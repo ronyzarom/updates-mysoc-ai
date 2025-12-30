@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+  --card: #1e293b;
+  --card-hover: #334155;
+  --border: #334155;
+}
+
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[var(--card)] rounded-xl border border-[var(--border)] p-6;
+  }
+  
+  .card-hover {
+    @apply hover:bg-[var(--card-hover)] transition-colors duration-200;
+  }
+  
+  .stat-card {
+    @apply card flex flex-col gap-2;
+  }
+  
+  .stat-value {
+    @apply text-3xl font-bold text-white;
+  }
+  
+  .stat-label {
+    @apply text-sm text-slate-400;
+  }
+  
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+  
+  .status-online {
+    @apply bg-emerald-500/20 text-emerald-400;
+  }
+  
+  .status-offline {
+    @apply bg-red-500/20 text-red-400;
+  }
+  
+  .status-degraded {
+    @apply bg-amber-500/20 text-amber-400;
+  }
+  
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-500 text-white hover:bg-primary-600 active:scale-95;
+  }
+  
+  .btn-secondary {
+    @apply bg-slate-700 text-white hover:bg-slate-600 active:scale-95;
+  }
+  
+  .btn-danger {
+    @apply bg-red-500 text-white hover:bg-red-600 active:scale-95;
+  }
+  
+  .table-container {
+    @apply overflow-x-auto rounded-lg border border-[var(--border)];
+  }
+  
+  .table {
+    @apply w-full text-sm;
+  }
+  
+  .table th {
+    @apply text-left px-4 py-3 bg-slate-800/50 text-slate-400 font-medium;
+  }
+  
+  .table td {
+    @apply px-4 py-3 border-t border-[var(--border)];
+  }
+  
+  .table tr:hover td {
+    @apply bg-slate-800/30;
+  }
+}
+

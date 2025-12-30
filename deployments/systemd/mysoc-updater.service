@@ -1,0 +1,23 @@
+[Unit]
+Description=MySoc Updater Agent
+After=network.target
+Documentation=https://docs.mysoc.ai/updater
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mysoc-updater daemon
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=no
+PrivateTmp=no
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mysoc-updater
+
+[Install]
+WantedBy=multi-user.target
+

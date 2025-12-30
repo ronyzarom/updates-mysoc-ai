@@ -1,0 +1,39 @@
+[Unit]
+Description=MySoc Update Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=mysoc-updates
+Group=mysoc-updates
+ExecStart=/opt/mysoc-updates/bin/update-server
+WorkingDirectory=/opt/mysoc-updates
+Restart=on-failure
+RestartSec=10
+
+# Environment
+Environment=SERVER_PORT=8080
+Environment=DB_HOST=localhost
+Environment=DB_PORT=5432
+Environment=DB_NAME=mysoc_updates
+Environment=DB_USER=mysoc_updates
+Environment=DB_SSL_MODE=disable
+Environment=STORAGE_TYPE=local
+Environment=STORAGE_LOCAL_PATH=/opt/mysoc-updates/artifacts
+
+# Security
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/mysoc-updates/artifacts /var/log/mysoc-updates
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=update-server
+
+[Install]
+WantedBy=multi-user.target
+

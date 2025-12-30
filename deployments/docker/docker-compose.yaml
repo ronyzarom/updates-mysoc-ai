@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: updates-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mysoc_updates
+      POSTGRES_USER: mysoc_updates
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../../migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mysoc_updates"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Update Server
+  update-server:
+    build:
+      context: ../../..
+      dockerfile: deployments/docker/Dockerfile.server
+    container_name: update-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: mysoc_updates
+      DB_USER: mysoc_updates
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      DB_SSL_MODE: disable
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_PATH: /data/artifacts
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+    volumes:
+      - artifacts_data:/data/artifacts
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Dashboard (optional)
+  dashboard:
+    build:
+      context: ../../..
+      dockerfile: deployments/docker/Dockerfile.dashboard
+    container_name: updates-dashboard
+    restart: unless-stopped
+    depends_on:
+      - update-server
+    environment:
+      API_URL: http://update-server:8080
+    ports:
+      - "3001:3001"
+
+  # Nginx (optional, for production)
+  nginx:
+    image: nginx:alpine
+    container_name: updates-nginx
+    restart: unless-stopped
+    depends_on:
+      - update-server
+      - dashboard
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  artifacts_data:
+
