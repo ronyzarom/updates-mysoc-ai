@@ -100,6 +100,29 @@ tidy:
 checksums:
 	@cd $(BINARY_DIR) && sha256sum * > checksums.txt
 
+# Deployment commands
+deploy:
+	@echo "Deploying to updates.mysoc.ai..."
+	./scripts/deploy.sh
+
+deploy-build:
+	./scripts/deploy.sh --build-only
+
+deploy-only:
+	./scripts/deploy.sh --deploy-only
+
+deploy-restart:
+	./scripts/deploy.sh --restart
+
+deploy-status:
+	./scripts/deploy.sh --status
+
+deploy-logs:
+	./scripts/deploy.sh --logs
+
+deploy-ssh:
+	./scripts/deploy.sh --ssh
+
 # Help
 help:
 	@echo "Available targets:"
@@ -114,4 +137,12 @@ help:
 	@echo "  migrate-down   - Rollback database migrations"
 	@echo "  dashboard-dev  - Run dashboard in development mode"
 	@echo "  docker-build   - Build Docker image"
+	@echo ""
+	@echo "Deployment:"
+	@echo "  deploy         - Full deployment to updates.mysoc.ai"
+	@echo "  deploy-build   - Build binaries only"
+	@echo "  deploy-restart - Restart services on server"
+	@echo "  deploy-status  - Check service status"
+	@echo "  deploy-logs    - Tail server logs"
+	@echo "  deploy-ssh     - SSH into server"
 
