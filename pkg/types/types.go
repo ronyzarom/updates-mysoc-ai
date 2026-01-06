@@ -224,3 +224,147 @@ type ReleaseInfo struct {
 	ReleasedAt      time.Time `json:"released_at"`
 }
 
+// ============================================
+// Authentication Types
+// ============================================
+
+// User represents a dashboard user
+type User struct {
+	ID                string     `json:"id"`
+	Email             string     `json:"email"`
+	Name              string     `json:"name"`
+	Role              string     `json:"role"` // admin, operator, viewer
+	AvatarURL         string     `json:"avatar_url,omitempty"`
+	MFAEnabled        bool       `json:"mfa_enabled"`
+	IsActive          bool       `json:"is_active"`
+	EmailVerified     bool       `json:"email_verified"`
+	LastLoginAt       *time.Time `json:"last_login_at,omitempty"`
+	PasswordChangedAt time.Time  `json:"password_changed_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+// UserWithPassword includes the password hash for internal use
+type UserWithPassword struct {
+	User
+	PasswordHash      string     `json:"-"`
+	MFASecret         string     `json:"-"`
+	MFABackupCodes    []string   `json:"-"`
+	FailedLoginAttempts int      `json:"-"`
+	LockedUntil       *time.Time `json:"-"`
+}
+
+// Session represents an authenticated session
+type Session struct {
+	ID               string    `json:"id"`
+	UserID           string    `json:"user_id"`
+	RefreshTokenHash string    `json:"-"`
+	UserAgent        string    `json:"user_agent,omitempty"`
+	IPAddress        string    `json:"ip_address,omitempty"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// AuthAuditLog represents a security audit event
+type AuthAuditLog struct {
+	ID        string                 `json:"id"`
+	UserID    string                 `json:"user_id,omitempty"`
+	EventType string                 `json:"event_type"`
+	IPAddress string                 `json:"ip_address,omitempty"`
+	UserAgent string                 `json:"user_agent,omitempty"`
+	Details   map[string]interface{} `json:"details,omitempty"`
+	CreatedAt time.Time              `json:"created_at"`
+}
+
+// LoginRequest is the initial login request
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// LoginResponse is returned after successful password verification
+type LoginResponse struct {
+	RequiresMFA bool   `json:"requires_mfa"`
+	MFAToken    string `json:"mfa_token,omitempty"` // Temporary token to complete MFA
+	AccessToken  string `json:"access_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	User         *User  `json:"user,omitempty"`
+	ExpiresIn    int    `json:"expires_in,omitempty"` // seconds
+}
+
+// MFAVerifyRequest verifies the TOTP code
+type MFAVerifyRequest struct {
+	MFAToken string `json:"mfa_token"` // From LoginResponse
+	TOTPCode string `json:"totp_code"`
+}
+
+// MFASetupResponse contains QR code data for setting up authenticator
+type MFASetupResponse struct {
+	Secret     string `json:"secret"`
+	QRCodeURL  string `json:"qr_code_url"`  // otpauth:// URL
+	QRCodeData string `json:"qr_code_data"` // Base64 PNG
+}
+
+// MFAEnableRequest enables MFA after verifying the code
+type MFAEnableRequest struct {
+	TOTPCode string `json:"totp_code"`
+}
+
+// MFADisableRequest disables MFA
+type MFADisableRequest struct {
+	Password string `json:"password"`
+	TOTPCode string `json:"totp_code"`
+}
+
+// MFABackupCodesResponse returns backup codes
+type MFABackupCodesResponse struct {
+	BackupCodes []string `json:"backup_codes"`
+}
+
+// RefreshTokenRequest refreshes the access token
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// RefreshTokenResponse returns new tokens
+type RefreshTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+// UpdateProfileRequest updates user profile
+type UpdateProfileRequest struct {
+	Name      string `json:"name,omitempty"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+}
+
+// ChangePasswordRequest changes the user password
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// CreateUserRequest creates a new user (admin only)
+type CreateUserRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+}
+
+// UpdateUserRequest updates a user (admin only)
+type UpdateUserRequest struct {
+	Name     string `json:"name,omitempty"`
+	Role     string `json:"role,omitempty"`
+	IsActive *bool  `json:"is_active,omitempty"`
+}
+
+// JWTClaims are the claims in the JWT token
+type JWTClaims struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
+	Type   string `json:"type"` // access, refresh, mfa
+}

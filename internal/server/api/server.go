@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/auth"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/config"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/storage"
@@ -14,18 +15,27 @@ import (
 
 // Server represents the API server
 type Server struct {
-	config  *config.Config
-	db      *database.DB
-	storage storage.Storage
-	router  *chi.Mux
+	config      *config.Config
+	db          *database.DB
+	storage     storage.Storage
+	router      *chi.Mux
+	authService *auth.Service
+	authHandler *auth.Handlers
 }
 
 // NewServer creates a new API server
 func NewServer(cfg *config.Config, db *database.DB, store storage.Storage) *Server {
+	// Initialize auth
+	authRepo := auth.NewRepository(db)
+	authService := auth.NewService(authRepo, cfg.Auth.JWTSecret, cfg.Auth.Issuer)
+	authHandlers := auth.NewHandlers(authService)
+
 	s := &Server{
-		config:  cfg,
-		db:      db,
-		storage: store,
+		config:      cfg,
+		db:          db,
+		storage:     store,
+		authService: authService,
+		authHandler: authHandlers,
 	}
 
 	s.setupRoutes()
@@ -68,47 +78,91 @@ func (s *Server) setupRoutes() {
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
-		// License endpoints
+		// =====================
+		// Authentication routes (public)
+		// =====================
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/login", s.authHandler.HandleLogin)
+			r.Post("/mfa/verify", s.authHandler.HandleMFAVerify)
+			r.Post("/refresh", s.authHandler.HandleRefresh)
+
+			// Protected auth routes
+			r.Group(func(r chi.Router) {
+				r.Use(auth.JWTMiddleware(s.authService))
+				r.Post("/logout", s.authHandler.HandleLogout)
+				r.Post("/logout-all", s.authHandler.HandleLogoutAll)
+				r.Get("/profile", s.authHandler.HandleGetProfile)
+				r.Put("/profile", s.authHandler.HandleUpdateProfile)
+				r.Post("/password", s.authHandler.HandleChangePassword)
+				r.Get("/mfa/setup", s.authHandler.HandleMFASetup)
+				r.Post("/mfa/enable", s.authHandler.HandleMFAEnable)
+				r.Post("/mfa/disable", s.authHandler.HandleMFADisable)
+				r.Get("/sessions", s.authHandler.HandleGetSessions)
+				r.Get("/audit", s.authHandler.HandleGetAuditLog)
+			})
+		})
+
+		// =====================
+		// License endpoints (public for activation)
+		// =====================
 		r.Route("/license", func(r chi.Router) {
 			r.Post("/activate", s.handleLicenseActivate)
 			r.Post("/validate", s.handleLicenseValidate)
 		})
 
+		// =====================
 		// Release endpoints
+		// =====================
 		r.Route("/releases", func(r chi.Router) {
 			r.Get("/", s.handleListReleases)
-			r.Post("/", s.handleUploadRelease) // Requires admin auth
 			r.Get("/{product}", s.handleListProductReleases)
 			r.Get("/{product}/latest", s.handleGetLatestRelease)
 			r.Get("/{product}/{version}", s.handleGetRelease)
 			r.Get("/{product}/{version}/download", s.handleDownloadRelease)
-			// Upload specific binary (e.g., siemcore-linux-amd64)
+			// Protected: upload releases
+			r.With(s.adminAuth).Post("/", s.handleUploadRelease)
 			r.With(s.adminAuth).Put("/{product}/{version}/{filename}", s.handleUploadBinary)
 		})
 
-		// Heartbeat endpoint
+		// =====================
+		// Heartbeat endpoint (from updaters)
+		// =====================
 		r.Post("/heartbeat", s.handleHeartbeat)
 
+		// =====================
 		// Instance endpoints
-		// Read-only endpoints are public for dashboard, write ops require admin
+		// =====================
 		r.Route("/instances", func(r chi.Router) {
-			r.Get("/", s.handleListInstances)           // Public for dashboard
-			r.Get("/{id}", s.handleGetInstance)         // Public for dashboard
-			r.With(s.adminAuth).Delete("/{id}", s.handleDeleteInstance)
+			// Read endpoints - require JWT auth for dashboard
+			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/", s.handleListInstances)
+			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/{id}", s.handleGetInstance)
+			// Delete requires admin
+			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Delete("/{id}", s.handleDeleteInstance)
 		})
 
+		// =====================
 		// Admin endpoints
+		// =====================
 		r.Route("/admin", func(r chi.Router) {
-			// License read endpoints are public for dashboard
+			// License management - read is public for dashboard, write requires JWT admin
 			r.Get("/licenses", s.handleListLicenses)
 			r.Get("/licenses/{id}", s.handleGetLicense)
-			// Write operations require admin auth
-			r.With(s.adminAuth).Post("/licenses", s.handleCreateLicense)
-			r.With(s.adminAuth).Put("/licenses/{id}", s.handleUpdateLicense)
-			r.With(s.adminAuth).Delete("/licenses/{id}", s.handleDeleteLicense)
+			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Post("/licenses", s.handleCreateLicense)
+			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Put("/licenses/{id}", s.handleUpdateLicense)
+			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Delete("/licenses/{id}", s.handleDeleteLicense)
+
+			// User management - requires JWT admin
+			r.Group(func(r chi.Router) {
+				r.Use(auth.JWTMiddleware(s.authService))
+				r.Use(auth.RequireRole("admin"))
+				r.Get("/users", s.authHandler.HandleListUsers)
+				r.Post("/users", s.authHandler.HandleCreateUser)
+				r.Get("/users/{id}", s.authHandler.HandleGetUser)
+				r.Put("/users/{id}", s.authHandler.HandleUpdateUser)
+				r.Delete("/users/{id}", s.authHandler.HandleDeleteUser)
+			})
 		})
 	})
 
 	s.router = r
 }
-

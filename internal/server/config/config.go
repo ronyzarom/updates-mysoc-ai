@@ -10,6 +10,13 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	Storage  StorageConfig
+	Auth     AuthConfig
+}
+
+// AuthConfig holds authentication configuration
+type AuthConfig struct {
+	JWTSecret string
+	Issuer    string
 }
 
 // ServerConfig holds HTTP server configuration
@@ -63,6 +70,10 @@ func Load() (*Config, error) {
 			S3Bucket:  getEnv("STORAGE_S3_BUCKET", ""),
 			S3Region:  getEnv("STORAGE_S3_REGION", ""),
 			S3Endpoint: getEnv("STORAGE_S3_ENDPOINT", ""),
+		},
+		Auth: AuthConfig{
+			JWTSecret: getEnv("JWT_SECRET", "change-this-secret-in-production"),
+			Issuer:    getEnv("JWT_ISSUER", "updates.mysoc.ai"),
 		},
 	}
 

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
 import { Providers } from "@/components/Providers";
+import { LayoutWrapper } from "@/components/LayoutWrapper";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,14 +26,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.variable} ${jetbrains.variable} antialiased`}>
+      <body className={`${inter.variable} ${jetbrains.variable} antialiased bg-slate-950`}>
         <Providers>
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <main className="flex-1 p-8 ml-64">
-              {children}
-            </main>
-          </div>
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
         </Providers>
       </body>
     </html>
