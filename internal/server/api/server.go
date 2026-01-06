@@ -89,22 +89,23 @@ func (s *Server) setupRoutes() {
 		// Heartbeat endpoint
 		r.Post("/heartbeat", s.handleHeartbeat)
 
-		// Instance endpoints (admin)
+		// Instance endpoints
+		// Read-only endpoints are public for dashboard, write ops require admin
 		r.Route("/instances", func(r chi.Router) {
-			r.Use(s.adminAuth)
-			r.Get("/", s.handleListInstances)
-			r.Get("/{id}", s.handleGetInstance)
-			r.Delete("/{id}", s.handleDeleteInstance)
+			r.Get("/", s.handleListInstances)           // Public for dashboard
+			r.Get("/{id}", s.handleGetInstance)         // Public for dashboard
+			r.With(s.adminAuth).Delete("/{id}", s.handleDeleteInstance)
 		})
 
 		// Admin endpoints
 		r.Route("/admin", func(r chi.Router) {
-			r.Use(s.adminAuth)
+			// License read endpoints are public for dashboard
 			r.Get("/licenses", s.handleListLicenses)
-			r.Post("/licenses", s.handleCreateLicense)
 			r.Get("/licenses/{id}", s.handleGetLicense)
-			r.Put("/licenses/{id}", s.handleUpdateLicense)
-			r.Delete("/licenses/{id}", s.handleDeleteLicense)
+			// Write operations require admin auth
+			r.With(s.adminAuth).Post("/licenses", s.handleCreateLicense)
+			r.With(s.adminAuth).Put("/licenses/{id}", s.handleUpdateLicense)
+			r.With(s.adminAuth).Delete("/licenses/{id}", s.handleDeleteLicense)
 		})
 	})
 
