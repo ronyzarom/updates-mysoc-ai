@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://18.201.144.150";
+// Use relative URLs for same-origin requests
+const API_URL = "";
 
 export interface Instance {
   id: string;
