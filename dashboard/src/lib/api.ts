@@ -412,6 +412,45 @@ class ApiClient {
     return this.fetch<Release[]>(`/api/v1/releases/${product}`);
   }
 
+  async uploadRelease(data: {
+    product: string;
+    version: string;
+    channel: string;
+    release_notes?: string;
+    artifact: File;
+  }): Promise<Release> {
+    const formData = new FormData();
+    formData.append("product", data.product);
+    formData.append("version", data.version);
+    formData.append("channel", data.channel);
+    if (data.release_notes) {
+      formData.append("release_notes", data.release_notes);
+    }
+    formData.append("artifact", data.artifact);
+
+    const headers: HeadersInit = {};
+    if (this.accessToken) {
+      headers["Authorization"] = `Bearer ${this.accessToken}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/v1/releases`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Upload failed" }));
+      throw new Error(error.error || `Upload failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async deleteRelease(id: string): Promise<void> {
+    await this.fetch(`/api/v1/releases/${id}`, { method: "DELETE" }, true);
+  }
+
   // Admin - Users
   async getUsers(): Promise<User[]> {
     return this.fetch<User[]>("/api/v1/admin/users", {}, true);

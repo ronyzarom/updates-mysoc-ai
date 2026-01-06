@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="white">
+  <!-- Hexagon function: center at (cx, cy) with radius r -->
+  <!-- Points for a flat-top hexagon: (cx + r*cos(angle), cy + r*sin(angle)) for angles 0, 60, 120, 180, 240, 300 -->
+  
+  <!-- Center hexagon -->
+  <polygon points="50,38 60.4,44 60.4,56 50,62 39.6,56 39.6,44"/>
+  
+  <!-- Top hexagon -->
+  <polygon points="50,14 60.4,20 60.4,32 50,38 39.6,32 39.6,20"/>
+  
+  <!-- Top right hexagon -->
+  <polygon points="70.8,26 81.2,32 81.2,44 70.8,50 60.4,44 60.4,32"/>
+  
+  <!-- Bottom right hexagon -->
+  <polygon points="70.8,50 81.2,56 81.2,68 70.8,74 60.4,68 60.4,56"/>
+  
+  <!-- Bottom hexagon -->
+  <polygon points="50,62 60.4,68 60.4,80 50,86 39.6,80 39.6,68"/>
+  
+  <!-- Bottom left hexagon -->
+  <polygon points="29.2,50 39.6,56 39.6,68 29.2,74 18.8,68 18.8,56"/>
+  
+  <!-- Top left hexagon -->
+  <polygon points="29.2,26 39.6,32 39.6,44 29.2,50 18.8,44 18.8,32"/>
+</svg>
