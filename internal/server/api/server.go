@@ -61,6 +61,11 @@ func (s *Server) setupRoutes() {
 	// Health check (no auth)
 	r.Get("/health", s.handleHealth)
 
+	// Direct binary download routes (Siemcore installer format)
+	// Supports: /{product}/{version}/{filename}
+	// Example: /siemcore/v1.5.0/siemcore-linux-amd64
+	r.Get("/{product}/{version}/{filename}", s.handleDirectDownload)
+
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// License endpoints
@@ -77,6 +82,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/{product}/latest", s.handleGetLatestRelease)
 			r.Get("/{product}/{version}", s.handleGetRelease)
 			r.Get("/{product}/{version}/download", s.handleDownloadRelease)
+			// Upload specific binary (e.g., siemcore-linux-amd64)
+			r.With(s.adminAuth).Put("/{product}/{version}/{filename}", s.handleUploadBinary)
 		})
 
 		// Heartbeat endpoint

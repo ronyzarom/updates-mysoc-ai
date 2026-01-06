@@ -236,6 +236,79 @@ func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, reader)
 }
 
+// handleUploadBinary handles uploading a specific binary file
+// PUT /api/v1/releases/{product}/{version}/{filename}
+// This allows uploading multiple architecture-specific binaries for a single release
+func (s *Server) handleUploadBinary(w http.ResponseWriter, r *http.Request) {
+	product := chi.URLParam(r, "product")
+	version := chi.URLParam(r, "version")
+	filename := chi.URLParam(r, "filename")
+
+	// Read the binary from request body
+	defer r.Body.Close()
+
+	// Save to storage
+	path, err := s.storage.Save(product, version, filename, r.Body)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save binary: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":   "uploaded",
+		"product":  product,
+		"version":  version,
+		"filename": filename,
+		"path":     path,
+		"download_url": "/" + product + "/" + version + "/" + filename,
+	})
+}
+
+// handleDirectDownload serves binaries directly at /{product}/{version}/{filename}
+// This supports the Siemcore installer format:
+// GET /siemcore/v1.5.0/siemcore-linux-amd64
+// GET /siemcore/v1.5.0/siemcore-linux-arm64
+func (s *Server) handleDirectDownload(w http.ResponseWriter, r *http.Request) {
+	product := chi.URLParam(r, "product")
+	version := chi.URLParam(r, "version")
+	filename := chi.URLParam(r, "filename")
+
+	// Skip if this looks like an API route
+	if product == "api" || product == "health" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Check if file exists in storage
+	if !s.storage.Exists(product, version, filename) {
+		writeError(w, http.StatusNotFound, "artifact not found")
+		return
+	}
+
+	// Get the artifact file
+	reader, err := s.storage.Get(product, version, filename)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get artifact")
+		return
+	}
+	defer reader.Close()
+
+	// Try to get release info for checksum
+	svc := releases.NewService(s.db, s.storage)
+	release, _ := svc.GetRelease(r.Context(), product, version)
+
+	// Set headers for download
+	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	
+	// Add checksum if available from release record
+	if release != nil && release.Checksum != "" {
+		w.Header().Set("X-Checksum-SHA256", release.Checksum)
+	}
+
+	io.Copy(w, reader)
+}
+
 // Heartbeat handler
 
 func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
