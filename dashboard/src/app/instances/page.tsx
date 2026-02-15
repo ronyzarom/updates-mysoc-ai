@@ -7,7 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 
 export default function InstancesPage() {
-  const { data: instances, isLoading, refetch } = useQuery({
+  const { data: instances, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.getInstances(),
   });
@@ -42,6 +42,21 @@ export default function InstancesPage() {
       {/* Instances Grid */}
       {isLoading ? (
         <div className="text-slate-400">Loading instances...</div>
+      ) : isError ? (
+        <div className="card border-red-500/50 bg-red-900/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-red-400 font-medium">Failed to load instances</p>
+              <p className="text-sm text-slate-400 mt-1">
+                {error instanceof Error ? error.message : "Unknown error"}
+              </p>
+            </div>
+            <button onClick={() => refetch()} className="btn btn-secondary">
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {instances?.map((instance) => (
@@ -59,7 +74,9 @@ export default function InstancesPage() {
                     <h3 className="font-semibold text-white">
                       {instance.instance_id}
                     </h3>
-                    <p className="text-sm text-slate-500">{instance.hostname}</p>
+                    <p className="text-sm text-slate-500">
+                      {instance.display_name || instance.hostname}
+                    </p>
                   </div>
                 </div>
                 <StatusBadge status={instance.status} />

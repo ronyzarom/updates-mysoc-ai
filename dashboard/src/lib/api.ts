@@ -6,12 +6,47 @@ export interface Instance {
   instance_id: string;
   instance_type: string;
   hostname: string;
+  display_name?: string;
   license_id?: string;
   status: string;
+  auto_update_enabled: boolean;
+  update_group: string;
   last_heartbeat?: string;
   last_heartbeat_data?: HeartbeatData;
+  // IP address tracking
+  last_ip_address?: string;
+  last_ip_seen_at?: string;
+  // Update attempt tracking
+  last_update_from_version?: string;
+  last_update_target_version?: string;
+  last_update_success?: boolean;
+  last_update_error?: string;
+  last_update_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface LicenseStatus {
+  key?: string;
+  valid: boolean;
+  expires_at?: string;
+  last_check?: string;
+}
+
+export interface UpdateAttempt {
+  from_version: string;
+  target_version: string;
+  success: boolean;
+  error?: string;
+  timestamp: string;
+}
+
+// Paginated response for instances list
+export interface InstancesPagedResponse {
+  items: Instance[];
+  limit: number;
+  offset: number;
+  total: number;
 }
 
 export interface HeartbeatData {
@@ -20,6 +55,8 @@ export interface HeartbeatData {
   products: ProductStatus[];
   system: SystemMetrics;
   security?: SecurityStatus;
+  license?: LicenseStatus;
+  last_update_attempt?: UpdateAttempt;
   timestamp: string;
 }
 
@@ -31,6 +68,8 @@ export interface ProductStatus {
 }
 
 export interface SystemMetrics {
+  os?: string;
+  arch?: string;
   cpu_usage: number;
   memory_total: number;
   memory_used: number;
@@ -69,6 +108,7 @@ export interface Release {
   artifact_size: number;
   checksum: string;
   release_notes?: string;
+  target_groups?: string[];
   released_at: string;
 }
 
@@ -360,12 +400,44 @@ class ApiClient {
     return this.fetch<Instance[]>("/api/v1/instances");
   }
 
+  // Paginated instances response
+  async getInstancesPaged(limit = 50, offset = 0): Promise<InstancesPagedResponse> {
+    return this.fetch<InstancesPagedResponse>(
+      `/api/v1/instances/paged?limit=${limit}&offset=${offset}`
+    );
+  }
+
   async getInstance(id: string): Promise<Instance> {
     return this.fetch<Instance>(`/api/v1/instances/${id}`);
   }
 
   async deleteInstance(id: string): Promise<void> {
     await this.fetch(`/api/v1/instances/${id}`, { method: "DELETE" }, true);
+  }
+
+  async updateInstance(id: string, data: { display_name?: string; auto_update_enabled?: boolean; update_group?: string }): Promise<Instance> {
+    return this.fetch<Instance>(
+      `/api/v1/instances/${id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+      true
+    );
+  }
+
+  async setInstanceAutoUpdate(id: string, enabled: boolean): Promise<void> {
+    await this.fetch(`/api/v1/instances/${id}/auto-update`, {
+      method: "PUT",
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  async setInstanceUpdateGroup(id: string, group: string): Promise<void> {
+    await this.fetch(`/api/v1/instances/${id}/update-group`, {
+      method: "PUT",
+      body: JSON.stringify({ group }),
+    });
   }
 
   // Licenses
@@ -417,6 +489,7 @@ class ApiClient {
     version: string;
     channel: string;
     release_notes?: string;
+    target_groups?: string[];
     artifact: File;
   }): Promise<Release> {
     const formData = new FormData();
@@ -425,6 +498,9 @@ class ApiClient {
     formData.append("channel", data.channel);
     if (data.release_notes) {
       formData.append("release_notes", data.release_notes);
+    }
+    if (data.target_groups && data.target_groups.length > 0) {
+      formData.append("target_groups", data.target_groups.join(","));
     }
     formData.append("artifact", data.artifact);
 
@@ -447,8 +523,34 @@ class ApiClient {
     return response.json();
   }
 
-  async deleteRelease(id: string): Promise<void> {
-    await this.fetch(`/api/v1/releases/${id}`, { method: "DELETE" }, true);
+  async deleteRelease(product: string, version: string): Promise<void> {
+    await this.fetch(`/api/v1/releases/${product}/${version}`, { method: "DELETE" }, true);
+  }
+
+  async updateRelease(product: string, version: string, data: { release_notes?: string; target_groups?: string[] }): Promise<void> {
+    await this.fetch(
+      `/api/v1/releases/${product}/${version}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+      true
+    );
+  }
+
+  async updateReleaseTargetGroups(
+    product: string,
+    version: string,
+    targetGroups: string[]
+  ): Promise<void> {
+    await this.fetch(
+      `/api/v1/releases/${product}/${version}/target-groups`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ target_groups: targetGroups }),
+      },
+      true
+    );
   }
 
   // Admin - Users

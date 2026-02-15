@@ -48,13 +48,13 @@ func main() {
 	// Create API server
 	server := api.NewServer(cfg, db, store)
 
-	// Create HTTP server
+	// Create HTTP server with extended timeouts for large file uploads
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      server.Router(),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  5 * time.Minute, // Allow 5 minutes for reading large uploads
+		WriteTimeout: 5 * time.Minute, // Allow 5 minutes for writing responses
+		IdleTimeout:  2 * time.Minute,
 	}
 
 	// Start server in goroutine
@@ -95,4 +95,3 @@ func printBanner() {
 
 `, Version, GitCommit, BuildTime)
 }
-

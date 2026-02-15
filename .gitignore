@@ -53,3 +53,7 @@ dashboard/out/
 dist/
 build/
 
+# Compiled Linux binaries (deploy via scripts/deploy.sh)
+update-server-linux
+siemcore-updater-linux-amd64
+

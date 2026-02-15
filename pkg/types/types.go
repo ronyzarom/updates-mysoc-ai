@@ -6,20 +6,20 @@ import (
 
 // License represents a customer license
 type License struct {
-	ID           string         `json:"id"`
-	LicenseKey   string         `json:"license_key"`
-	CustomerID   string         `json:"customer_id"`
-	CustomerName string         `json:"customer_name"`
-	Type         string         `json:"type"` // mysoc-cloud, siemcore, siemcore-lite
-	Products     []string       `json:"products"`
-	Features     []string       `json:"features,omitempty"`
-	Limits       LicenseLimits  `json:"limits"`
-	IssuedAt     time.Time      `json:"issued_at"`
-	ExpiresAt    time.Time      `json:"expires_at"`
-	BoundTo      string         `json:"bound_to,omitempty"`
-	IsActive     bool           `json:"is_active"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID           string        `json:"id"`
+	LicenseKey   string        `json:"license_key"`
+	CustomerID   string        `json:"customer_id"`
+	CustomerName string        `json:"customer_name"`
+	Type         string        `json:"type"` // mysoc-cloud, siemcore, siemcore-lite
+	Products     []string      `json:"products"`
+	Features     []string      `json:"features,omitempty"`
+	Limits       LicenseLimits `json:"limits"`
+	IssuedAt     time.Time     `json:"issued_at"`
+	ExpiresAt    time.Time     `json:"expires_at"`
+	BoundTo      string        `json:"bound_to,omitempty"`
+	IsActive     bool          `json:"is_active"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 // LicenseLimits defines the limits for a license
@@ -32,17 +32,32 @@ type LicenseLimits struct {
 
 // Instance represents a registered server instance
 type Instance struct {
-	ID                string          `json:"id"`
-	InstanceID        string          `json:"instance_id"`
-	InstanceType      string          `json:"instance_type"` // mysoc, siemcore
-	Hostname          string          `json:"hostname"`
-	LicenseID         string          `json:"license_id,omitempty"`
-	APIKeyHash        string          `json:"-"`
-	LastHeartbeat     *time.Time      `json:"last_heartbeat,omitempty"`
-	LastHeartbeatData *Heartbeat      `json:"last_heartbeat_data,omitempty"`
-	Status            string          `json:"status"` // online, offline, degraded
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
+	ID                string     `json:"id"`
+	InstanceID        string     `json:"instance_id"`
+	InstanceType      string     `json:"instance_type"` // mysoc, siemcore
+	Hostname          string     `json:"hostname"`
+	DisplayName       string     `json:"display_name,omitempty"` // Friendly name / domain (e.g., cloud.siemcore.ai)
+	LicenseID         string     `json:"license_id,omitempty"`
+	APIKeyHash        string     `json:"-"`
+	LastHeartbeat     *time.Time `json:"last_heartbeat,omitempty"`
+	LastHeartbeatData *Heartbeat `json:"last_heartbeat_data,omitempty"`
+	Status            string     `json:"status"` // online, offline, degraded
+	AutoUpdateEnabled bool       `json:"auto_update_enabled"`
+	UpdateGroup       string     `json:"update_group"` // alpha, beta, stable, production
+
+	// IP address tracking
+	LastIPAddress string     `json:"last_ip_address,omitempty"`
+	LastIPSeenAt  *time.Time `json:"last_ip_seen_at,omitempty"`
+
+	// Update attempt tracking
+	LastUpdateFromVersion   string     `json:"last_update_from_version,omitempty"`
+	LastUpdateTargetVersion string     `json:"last_update_target_version,omitempty"`
+	LastUpdateSuccess       *bool      `json:"last_update_success,omitempty"`
+	LastUpdateError         string     `json:"last_update_error,omitempty"`
+	LastUpdateAt            *time.Time `json:"last_update_at,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Release represents a product release
@@ -58,6 +73,7 @@ type Release struct {
 	Signature         string    `json:"signature,omitempty"`
 	ReleaseNotes      string    `json:"release_notes,omitempty"`
 	MinUpdaterVersion string    `json:"min_updater_version,omitempty"`
+	TargetGroups      []string  `json:"target_groups"` // alpha, beta, stable, production
 	ReleasedAt        time.Time `json:"released_at"`
 	CreatedAt         time.Time `json:"created_at"`
 }
@@ -92,6 +108,15 @@ type Deployment struct {
 	PreviousVersion string     `json:"previous_version,omitempty"`
 }
 
+// UpdateAttempt tracks the result of an update installation
+type UpdateAttempt struct {
+	FromVersion   string    `json:"from_version"`
+	TargetVersion string    `json:"target_version"`
+	Success       bool      `json:"success"`
+	Error         string    `json:"error,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
 // Heartbeat is the payload sent by updaters
 type Heartbeat struct {
 	InstanceID     string          `json:"instance_id"`
@@ -104,6 +129,9 @@ type Heartbeat struct {
 	System         SystemMetrics   `json:"system"`
 	Security       SecurityStatus  `json:"security,omitempty"`
 	Timestamp      time.Time       `json:"timestamp"`
+
+	// Last update attempt (included in next heartbeat after install)
+	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
 }
 
 // LicenseStatus reports license state
@@ -142,18 +170,18 @@ type SystemMetrics struct {
 
 // SecurityStatus reports security posture
 type SecurityStatus struct {
-	FirewallEnabled  bool           `json:"firewall_enabled"`
-	FirewallStatus   string         `json:"firewall_status"`
-	SSHHardened      bool           `json:"ssh_hardened"`
-	TLSCertificates  []CertStatus   `json:"tls_certificates,omitempty"`
-	PendingUpdates   int            `json:"pending_updates"`
-	SecurityUpdates  int            `json:"security_updates"`
-	RebootRequired   bool           `json:"reboot_required"`
-	ComplianceScore  float64        `json:"compliance_score"`
-	FailedChecks     int            `json:"failed_checks"`
-	SecurityScore    int            `json:"security_score"`
-	SecurityAlerts   []SecurityAlert `json:"security_alerts,omitempty"`
-	LastScan         time.Time      `json:"last_scan"`
+	FirewallEnabled bool            `json:"firewall_enabled"`
+	FirewallStatus  string          `json:"firewall_status"`
+	SSHHardened     bool            `json:"ssh_hardened"`
+	TLSCertificates []CertStatus    `json:"tls_certificates,omitempty"`
+	PendingUpdates  int             `json:"pending_updates"`
+	SecurityUpdates int             `json:"security_updates"`
+	RebootRequired  bool            `json:"reboot_required"`
+	ComplianceScore float64         `json:"compliance_score"`
+	FailedChecks    int             `json:"failed_checks"`
+	SecurityScore   int             `json:"security_score"`
+	SecurityAlerts  []SecurityAlert `json:"security_alerts,omitempty"`
+	LastScan        time.Time       `json:"last_scan"`
 }
 
 // CertStatus reports TLS certificate state
@@ -182,11 +210,11 @@ type LicenseActivationRequest struct {
 
 // LicenseActivationResponse is the response from license activation
 type LicenseActivationResponse struct {
-	Success  bool            `json:"success"`
-	License  *License        `json:"license,omitempty"`
-	Instance *InstanceInfo   `json:"instance,omitempty"`
+	Success  bool             `json:"success"`
+	License  *License         `json:"license,omitempty"`
+	Instance *InstanceInfo    `json:"instance,omitempty"`
 	Install  *InstallManifest `json:"install,omitempty"`
-	Error    string          `json:"error,omitempty"`
+	Error    string           `json:"error,omitempty"`
 }
 
 // InstanceInfo contains instance credentials
@@ -247,23 +275,23 @@ type User struct {
 // UserWithPassword includes the password hash for internal use
 type UserWithPassword struct {
 	User
-	PasswordHash      string     `json:"-"`
-	MFASecret         string     `json:"-"`
-	MFABackupCodes    []string   `json:"-"`
-	FailedLoginAttempts int      `json:"-"`
-	LockedUntil       *time.Time `json:"-"`
+	PasswordHash        string     `json:"-"`
+	MFASecret           string     `json:"-"`
+	MFABackupCodes      []string   `json:"-"`
+	FailedLoginAttempts int        `json:"-"`
+	LockedUntil         *time.Time `json:"-"`
 }
 
 // Session represents an authenticated session
 type Session struct {
-	ID               string    `json:"id"`
-	UserID           string    `json:"user_id"`
-	RefreshTokenHash string    `json:"-"`
-	UserAgent        string    `json:"user_agent,omitempty"`
-	IPAddress        string    `json:"ip_address,omitempty"`
-	ExpiresAt        time.Time `json:"expires_at"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"user_id"`
+	RefreshTokenHash string     `json:"-"`
+	UserAgent        string     `json:"user_agent,omitempty"`
+	IPAddress        string     `json:"ip_address,omitempty"`
+	ExpiresAt        time.Time  `json:"expires_at"`
 	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
+	CreatedAt        time.Time  `json:"created_at"`
 }
 
 // AuthAuditLog represents a security audit event
@@ -285,8 +313,8 @@ type LoginRequest struct {
 
 // LoginResponse is returned after successful password verification
 type LoginResponse struct {
-	RequiresMFA bool   `json:"requires_mfa"`
-	MFAToken    string `json:"mfa_token,omitempty"` // Temporary token to complete MFA
+	RequiresMFA  bool   `json:"requires_mfa"`
+	MFAToken     string `json:"mfa_token,omitempty"` // Temporary token to complete MFA
 	AccessToken  string `json:"access_token,omitempty"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	User         *User  `json:"user,omitempty"`

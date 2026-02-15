@@ -133,7 +133,12 @@ func (u *Updater) CheckUpdate(productName string) (bool, *types.ReleaseInfo, err
 	if err != nil {
 		return false, nil, err
 	}
-	req.Header.Set("X-API-Key", u.config.Server.APIKey)
+	if u.config.Server.APIKey != "" {
+		req.Header.Set("X-API-Key", u.config.Server.APIKey)
+	}
+	if u.config.Instance.LicenseKey != "" {
+		req.Header.Set("X-License-Key", u.config.Instance.LicenseKey)
+	}
 
 	resp, err := u.client.Do(req)
 	if err != nil {
@@ -250,7 +255,12 @@ func (u *Updater) downloadFile(url, destPath string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-API-Key", u.config.Server.APIKey)
+	if u.config.Server.APIKey != "" {
+		req.Header.Set("X-API-Key", u.config.Server.APIKey)
+	}
+	if u.config.Instance.LicenseKey != "" {
+		req.Header.Set("X-License-Key", u.config.Instance.LicenseKey)
+	}
 
 	resp, err := u.client.Do(req)
 	if err != nil {
@@ -281,4 +291,3 @@ func (u *Updater) downloadFile(url, destPath string) error {
 
 	return nil
 }
-

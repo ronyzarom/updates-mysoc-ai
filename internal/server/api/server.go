@@ -119,9 +119,12 @@ func (s *Server) setupRoutes() {
 			r.Get("/{product}/latest", s.handleGetLatestRelease)
 			r.Get("/{product}/{version}", s.handleGetRelease)
 			r.Get("/{product}/{version}/download", s.handleDownloadRelease)
-			// Protected: upload releases
+			// Protected: upload releases and manage target groups
 			r.With(s.adminAuth).Post("/", s.handleUploadRelease)
 			r.With(s.adminAuth).Put("/{product}/{version}/{filename}", s.handleUploadBinary)
+			r.With(s.adminAuth).Put("/{product}/{version}/target-groups", s.handleUpdateReleaseTargetGroups)
+			r.With(s.adminAuth).Put("/{product}/{version}", s.handleUpdateRelease)
+			r.With(s.adminAuth).Delete("/{product}/{version}", s.handleDeleteRelease)
 		})
 
 		// =====================
@@ -130,14 +133,28 @@ func (s *Server) setupRoutes() {
 		r.Post("/heartbeat", s.handleHeartbeat)
 
 		// =====================
+		// Updates endpoint (siemcore-updater format)
+		// =====================
+		r.Route("/updates", func(r chi.Router) {
+			r.Post("/{product}/check", s.handleUpdateCheck)
+			r.Post("/{product}/report", s.handleUpdateReport)
+		})
+
+		// =====================
 		// Instance endpoints
 		// =====================
 		r.Route("/instances", func(r chi.Router) {
 			// Read endpoints - require JWT auth for dashboard
 			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/", s.handleListInstances)
+			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/paged", s.handleListInstancesPaged) // New paginated endpoint
 			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/{id}", s.handleGetInstance)
-			// Delete requires admin
-			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Delete("/{id}", s.handleDeleteInstance)
+			// Update and delete require admin
+			r.With(s.adminAuth).Put("/{id}", s.handleUpdateInstance)
+			r.With(s.adminAuth).Delete("/{id}", s.handleDeleteInstance)
+			// Toggle auto-update - public for now (can add auth later)
+			r.Put("/{id}/auto-update", s.handleSetAutoUpdate)
+			// Set update group (alpha, beta, stable, production)
+			r.Put("/{id}/update-group", s.handleSetUpdateGroup)
 		})
 
 		// =====================

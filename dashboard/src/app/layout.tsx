@@ -17,6 +17,9 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "MySoc Updates Dashboard",
   description: "Fleet management for MySoc and SIEMCore instances",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

@@ -68,7 +68,12 @@ func (r *Reporter) sendHeartbeat() {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", r.config.Server.APIKey)
+	if r.config.Server.APIKey != "" {
+		req.Header.Set("X-API-Key", r.config.Server.APIKey)
+	}
+	if r.config.Instance.LicenseKey != "" {
+		req.Header.Set("X-License-Key", r.config.Instance.LicenseKey)
+	}
 
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -392,4 +397,3 @@ func (r *Reporter) checkRebootRequired() bool {
 	_, err := os.Stat("/var/run/reboot-required")
 	return err == nil
 }
-

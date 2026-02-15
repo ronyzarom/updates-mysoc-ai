@@ -1,18 +1,33 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Key, Plus, RefreshCw, Calendar, CheckCircle, XCircle } from "lucide-react";
+import { Key, Plus, RefreshCw, Calendar, CheckCircle, XCircle, X } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useState } from "react";
 
 export default function LicensesPage() {
+  const queryClient = useQueryClient();
   const { data: licenses, isLoading, refetch } = useQuery({
     queryKey: ["licenses"],
     queryFn: () => api.getLicenses(),
   });
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const createMutation = useMutation({
+    mutationFn: (data: {
+      customer_id: string;
+      customer_name: string;
+      type: string;
+      products: string[];
+      expires_at: string;
+    }) => api.createLicense(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["licenses"] });
+      setShowCreateModal(false);
+    },
+  });
 
   return (
     <div className="space-y-8">
@@ -215,6 +230,195 @@ export default function LicensesPage() {
           </div>
         </div>
       )}
+
+      {/* Create License Modal */}
+      {showCreateModal && (
+        <CreateLicenseModal
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={(data) => createMutation.mutate(data)}
+          isLoading={createMutation.isPending}
+          error={createMutation.error?.message}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateLicenseModal({
+  onClose,
+  onSubmit,
+  isLoading,
+  error,
+}: {
+  onClose: () => void;
+  onSubmit: (data: {
+    customer_id: string;
+    customer_name: string;
+    type: string;
+    products: string[];
+    expires_at: string;
+  }) => void;
+  isLoading: boolean;
+  error?: string;
+}) {
+  const [formData, setFormData] = useState({
+    customer_id: "",
+    customer_name: "",
+    type: "siemcore",
+    products: ["siemcore-api", "siemcore-collector", "siemcore-frontend"],
+    expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  });
+
+  const productOptions = [
+    "siemcore-api",
+    "siemcore-collector",
+    "siemcore-frontend",
+    "mysoc-api",
+    "mysoc-frontend",
+  ];
+
+  const handleProductToggle = (product: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      products: prev.products.includes(product)
+        ? prev.products.filter((p) => p !== product)
+        : [...prev.products, product],
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      ...formData,
+      expires_at: new Date(formData.expires_at).toISOString(),
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-700">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-white">Create License</h2>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-slate-700 rounded transition-colors"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Customer ID
+            </label>
+            <input
+              type="text"
+              value={formData.customer_id}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, customer_id: e.target.value }))
+              }
+              className="input w-full"
+              placeholder="e.g., acme-corp"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Customer Name
+            </label>
+            <input
+              type="text"
+              value={formData.customer_name}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, customer_name: e.target.value }))
+              }
+              className="input w-full"
+              placeholder="e.g., Acme Corporation"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              License Type
+            </label>
+            <select
+              value={formData.type}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, type: e.target.value }))
+              }
+              className="input w-full"
+            >
+              <option value="siemcore">SIEMCore</option>
+              <option value="mysoc">MySoc</option>
+              <option value="enterprise">Enterprise</option>
+              <option value="trial">Trial</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Products
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {productOptions.map((product) => (
+                <button
+                  key={product}
+                  type="button"
+                  onClick={() => handleProductToggle(product)}
+                  className={`px-3 py-1 rounded text-sm transition-colors ${
+                    formData.products.includes(product)
+                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/50"
+                      : "bg-slate-700 text-slate-400 border border-slate-600"
+                  }`}
+                >
+                  {product}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Expires At
+            </label>
+            <input
+              type="date"
+              value={formData.expires_at}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, expires_at: e.target.value }))
+              }
+              className="input w-full"
+              required
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 rounded bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-secondary flex-1"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="btn btn-primary flex-1"
+            >
+              {isLoading ? "Creating..." : "Create License"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

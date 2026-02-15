@@ -2,10 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -13,6 +17,26 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/releases"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
+
+// getClientIP extracts client IP from request, respecting proxy headers
+// NOTE: X-Forwarded-For is only trusted if you control the proxy chain
+func getClientIP(r *http.Request) string {
+	// Prefer X-Real-IP (typically set by nginx/proxy you control)
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	// X-Forwarded-For - take first IP (client), but be aware this is spoofable
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	// Fall back to direct connection
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr // Return as-is if SplitHostPort fails
+	}
+	return ip
+}
 
 // Health check response
 type HealthResponse struct {
@@ -119,6 +143,37 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	releaseNotes := r.FormValue("release_notes")
 
+	// Parse target groups (comma-separated or multiple form values)
+	var targetGroups []string
+	rawTargetGroups := r.FormValue("target_groups")
+	if rawTargetGroups != "" {
+		// Support comma-separated values: "alpha,beta,stable,production"
+		for _, g := range strings.Split(rawTargetGroups, ",") {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				targetGroups = append(targetGroups, g)
+			}
+		}
+	}
+	// Also support multiple form values: target_groups[]=alpha&target_groups[]=beta
+	if tgs := r.Form["target_groups[]"]; len(tgs) > 0 {
+		targetGroups = append(targetGroups, tgs...)
+	}
+
+	// Validate target group names
+	if len(targetGroups) > 0 {
+		validGroups := map[string]bool{"alpha": true, "beta": true, "stable": true, "production": true}
+		for _, g := range targetGroups {
+			if !validGroups[g] {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid target group: %q (must be alpha, beta, stable, or production). Raw form value: %q", g, rawTargetGroups))
+				return
+			}
+		}
+	}
+
+	// Log parsed groups for debugging
+	fmt.Printf("[upload-release] product=%s version=%s raw_target_groups=%q parsed_groups=%v\n", productName, version, rawTargetGroups, targetGroups)
+
 	if productName == "" || version == "" {
 		writeError(w, http.StatusBadRequest, "product and version are required")
 		return
@@ -138,6 +193,7 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 		Version:      version,
 		Channel:      channel,
 		ReleaseNotes: releaseNotes,
+		TargetGroups: targetGroups,
 		Filename:     header.Filename,
 		FileSize:     header.Size,
 		File:         file,
@@ -255,12 +311,161 @@ func (s *Server) handleUploadBinary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":   "uploaded",
-		"product":  product,
-		"version":  version,
-		"filename": filename,
-		"path":     path,
+		"status":       "uploaded",
+		"product":      product,
+		"version":      version,
+		"filename":     filename,
+		"path":         path,
 		"download_url": "/" + product + "/" + version + "/" + filename,
+	})
+}
+
+// UpdateReleaseTargetGroupsRequest is the request to update release target groups
+type UpdateReleaseTargetGroupsRequest struct {
+	TargetGroups []string `json:"target_groups"` // alpha, beta, stable, production
+}
+
+// UpdateReleaseRequest is the request to update a release (notes and/or groups)
+type UpdateReleaseRequest struct {
+	ReleaseNotes *string  `json:"release_notes,omitempty"`
+	TargetGroups []string `json:"target_groups,omitempty"`
+}
+
+// handleUpdateRelease updates release notes and/or target groups
+// PUT /api/v1/releases/{product}/{version}
+func (s *Server) handleUpdateRelease(w http.ResponseWriter, r *http.Request) {
+	product := chi.URLParam(r, "product")
+	version := chi.URLParam(r, "version")
+
+	var req UpdateReleaseRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Validate groups if provided
+	if len(req.TargetGroups) > 0 {
+		validGroups := map[string]bool{"alpha": true, "beta": true, "stable": true, "production": true}
+		for _, g := range req.TargetGroups {
+			if !validGroups[g] {
+				writeError(w, http.StatusBadRequest, "invalid group: "+g)
+				return
+			}
+		}
+	}
+
+	svc := releases.NewService(s.db, s.storage)
+
+	// Get the release first
+	release, err := svc.GetRelease(r.Context(), product, version)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if release == nil {
+		writeError(w, http.StatusNotFound, "release not found")
+		return
+	}
+
+	// Update the release
+	if err := svc.UpdateRelease(r.Context(), release.ID, req.ReleaseNotes, req.TargetGroups); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Return updated info
+	response := map[string]interface{}{
+		"status":  "updated",
+		"product": product,
+		"version": version,
+	}
+	if req.ReleaseNotes != nil {
+		response["release_notes"] = *req.ReleaseNotes
+	}
+	if len(req.TargetGroups) > 0 {
+		response["target_groups"] = req.TargetGroups
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+// handleUpdateReleaseTargetGroups updates which groups can receive a release
+// PUT /api/v1/releases/{product}/{version}/target-groups
+func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.Request) {
+	product := chi.URLParam(r, "product")
+	version := chi.URLParam(r, "version")
+
+	var req UpdateReleaseTargetGroupsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Validate groups
+	validGroups := map[string]bool{"alpha": true, "beta": true, "stable": true, "production": true}
+	for _, g := range req.TargetGroups {
+		if !validGroups[g] {
+			writeError(w, http.StatusBadRequest, "invalid group: "+g+" (must be alpha, beta, stable, or production)")
+			return
+		}
+	}
+
+	svc := releases.NewService(s.db, s.storage)
+
+	// Get the release first
+	release, err := svc.GetRelease(r.Context(), product, version)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if release == nil {
+		writeError(w, http.StatusNotFound, "release not found")
+		return
+	}
+
+	// Update target groups
+	if err := svc.UpdateReleaseTargetGroups(r.Context(), release.ID, req.TargetGroups); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":        "updated",
+		"product":       product,
+		"version":       version,
+		"target_groups": req.TargetGroups,
+	})
+}
+
+// handleDeleteRelease deletes a release
+// DELETE /api/v1/releases/{product}/{version}
+func (s *Server) handleDeleteRelease(w http.ResponseWriter, r *http.Request) {
+	product := chi.URLParam(r, "product")
+	version := chi.URLParam(r, "version")
+
+	svc := releases.NewService(s.db, s.storage)
+
+	// Get the release first to find its ID
+	release, err := svc.GetRelease(r.Context(), product, version)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if release == nil {
+		writeError(w, http.StatusNotFound, "release not found")
+		return
+	}
+
+	// Delete the release
+	if err := svc.DeleteRelease(r.Context(), release.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "deleted",
+		"product": product,
+		"version": version,
 	})
 }
 
@@ -300,7 +505,7 @@ func (s *Server) handleDirectDownload(w http.ResponseWriter, r *http.Request) {
 	// Set headers for download
 	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
 	w.Header().Set("Content-Type", "application/octet-stream")
-	
+
 	// Add checksum if available from release record
 	if release != nil && release.Checksum != "" {
 		w.Header().Set("X-Checksum-SHA256", release.Checksum)
@@ -323,11 +528,25 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update instance heartbeat
+	// Read license key from header (sent by siemcore-updater)
+	licenseKey := r.Header.Get("X-License-Key")
+
+	// Look up license ID if license key provided
+	var licenseID string
+	if licenseKey != "" {
+		licenseSvc := licensing.NewService(s.db)
+		license, err := licenseSvc.ValidateLicense(r.Context(), licenseKey)
+		if err == nil && license != nil && license.IsActive {
+			licenseID = license.ID
+		}
+	}
+
+	// Upsert instance (create if not exists, update if exists)
 	instanceRepo := licensing.NewInstanceRepository(s.db)
-	if err := instanceRepo.UpdateHeartbeat(r.Context(), heartbeat.InstanceID, &heartbeat); err != nil {
-		// Instance might not exist yet, that's ok
-		// Just log and continue
+	clientIP := getClientIP(r)
+	if err := instanceRepo.UpsertFromHeartbeat(r.Context(), heartbeat.InstanceID, &heartbeat, licenseID, clientIP); err != nil {
+		// Log error but continue - don't fail the heartbeat
+		// fmt.Printf("Warning: failed to upsert instance: %v\n", err)
 	}
 
 	// Check for available updates
@@ -347,6 +566,165 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Update check handler (siemcore-updater format)
+// Accepts the format sent by siemcore-updater and creates/updates instances
+
+type UpdateCheckRequest struct {
+	InstanceID     string `json:"instance_id"`
+	CurrentVersion string `json:"current_version"`
+	UpdaterVersion string `json:"updater_version"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	Hostname       string `json:"hostname"`
+	Channel        string `json:"channel"`
+}
+
+func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	product := chi.URLParam(r, "product")
+	if product == "" {
+		writeError(w, http.StatusBadRequest, "product is required")
+		return
+	}
+
+	var req UpdateCheckRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.InstanceID == "" {
+		writeError(w, http.StatusBadRequest, "instance_id is required")
+		return
+	}
+
+	// Read license key from header
+	licenseKey := r.Header.Get("X-License-Key")
+
+	// Look up license ID if license key provided
+	var licenseID string
+	if licenseKey != "" {
+		licenseSvc := licensing.NewService(s.db)
+		license, err := licenseSvc.ValidateLicense(r.Context(), licenseKey)
+		if err == nil && license != nil && license.IsActive {
+			licenseID = license.ID
+		}
+	}
+
+	// Convert to heartbeat format for upsert
+	heartbeat := &types.Heartbeat{
+		InstanceID:     req.InstanceID,
+		InstanceType:   product,
+		Hostname:       req.Hostname,
+		UpdaterVersion: req.UpdaterVersion,
+		Products: []types.ProductStatus{
+			{
+				Name:    product,
+				Version: req.CurrentVersion,
+				Channel: req.Channel,
+			},
+		},
+	}
+
+	// Upsert instance
+	instanceRepo := licensing.NewInstanceRepository(s.db)
+	clientIP := getClientIP(r)
+	if err := instanceRepo.UpsertFromHeartbeat(r.Context(), req.InstanceID, heartbeat, licenseID, clientIP); err != nil {
+		// Log but don't fail
+	}
+
+	// Check if auto-update is enabled for this instance
+	instance, _ := instanceRepo.GetByInstanceID(r.Context(), req.InstanceID)
+	if instance != nil && !instance.AutoUpdateEnabled {
+		// Auto-update disabled - don't notify of updates
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"update_available": false,
+			"current_version":  req.CurrentVersion,
+			"auto_update":      false,
+		})
+		return
+	}
+
+	// Check for available updates
+	channel := req.Channel
+	if channel == "" {
+		channel = "stable"
+	}
+
+	// Determine update group (default to stable if not set)
+	updateGroup := "stable"
+	if instance != nil && instance.UpdateGroup != "" {
+		updateGroup = instance.UpdateGroup
+	}
+
+	releaseSvc := releases.NewService(s.db, s.storage)
+	info, err := releaseSvc.GetLatestReleaseForGroup(r.Context(), product, channel, req.CurrentVersion, updateGroup)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to check for updates")
+		return
+	}
+
+	if info != nil && info.UpdateAvailable {
+		// Build absolute download URL
+		scheme := r.Header.Get("X-Forwarded-Proto")
+		if scheme == "" {
+			if r.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
+		}
+		host := r.Host
+		absoluteURL := fmt.Sprintf("%s://%s%s", scheme, host, info.DownloadURL)
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"update_available": true,
+			"latest_version":   info.LatestVersion,
+			"download_url":     absoluteURL,
+			"update_url":       absoluteURL, // Alias for compatibility with siemcore-updater
+			"sha256":           info.Checksum,
+			"release_notes":    info.ReleaseNotes,
+			"channel":          info.Channel,
+			"update_group":     updateGroup,
+		})
+	} else {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"update_available": false,
+			"current_version":  req.CurrentVersion,
+			"update_group":     updateGroup,
+		})
+	}
+}
+
+// Update report handler - reports update success/failure
+type UpdateReportRequest struct {
+	InstanceID  string `json:"instance_id"`
+	FromVersion string `json:"from_version"`
+	ToVersion   string `json:"to_version"`
+	Success     bool   `json:"success"`
+	Error       string `json:"error,omitempty"`
+}
+
+func (s *Server) handleUpdateReport(w http.ResponseWriter, r *http.Request) {
+	product := chi.URLParam(r, "product")
+	if product == "" {
+		writeError(w, http.StatusBadRequest, "product is required")
+		return
+	}
+
+	var req UpdateReportRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// For now, just acknowledge the report
+	// TODO: Store update reports in database for analytics
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "ok",
+		"message": "update report received",
+	})
+}
+
 // Instance handlers (admin)
 
 func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
@@ -360,17 +738,50 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, instances)
 }
 
+// parseIntQueryParam parses an integer query parameter with bounds checking
+func parseIntQueryParam(r *http.Request, name string, defaultVal, minVal, maxVal int) int {
+	valStr := r.URL.Query().Get(name)
+	if valStr == "" {
+		return defaultVal
+	}
+	val, err := strconv.Atoi(valStr)
+	if err != nil {
+		return defaultVal
+	}
+	if val < minVal {
+		return minVal
+	}
+	if maxVal > 0 && val > maxVal {
+		return maxVal
+	}
+	return val
+}
+
+func (s *Server) handleListInstancesPaged(w http.ResponseWriter, r *http.Request) {
+	limit := parseIntQueryParam(r, "limit", 50, 1, 200)
+	offset := parseIntQueryParam(r, "offset", 0, 0, -1)
+
+	repo := licensing.NewInstanceRepository(s.db)
+	result, err := repo.ListPaged(r.Context(), limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	repo := licensing.NewInstanceRepository(s.db)
 	instance, err := repo.GetByID(r.Context(), id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	if errors.Is(err, licensing.ErrInstanceNotFound) {
+		writeError(w, http.StatusNotFound, "instance not found")
 		return
 	}
-	if instance == nil {
-		writeError(w, http.StatusNotFound, "instance not found")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -382,11 +793,117 @@ func (s *Server) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 
 	repo := licensing.NewInstanceRepository(s.db)
 	if err := repo.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, licensing.ErrInstanceNotFound) {
+			writeError(w, http.StatusNotFound, "instance not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// UpdateInstanceRequest is the request to update instance settings
+type UpdateInstanceRequest struct {
+	DisplayName *string `json:"display_name,omitempty"`
+	AutoUpdate  *bool   `json:"auto_update_enabled,omitempty"`
+	UpdateGroup *string `json:"update_group,omitempty"`
+}
+
+func (s *Server) handleUpdateInstance(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req UpdateInstanceRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	repo := licensing.NewInstanceRepository(s.db)
+
+	// UpdateInstance now uses pk `id` directly, validates, and returns updated instance
+	instance, err := repo.UpdateInstance(r.Context(), id, req.DisplayName, req.AutoUpdate, req.UpdateGroup)
+	if errors.Is(err, licensing.ErrInstanceNotFound) {
+		writeError(w, http.StatusNotFound, "instance not found")
+		return
+	}
+	if errors.Is(err, licensing.ErrNoFieldsToUpdate) {
+		writeError(w, http.StatusBadRequest, "no fields to update")
+		return
+	}
+	if err != nil {
+		// Validation errors from repo (e.g., invalid update_group) return here
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, instance)
+}
+
+// SetAutoUpdateRequest is the request to enable/disable auto-update
+type SetAutoUpdateRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+func (s *Server) handleSetAutoUpdate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req SetAutoUpdateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	repo := licensing.NewInstanceRepository(s.db)
+
+	// SetAutoUpdate is now a thin wrapper around UpdateInstance
+	if err := repo.SetAutoUpdate(r.Context(), id, req.Enabled); err != nil {
+		if errors.Is(err, licensing.ErrInstanceNotFound) {
+			writeError(w, http.StatusNotFound, "instance not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":              "updated",
+		"auto_update_enabled": req.Enabled,
+	})
+}
+
+// SetUpdateGroupRequest is the request to set an instance's update group
+type SetUpdateGroupRequest struct {
+	Group string `json:"group"` // alpha, beta, stable, production
+}
+
+func (s *Server) handleSetUpdateGroup(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req SetUpdateGroupRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	repo := licensing.NewInstanceRepository(s.db)
+
+	// SetUpdateGroup is now a thin wrapper around UpdateInstance (validation in repo)
+	if err := repo.SetUpdateGroup(r.Context(), id, req.Group); err != nil {
+		if errors.Is(err, licensing.ErrInstanceNotFound) {
+			writeError(w, http.StatusNotFound, "instance not found")
+			return
+		}
+		// Validation errors (invalid group) come back as regular errors
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":       "updated",
+		"update_group": req.Group,
+	})
 }
 
 // Admin license handlers

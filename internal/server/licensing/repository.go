@@ -41,6 +41,7 @@ func (r *Repository) Create(ctx context.Context, license *types.License) error {
 // GetByKey retrieves a license by its key
 func (r *Repository) GetByKey(ctx context.Context, licenseKey string) (*types.License, error) {
 	var license types.License
+	var boundTo *string
 	err := r.db.Pool.QueryRow(ctx, `
 		SELECT id, license_key, customer_id, customer_name, license_type, products, features, limits, issued_at, expires_at, bound_to, is_active, created_at, updated_at
 		FROM licenses
@@ -48,7 +49,7 @@ func (r *Repository) GetByKey(ctx context.Context, licenseKey string) (*types.Li
 	`, licenseKey).Scan(
 		&license.ID, &license.LicenseKey, &license.CustomerID, &license.CustomerName,
 		&license.Type, &license.Products, &license.Features, &license.Limits,
-		&license.IssuedAt, &license.ExpiresAt, &license.BoundTo, &license.IsActive,
+		&license.IssuedAt, &license.ExpiresAt, &boundTo, &license.IsActive,
 		&license.CreatedAt, &license.UpdatedAt)
 
 	if err == pgx.ErrNoRows {
@@ -56,6 +57,10 @@ func (r *Repository) GetByKey(ctx context.Context, licenseKey string) (*types.Li
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get license: %w", err)
+	}
+
+	if boundTo != nil {
+		license.BoundTo = *boundTo
 	}
 
 	return &license, nil
@@ -64,6 +69,7 @@ func (r *Repository) GetByKey(ctx context.Context, licenseKey string) (*types.Li
 // GetByID retrieves a license by ID
 func (r *Repository) GetByID(ctx context.Context, id string) (*types.License, error) {
 	var license types.License
+	var boundTo *string
 	err := r.db.Pool.QueryRow(ctx, `
 		SELECT id, license_key, customer_id, customer_name, license_type, products, features, limits, issued_at, expires_at, bound_to, is_active, created_at, updated_at
 		FROM licenses
@@ -71,7 +77,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*types.License, er
 	`, id).Scan(
 		&license.ID, &license.LicenseKey, &license.CustomerID, &license.CustomerName,
 		&license.Type, &license.Products, &license.Features, &license.Limits,
-		&license.IssuedAt, &license.ExpiresAt, &license.BoundTo, &license.IsActive,
+		&license.IssuedAt, &license.ExpiresAt, &boundTo, &license.IsActive,
 		&license.CreatedAt, &license.UpdatedAt)
 
 	if err == pgx.ErrNoRows {
@@ -79,6 +85,10 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*types.License, er
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get license: %w", err)
+	}
+
+	if boundTo != nil {
+		license.BoundTo = *boundTo
 	}
 
 	return &license, nil
@@ -99,13 +109,17 @@ func (r *Repository) List(ctx context.Context) ([]types.License, error) {
 	var licenses []types.License
 	for rows.Next() {
 		var license types.License
+		var boundTo *string
 		err := rows.Scan(
 			&license.ID, &license.LicenseKey, &license.CustomerID, &license.CustomerName,
 			&license.Type, &license.Products, &license.Features, &license.Limits,
-			&license.IssuedAt, &license.ExpiresAt, &license.BoundTo, &license.IsActive,
+			&license.IssuedAt, &license.ExpiresAt, &boundTo, &license.IsActive,
 			&license.CreatedAt, &license.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan license: %w", err)
+		}
+		if boundTo != nil {
+			license.BoundTo = *boundTo
 		}
 		licenses = append(licenses, license)
 	}

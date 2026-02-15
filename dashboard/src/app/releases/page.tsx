@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Package, Upload, RefreshCw, X, FileUp } from "lucide-react";
+import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useRef } from "react";
 
@@ -11,6 +11,7 @@ interface UploadFormData {
   version: string;
   channel: string;
   release_notes: string;
+  target_groups: string[];
   artifact: File | null;
 }
 
@@ -30,6 +31,7 @@ export default function ReleasesPage() {
     version: "",
     channel: "stable",
     release_notes: "",
+    target_groups: ["alpha", "beta", "stable", "production"],
     artifact: null,
   });
   const [uploadError, setUploadError] = useState("");
@@ -42,6 +44,7 @@ export default function ReleasesPage() {
         version: data.version,
         channel: data.channel,
         release_notes: data.release_notes || undefined,
+        target_groups: data.target_groups.length > 0 ? data.target_groups : undefined,
         artifact: data.artifact,
       });
     },
@@ -53,6 +56,7 @@ export default function ReleasesPage() {
         version: "",
         channel: "stable",
         release_notes: "",
+        target_groups: ["alpha", "beta", "stable", "production"],
         artifact: null,
       });
       setUploadError("");
@@ -61,6 +65,76 @@ export default function ReleasesPage() {
       setUploadError(error.message);
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({ product, version }: { product: string; version: string }) => {
+      return api.deleteRelease(product, version);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["releases"] });
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    },
+  });
+
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ product: string; version: string } | null>(null);
+
+  const handleDeleteRelease = (product: string, version: string) => {
+    setDeleteTarget({ product, version });
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget);
+    }
+  };
+
+  // Edit release state and mutation
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    product: "",
+    version: "",
+    release_notes: "",
+    target_groups: [] as string[],
+  });
+  const [editError, setEditError] = useState("");
+
+  const editMutation = useMutation({
+    mutationFn: async (data: { product: string; version: string; release_notes: string; target_groups: string[] }) => {
+      return api.updateRelease(data.product, data.version, {
+        release_notes: data.release_notes,
+        target_groups: data.target_groups,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["releases"] });
+      setShowEditModal(false);
+      setEditError("");
+    },
+    onError: (error: Error) => {
+      setEditError(error.message);
+    },
+  });
+
+  const handleEditRelease = (release: { product_name: string; version: string; release_notes?: string; target_groups?: string[] }) => {
+    setEditForm({
+      product: release.product_name,
+      version: release.version,
+      release_notes: release.release_notes || "",
+      target_groups: release.target_groups || [],
+    });
+    setEditError("");
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditError("");
+    editMutation.mutate(editForm);
+  };
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 B";
@@ -172,10 +246,11 @@ export default function ReleasesPage() {
                       <tr>
                         <th>Version</th>
                         <th>Channel</th>
+                        <th>Target Groups</th>
                         <th>Size</th>
-                        <th>Checksum</th>
                         <th>Released</th>
                         <th>Notes</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -199,13 +274,30 @@ export default function ReleasesPage() {
                               {release.channel}
                             </span>
                           </td>
+                          <td>
+                            <div className="flex flex-wrap gap-1">
+                              {(release.target_groups || ["all"]).map((group) => (
+                                <span
+                                  key={group}
+                                  className={`px-2 py-0.5 rounded text-xs ${
+                                    group === "alpha"
+                                      ? "bg-purple-500/20 text-purple-400"
+                                      : group === "beta"
+                                      ? "bg-amber-500/20 text-amber-400"
+                                      : group === "stable"
+                                      ? "bg-blue-500/20 text-blue-400"
+                                      : group === "production"
+                                      ? "bg-emerald-500/20 text-emerald-400"
+                                      : "bg-slate-700 text-slate-400"
+                                  }`}
+                                >
+                                  {group}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
                           <td className="text-slate-300">
                             {formatBytes(release.artifact_size)}
-                          </td>
-                          <td>
-                            <code className="text-xs text-slate-500 font-mono">
-                              {release.checksum?.substring(0, 12)}...
-                            </code>
                           </td>
                           <td className="text-slate-400">
                             {formatDistanceToNow(new Date(release.released_at), {
@@ -214,6 +306,25 @@ export default function ReleasesPage() {
                           </td>
                           <td className="text-slate-400 max-w-xs truncate">
                             {release.release_notes || "-"}
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleEditRelease(release)}
+                                className="p-1.5 rounded-lg hover:bg-blue-500/20 text-slate-400 hover:text-blue-400 transition-colors"
+                                title="Edit release"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteRelease(release.product_name, release.version)}
+                                disabled={deleteMutation.isPending}
+                                className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors disabled:opacity-50"
+                                title="Delete release"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -311,6 +422,42 @@ export default function ReleasesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Target Groups
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {["alpha", "beta", "stable", "production"].map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      onClick={() => {
+                        const groups = uploadForm.target_groups.includes(group)
+                          ? uploadForm.target_groups.filter((g) => g !== group)
+                          : [...uploadForm.target_groups, group];
+                        setUploadForm({ ...uploadForm, target_groups: groups });
+                      }}
+                      className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                        uploadForm.target_groups.includes(group)
+                          ? group === "alpha"
+                            ? "bg-purple-500/30 text-purple-300 border border-purple-500/50"
+                            : group === "beta"
+                            ? "bg-amber-500/30 text-amber-300 border border-amber-500/50"
+                            : group === "stable"
+                            ? "bg-blue-500/30 text-blue-300 border border-blue-500/50"
+                            : "bg-emerald-500/30 text-emerald-300 border border-emerald-500/50"
+                          : "bg-slate-800 text-slate-400 border border-slate-700"
+                      }`}
+                    >
+                      {group}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Select which instance groups will receive this release
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
                   Release Notes
                 </label>
                 <textarea
@@ -378,6 +525,172 @@ export default function ReleasesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-white">
+                Edit Release: {editForm.product} {editForm.version}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditError("");
+                }}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              {editError && (
+                <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
+                  {editError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Target Groups
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {["alpha", "beta", "stable", "production"].map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      onClick={() => {
+                        const newGroups = editForm.target_groups.includes(group)
+                          ? editForm.target_groups.filter((g) => g !== group)
+                          : [...editForm.target_groups, group];
+                        setEditForm({ ...editForm, target_groups: newGroups });
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        editForm.target_groups.includes(group)
+                          ? group === "alpha"
+                            ? "bg-purple-500/30 text-purple-300 border border-purple-500"
+                            : group === "beta"
+                            ? "bg-amber-500/30 text-amber-300 border border-amber-500"
+                            : group === "stable"
+                            ? "bg-blue-500/30 text-blue-300 border border-blue-500"
+                            : "bg-emerald-500/30 text-emerald-300 border border-emerald-500"
+                          : "bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600"
+                      }`}
+                    >
+                      {group}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Select which instance groups will receive this release
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Release Notes
+                </label>
+                <textarea
+                  placeholder="What's new in this release..."
+                  value={editForm.release_notes}
+                  onChange={(e) => setEditForm({ ...editForm, release_notes: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditError("");
+                  }}
+                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editMutation.isPending}
+                  className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {editMutation.isPending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
+                <AlertTriangle className="w-7 h-7 text-red-400" />
+              </div>
+              
+              <h2 className="text-xl font-semibold text-white mb-2">
+                Delete Release
+              </h2>
+              
+              <p className="text-slate-400 mb-1">
+                Are you sure you want to delete this release?
+              </p>
+              
+              <div className="bg-slate-800 rounded-lg px-4 py-2 my-3">
+                <span className="text-cyan-400 font-medium">{deleteTarget.product}</span>
+                <span className="text-slate-500 mx-2">•</span>
+                <span className="text-white font-mono">{deleteTarget.version}</span>
+              </div>
+              
+              <p className="text-sm text-slate-500 mb-6">
+                This action cannot be undone. Instances will no longer be able to download this version.
+              </p>
+
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeleteTarget(null);
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleteMutation.isPending}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {deleteMutation.isPending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
