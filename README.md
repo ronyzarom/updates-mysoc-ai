@@ -136,13 +136,22 @@ mysoc-updater update [product]     # Force update check
 mysoc-updater rollback [product]   # Rollback to previous version
 ```
 
+## Documentation
+
+- [Updater Simulator](docs/UPDATER-SIMULATOR.md) - Safe live-protocol testing and reusable SiemCore/SWF agent skeleton
+- [Update Server and Agent Guidelines](docs/UPDATER-GUIDELINES.md) - Release lifecycle, heartbeat/grant flow, agent safety, and topology-specific operations
+- [SiemCore Deployment Guide](docs/SIEMCORE_DEPLOYMENT_GUIDE.md) - Deployment and staged rollout operations
+- [SiemCore Cluster Update Server Spec](docs/SIEMCORE-CLUSTER-UPDATE-SERVER-SPEC.md) - Cluster registry and rollout policy contract
+- [MySoc Admin Guide](docs/MYSOC_ADMIN_GUIDE.md) - Dashboard and release administration
+
 ## Project Structure
 
 ```
 updates-mysoc-ai/
 ├── cmd/
 │   ├── update-server/       # Server entrypoint
-│   └── mysoc-updater/       # Updater entrypoint
+│   ├── mysoc-updater/       # Updater entrypoint
+│   └── updater-simulator/   # Safe protocol simulator and agent skeleton
 ├── internal/
 │   ├── server/              # Server internals
 │   │   ├── api/             # HTTP handlers
@@ -154,8 +163,11 @@ updates-mysoc-ai/
 │       ├── update/          # Update logic
 │       ├── service/         # Service monitoring
 │       └── security/        # Security hardening
-├── pkg/                     # Shared packages
+├── pkg/
+│   ├── types/               # Shared wire types
+│   └── updatersim/          # Reusable simulator client and lifecycle
 ├── dashboard/               # Next.js admin UI
+├── examples/                # Safe simulator configurations
 ├── migrations/              # Database migrations
 └── scripts/                 # Install scripts
 ```

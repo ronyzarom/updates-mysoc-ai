@@ -1,0 +1,34 @@
+# Safe observe-only SiemCore simulator.
+# Supply a dedicated test license through UPDATER_SIM_LICENSE_KEY.
+server:
+  url: https://updates.mysoc.ai
+  license_key: ""
+  api_key: ""
+  timeout: 30s
+  max_response_bytes: 1048576
+  allow_external_downloads: false
+
+instance:
+  id: sim-siemcore-dev-01
+  type: simulator
+  hostname: sim-siemcore-dev-01
+  machine_id: sim-siemcore-dev-01
+  updater_version: updater-simulator/1.1.0.3
+  os: linux
+  arch: amd64
+
+heartbeat:
+  interval: 60s
+  jitter: 5s
+
+simulation:
+  mode: observe
+  artifact_dir: ./artifacts
+  state_file: ./.siemcore-simulator-state.json
+  max_download_bytes: 1073741824
+  legacy_fallback: false
+
+products:
+  - name: siemcore
+    current_version: 0.0.0
+    channel: stable

@@ -1,15 +1,17 @@
-.PHONY: all build build-server build-updater clean test run-server run-updater migrate dashboard
+.PHONY: all build build-server build-updater build-simulator clean test run-server run-updater run-simulator migrate dashboard
 
 # Variables
 BINARY_DIR=bin
 SERVER_BINARY=$(BINARY_DIR)/update-server
 UPDATER_BINARY=$(BINARY_DIR)/mysoc-updater
+SIMULATOR_BINARY=$(BINARY_DIR)/updater-simulator
+SIMULATOR_CONFIG?=examples/updater-simulator/siemcore.yaml
 GO=go
 GOFLAGS=-ldflags="-s -w"
 
 # Version info
-VERSION?=0.1.0
-GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
+VERSION?=$(shell tr -d '[:space:]' < VERSION)
+GIT_COMMIT=$(shell git describe --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS=-ldflags="-s -w -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.BuildTime=$(BUILD_TIME)"
 
@@ -28,6 +30,12 @@ build-updater:
 	@mkdir -p $(BINARY_DIR)
 	$(GO) build $(LDFLAGS) -o $(UPDATER_BINARY) ./cmd/mysoc-updater
 
+# Build the safe updater simulator separately from production binaries
+build-simulator:
+	@echo "Building updater-simulator..."
+	@mkdir -p $(BINARY_DIR)
+	$(GO) build $(LDFLAGS) -o $(SIMULATOR_BINARY) ./cmd/updater-simulator
+
 # Cross-compile updater for Linux
 build-updater-linux:
 	@echo "Building mysoc-updater for Linux..."
@@ -42,6 +50,10 @@ run-server:
 # Run the updater locally
 run-updater:
 	$(GO) run ./cmd/mysoc-updater
+
+# Run the simulator in its configured safe mode
+run-simulator:
+	$(GO) run ./cmd/updater-simulator --config $(SIMULATOR_CONFIG) run
 
 # Run tests
 test:
@@ -129,8 +141,10 @@ help:
 	@echo "  build          - Build both server and updater"
 	@echo "  build-server   - Build update-server"
 	@echo "  build-updater  - Build mysoc-updater"
+	@echo "  build-simulator - Build updater-simulator"
 	@echo "  run-server     - Run update-server locally"
 	@echo "  run-updater    - Run mysoc-updater locally"
+	@echo "  run-simulator  - Run simulator (SIMULATOR_CONFIG=path)"
 	@echo "  test           - Run tests"
 	@echo "  clean          - Clean build artifacts"
 	@echo "  migrate-up     - Run database migrations"

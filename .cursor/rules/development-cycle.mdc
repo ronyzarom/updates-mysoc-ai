@@ -1,0 +1,27 @@
+---
+description: Enforce version branches, numbered builds, local testing, and deployment approval
+alwaysApply: true
+---
+
+# Development and Deployment Cycle
+
+1. `main` is the single source of truth for the exact production source and
+   version. Never develop directly on `main`.
+2. Start each release from current `main` on
+   `version/MAJOR.MINOR.PATCH` (for example, `version/1.1.0`).
+3. Number every release artifact build
+   `MAJOR.MINOR.PATCH.BUILD`, beginning with `.1` and incrementing for every
+   rebuilt candidate. Never replace an artifact under an existing build number.
+4. Before production, run the relevant local formatting, lint, test, build,
+   upgrade, rollback, and smoke checks. Record the exact commit and build number
+   that passed. A deployable candidate must come from a clean committed tree;
+   a build marked `dirty` is diagnostic only and cannot be deployed.
+5. After local validation, stop and report the results. Do not merge to `main`,
+   push a production release, upload artifacts, restart production services, or
+   deploy while waiting.
+6. Deploy to `updates.mysoc.ai` only after the user gives an explicit deployment
+   instruction. Deploy only the exact tested build.
+7. The approved version branch must be merged to `main` so the deployed commit
+   and version are represented by `main`. Any material change after testing
+   invalidates approval and restarts the build-and-test cycle with a new build
+   number.
