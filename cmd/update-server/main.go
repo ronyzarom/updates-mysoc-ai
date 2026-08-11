@@ -23,6 +23,9 @@ var (
 )
 
 func main() {
+	// Surface the build version through the API (e.g. /health).
+	api.Version = Version
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {

@@ -26,6 +26,9 @@ import {
 import Link from "next/link";
 import { formatDistanceToNow, format } from "date-fns";
 import { useState, useEffect } from "react";
+import { LoadingState, ErrorState, Switch } from "@/components/ui";
+import { RequireRole } from "@/lib/auth-context";
+import { effectiveUpdateGroup } from "@/lib/derive";
 
 export default function InstanceDetailPage() {
   const params = useParams();
@@ -33,9 +36,10 @@ export default function InstanceDetailPage() {
   const queryClient = useQueryClient();
   const id = params.id as string;
 
-  const { data: instance, isLoading, refetch } = useQuery({
+  const { data: instance, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instance", id],
     queryFn: () => api.getInstance(id),
+    retry: false,
   });
 
   const [selectedGroup, setSelectedGroup] = useState<string>("");
@@ -134,10 +138,16 @@ export default function InstanceDetailPage() {
   };
 
   if (isLoading) {
+    return <LoadingState label="Loading instance..." />;
+  }
+
+  if (isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400">Loading instance...</div>
-      </div>
+      <ErrorState
+        title="Failed to load instance"
+        error={error}
+        onRetry={() => refetch()}
+      />
     );
   }
 
@@ -155,6 +165,11 @@ export default function InstanceDetailPage() {
   }
 
   const heartbeat = instance.last_heartbeat_data;
+
+  // The group currently persisted on the instance, and the group the user has
+  // chosen. Never allow submitting an empty group value.
+  const currentGroup = instance.update_group || "stable";
+  const effectiveGroup = effectiveUpdateGroup(selectedGroup, instance.update_group);
 
   return (
     <div className="space-y-8">
@@ -204,16 +219,19 @@ export default function InstanceDetailPage() {
                 <p className="text-slate-400">
                   {instance.display_name || instance.hostname || "No display name set"}
                 </p>
-                <button
-                  onClick={() => {
-                    setDisplayName(instance.display_name || "");
-                    setIsEditingName(true);
-                  }}
-                  className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-white"
-                  title="Edit display name"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
+                <RequireRole roles={["admin"]}>
+                  <button
+                    onClick={() => {
+                      setDisplayName(instance.display_name || "");
+                      setIsEditingName(true);
+                    }}
+                    className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-white"
+                    title="Edit display name"
+                    aria-label="Edit display name"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </RequireRole>
               </div>
             )}
           </div>
@@ -223,13 +241,15 @@ export default function InstanceDetailPage() {
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="btn bg-red-600 hover:bg-red-500 text-white"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </button>
+          <RequireRole roles={["admin"]}>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="btn bg-red-600 hover:bg-red-500 text-white"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </RequireRole>
         </div>
       </div>
 
@@ -289,46 +309,51 @@ export default function InstanceDetailPage() {
                 <p className="text-white font-medium">Auto Update</p>
                 <p className="text-sm text-slate-400">Enable automatic updates</p>
               </div>
-              <button
-                onClick={() => autoUpdateMutation.mutate(!instance.auto_update_enabled)}
-                disabled={autoUpdateMutation.isPending}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  instance.auto_update_enabled ? "bg-cyan-500" : "bg-slate-600"
-                }`}
+              <RequireRole
+                roles={["admin"]}
+                fallback={
+                  <span className="text-sm text-slate-400">
+                    {instance.auto_update_enabled ? "Enabled" : "Disabled"}
+                  </span>
+                }
               >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    instance.auto_update_enabled ? "translate-x-6" : "translate-x-1"
-                  }`}
+                <Switch
+                  checked={instance.auto_update_enabled}
+                  onChange={(next) => autoUpdateMutation.mutate(next)}
+                  disabled={autoUpdateMutation.isPending}
+                  label="Auto update"
                 />
-              </button>
+              </RequireRole>
             </div>
 
             {/* Update Group */}
             <div>
               <p className="text-white font-medium mb-2">Update Group</p>
-              <div className="flex gap-2">
-                <select
-                  value={selectedGroup || instance.update_group || "stable"}
-                  onChange={(e) => setSelectedGroup(e.target.value)}
-                  className="input flex-1"
-                >
-                  <option value="alpha">Alpha</option>
-                  <option value="beta">Beta</option>
-                  <option value="stable">Stable</option>
-                  <option value="production">Production</option>
-                </select>
-                <button
-                  onClick={() => updateGroupMutation.mutate(selectedGroup)}
-                  disabled={
-                    updateGroupMutation.isPending ||
-                    selectedGroup === (instance.update_group || "stable")
-                  }
-                  className="btn btn-primary"
-                >
-                  Save
-                </button>
-              </div>
+              <RequireRole roles={["admin"]}>
+                <div className="flex gap-2">
+                  <select
+                    aria-label="Update group"
+                    value={effectiveGroup}
+                    onChange={(e) => setSelectedGroup(e.target.value)}
+                    className="input flex-1"
+                  >
+                    <option value="alpha">Alpha</option>
+                    <option value="beta">Beta</option>
+                    <option value="stable">Stable</option>
+                    <option value="production">Production</option>
+                  </select>
+                  <button
+                    onClick={() => updateGroupMutation.mutate(effectiveGroup)}
+                    disabled={
+                      updateGroupMutation.isPending ||
+                      effectiveGroup === currentGroup
+                    }
+                    className="btn btn-primary"
+                  >
+                    Save
+                  </button>
+                </div>
+              </RequireRole>
               <p className="text-xs text-slate-500 mt-1">
                 Current: <span className="text-cyan-400">{instance.update_group || "stable"}</span>
               </p>
@@ -422,8 +447,20 @@ export default function InstanceDetailPage() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">Status</span>
-                <span className={instance.last_update_success ? "text-emerald-400" : "text-red-400"}>
-                  {instance.last_update_success ? "Success" : "Failed"}
+                <span
+                  className={
+                    instance.last_update_success === undefined
+                      ? "text-slate-400"
+                      : instance.last_update_success
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                  }
+                >
+                  {instance.last_update_success === undefined
+                    ? "Unknown"
+                    : instance.last_update_success
+                      ? "Success"
+                      : "Failed"}
                 </span>
               </div>
               {instance.last_update_error && (

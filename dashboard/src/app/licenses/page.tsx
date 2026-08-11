@@ -1,19 +1,31 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { Key, Plus, RefreshCw, Calendar, CheckCircle, XCircle, X } from "lucide-react";
+import { api, LICENSE_TYPES } from "@/lib/api";
+import { Key, Plus, RefreshCw, Calendar, CheckCircle, XCircle } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
+import Link from "next/link";
 import { useState } from "react";
+import { LoadingState, ErrorState, Modal } from "@/components/ui";
+import { RequireRole } from "@/lib/auth-context";
+import { hasExpiry, licenseCounts, THIRTY_DAYS_MS } from "@/lib/derive";
 
 export default function LicensesPage() {
   const queryClient = useQueryClient();
-  const { data: licenses, isLoading, refetch } = useQuery({
+  const { data: licenses, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["licenses"],
     queryFn: () => api.getLicenses(),
+    retry: false,
   });
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const now = Date.now();
+  const {
+    active: activeCount,
+    expiringSoon: expiringSoonCount,
+    inactiveOrExpired: inactiveExpiredCount,
+  } = licenseCounts(licenses, now);
 
   const createMutation = useMutation({
     mutationFn: (data: {
@@ -44,13 +56,15 @@ export default function LicensesPage() {
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn btn-primary"
-          >
-            <Plus className="w-4 h-4" />
-            Create License
-          </button>
+          <RequireRole roles={["admin"]}>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn btn-primary"
+            >
+              <Plus className="w-4 h-4" />
+              Create License
+            </button>
+          </RequireRole>
         </div>
       </div>
 
@@ -62,9 +76,7 @@ export default function LicensesPage() {
               <CheckCircle className="w-6 h-6 text-emerald-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">
-                {licenses?.filter((l) => l.is_active).length || 0}
-              </p>
+              <p className="text-2xl font-bold text-white">{activeCount}</p>
               <p className="text-sm text-slate-400">Active Licenses</p>
             </div>
           </div>
@@ -75,13 +87,7 @@ export default function LicensesPage() {
               <Calendar className="w-6 h-6 text-amber-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-white">
-                {licenses?.filter(
-                  (l) =>
-                    new Date(l.expires_at) <
-                    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-                ).length || 0}
-              </p>
+              <p className="text-2xl font-bold text-white">{expiringSoonCount}</p>
               <p className="text-sm text-slate-400">Expiring Soon</p>
             </div>
           </div>
@@ -93,9 +99,7 @@ export default function LicensesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-white">
-                {licenses?.filter(
-                  (l) => !l.is_active || new Date(l.expires_at) < new Date()
-                ).length || 0}
+                {inactiveExpiredCount}
               </p>
               <p className="text-sm text-slate-400">Inactive/Expired</p>
             </div>
@@ -105,7 +109,13 @@ export default function LicensesPage() {
 
       {/* Licenses Table */}
       {isLoading ? (
-        <div className="text-slate-400">Loading licenses...</div>
+        <LoadingState label="Loading licenses..." />
+      ) : isError ? (
+        <ErrorState
+          title="Failed to load licenses"
+          error={error}
+          onRetry={() => refetch()}
+        />
       ) : (
         <div className="card">
           <div className="table-container">
@@ -122,22 +132,27 @@ export default function LicensesPage() {
               </thead>
               <tbody>
                 {licenses?.map((license) => {
-                  const isExpired = new Date(license.expires_at) < new Date();
+                  const licenseHasExpiry = hasExpiry(license.expires_at);
+                  const expMs = licenseHasExpiry
+                    ? new Date(license.expires_at).getTime()
+                    : 0;
+                  const isExpired = licenseHasExpiry && expMs <= now;
                   const isExpiringSoon =
-                    new Date(license.expires_at) <
-                    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                    licenseHasExpiry &&
+                    expMs > now &&
+                    expMs < now + THIRTY_DAYS_MS;
 
                   return (
                     <tr key={license.id}>
                       <td>
-                        <div>
-                          <p className="font-medium text-white">
+                        <Link href={`/licenses/${license.id}`} className="block group">
+                          <p className="font-medium text-white group-hover:text-cyan-400">
                             {license.customer_name}
                           </p>
                           <p className="text-xs text-slate-500">
                             {license.customer_id}
                           </p>
-                        </div>
+                        </Link>
                       </td>
                       <td>
                         <code className="text-cyan-400 font-mono text-sm">
@@ -176,14 +191,20 @@ export default function LicensesPage() {
                               : "text-slate-300"
                           }`}
                         >
-                          <p className="text-sm">
-                            {format(new Date(license.expires_at), "MMM d, yyyy")}
-                          </p>
-                          <p className="text-xs">
-                            {formatDistanceToNow(new Date(license.expires_at), {
-                              addSuffix: true,
-                            })}
-                          </p>
+                          {licenseHasExpiry ? (
+                            <>
+                              <p className="text-sm">
+                                {format(new Date(license.expires_at), "MMM d, yyyy")}
+                              </p>
+                              <p className="text-xs">
+                                {formatDistanceToNow(new Date(license.expires_at), {
+                                  addSuffix: true,
+                                })}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-slate-400">Never</p>
+                          )}
                         </div>
                       </td>
                       <td>
@@ -215,13 +236,15 @@ export default function LicensesPage() {
                       <p className="text-slate-400 mb-6">
                         Create your first license to get started.
                       </p>
-                      <button
-                        onClick={() => setShowCreateModal(true)}
-                        className="btn btn-primary"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Create License
-                      </button>
+                      <RequireRole roles={["admin"]}>
+                        <button
+                          onClick={() => setShowCreateModal(true)}
+                          className="btn btn-primary"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create License
+                        </button>
+                      </RequireRole>
                     </td>
                   </tr>
                 )}
@@ -295,131 +318,125 @@ function CreateLicenseModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-700">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-white">Create License</h2>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-slate-700 rounded transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
+    <Modal title="Create License" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="lic-customer-id" className="block text-sm font-medium text-slate-300 mb-1">
+            Customer ID
+          </label>
+          <input
+            id="lic-customer-id"
+            type="text"
+            value={formData.customer_id}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, customer_id: e.target.value }))
+            }
+            className="input w-full"
+            placeholder="e.g., acme-corp"
+            required
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Customer ID
-            </label>
-            <input
-              type="text"
-              value={formData.customer_id}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, customer_id: e.target.value }))
-              }
-              className="input w-full"
-              placeholder="e.g., acme-corp"
-              required
-            />
-          </div>
+        <div>
+          <label htmlFor="lic-customer-name" className="block text-sm font-medium text-slate-300 mb-1">
+            Customer Name
+          </label>
+          <input
+            id="lic-customer-name"
+            type="text"
+            value={formData.customer_name}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, customer_name: e.target.value }))
+            }
+            className="input w-full"
+            placeholder="e.g., Acme Corporation"
+            required
+          />
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Customer Name
-            </label>
-            <input
-              type="text"
-              value={formData.customer_name}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, customer_name: e.target.value }))
-              }
-              className="input w-full"
-              placeholder="e.g., Acme Corporation"
-              required
-            />
-          </div>
+        <div>
+          <label htmlFor="lic-type" className="block text-sm font-medium text-slate-300 mb-1">
+            License Type
+          </label>
+          <select
+            id="lic-type"
+            value={formData.type}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, type: e.target.value }))
+            }
+            className="input w-full"
+          >
+            {LICENSE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              License Type
-            </label>
-            <select
-              value={formData.type}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, type: e.target.value }))
-              }
-              className="input w-full"
-            >
-              <option value="siemcore">SIEMCore</option>
-              <option value="mysoc">MySoc</option>
-              <option value="enterprise">Enterprise</option>
-              <option value="trial">Trial</option>
-            </select>
+        <div>
+          <span className="block text-sm font-medium text-slate-300 mb-1">
+            Products
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {productOptions.map((product) => (
+              <button
+                key={product}
+                type="button"
+                aria-pressed={formData.products.includes(product)}
+                onClick={() => handleProductToggle(product)}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  formData.products.includes(product)
+                    ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/50"
+                    : "bg-slate-700 text-slate-400 border border-slate-600"
+                }`}
+              >
+                {product}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Products
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {productOptions.map((product) => (
-                <button
-                  key={product}
-                  type="button"
-                  onClick={() => handleProductToggle(product)}
-                  className={`px-3 py-1 rounded text-sm transition-colors ${
-                    formData.products.includes(product)
-                      ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/50"
-                      : "bg-slate-700 text-slate-400 border border-slate-600"
-                  }`}
-                >
-                  {product}
-                </button>
-              ))}
-            </div>
+        <div>
+          <label htmlFor="lic-expires" className="block text-sm font-medium text-slate-300 mb-1">
+            Expires At
+          </label>
+          <input
+            id="lic-expires"
+            type="date"
+            value={formData.expires_at}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, expires_at: e.target.value }))
+            }
+            className="input w-full"
+            required
+          />
+        </div>
+
+        {error && (
+          <div className="p-3 rounded bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
+            {error}
           </div>
+        )}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Expires At
-            </label>
-            <input
-              type="date"
-              value={formData.expires_at}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, expires_at: e.target.value }))
-              }
-              className="input w-full"
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="p-3 rounded bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn-secondary flex-1"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="btn btn-primary flex-1"
-            >
-              {isLoading ? "Creating..." : "Create License"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn-secondary flex-1"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="btn btn-primary flex-1"
+          >
+            {isLoading ? "Creating..." : "Create License"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

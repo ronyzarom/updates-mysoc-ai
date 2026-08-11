@@ -38,6 +38,10 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
+// Version is the running server build, injected from the main package at
+// startup (populated via -ldflags). It defaults to "dev" for local builds.
+var Version = "dev"
+
 // Health check response
 type HealthResponse struct {
 	Status  string `json:"status"`
@@ -48,7 +52,7 @@ type HealthResponse struct {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	resp := HealthResponse{
 		Status:  "ok",
-		Version: "1.0.0",
+		Version: Version,
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

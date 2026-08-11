@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   User,
@@ -23,9 +24,16 @@ import { useAuth, RequireAuth } from "@/lib/auth-context";
 function ProfileContent() {
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   // State
   const [name, setName] = useState(user?.name || "");
+
+  // Keep the editable name in sync when the authenticated user loads or changes
+  // (the user is null on first render while the profile is still loading).
+  useEffect(() => {
+    setName(user?.name || "");
+  }, [user?.name]);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -68,7 +76,13 @@ function ProfileContent() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setMessage({ type: "success", text: "Password changed successfully. You will need to log in again." });
+      setMessage({ type: "success", text: "Password changed successfully. Redirecting to sign in..." });
+      // The server revokes all sessions on password change, so the current
+      // tokens are now invalid. Clear them and send the user back to login.
+      api.clearTokens();
+      setTimeout(() => {
+        router.replace("/login");
+      }, 1500);
     },
     onError: (error) => {
       setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to change password" });

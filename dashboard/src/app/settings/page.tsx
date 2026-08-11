@@ -1,8 +1,22 @@
 "use client";
 
-import { Settings, Server, Key, Bell, Shield, Database } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { Server, Key, Bell, Shield, Database } from "lucide-react";
+import { api } from "@/lib/api";
+import { Switch } from "@/components/ui";
+
+const DASHBOARD_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || "same origin";
 
 export default function SettingsPage() {
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => api.getHealth(),
+    retry: false,
+    staleTime: 60_000,
+  });
+
   return (
     <div className="space-y-8">
       <div>
@@ -26,24 +40,32 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-2">
-                Server URL
+              <label
+                htmlFor="settings-server-url"
+                className="block text-sm text-slate-400 mb-2"
+              >
+                API Endpoint
               </label>
               <input
+                id="settings-server-url"
                 type="text"
-                value="https://updates.mysoc.ai"
-                disabled
+                value={API_ORIGIN}
+                readOnly
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-2">
+              <label
+                htmlFor="settings-api-version"
+                className="block text-sm text-slate-400 mb-2"
+              >
                 API Version
               </label>
               <input
+                id="settings-api-version"
                 type="text"
                 value="v1"
-                disabled
+                readOnly
                 className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300"
               />
             </div>
@@ -60,24 +82,16 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-2">
-                Admin API Key
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value="••••••••••••••••"
-                  disabled
-                  className="flex-1 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300"
-                />
-                <button className="btn btn-secondary text-sm">Regenerate</button>
-              </div>
-              <p className="text-xs text-slate-500 mt-2">
-                Used for administrative operations like creating licenses and
-                uploading releases.
-              </p>
-            </div>
+            <p className="text-sm text-slate-400">
+              The admin API key is configured on the server via the{" "}
+              <code className="text-cyan-400">ADMIN_API_KEY</code> environment
+              variable and is not managed from the dashboard.
+            </p>
+            <p className="text-xs text-slate-500">
+              Used for administrative operations like creating licenses and
+              uploading releases. Rotate it by updating the server environment
+              and restarting the service.
+            </p>
           </div>
         </div>
 
@@ -88,49 +102,40 @@ export default function SettingsPage() {
               <Bell className="w-5 h-5 text-violet-400" />
             </div>
             <h2 className="text-lg font-semibold text-white">Notifications</h2>
+            <span className="ml-auto px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs">
+              Coming soon
+            </span>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-white">Instance Offline Alerts</p>
-                <p className="text-xs text-slate-500">
-                  Get notified when instances go offline
-                </p>
+          <div className="space-y-4 opacity-60">
+            {[
+              {
+                title: "Instance Offline Alerts",
+                desc: "Get notified when instances go offline",
+              },
+              {
+                title: "License Expiry Warnings",
+                desc: "Alert before licenses expire",
+              },
+              {
+                title: "Security Alerts",
+                desc: "Critical security notifications",
+              },
+            ].map((n) => (
+              <div key={n.title} className="flex items-center justify-between">
+                <div>
+                  <p className="text-white">{n.title}</p>
+                  <p className="text-xs text-slate-500">{n.desc}</p>
+                </div>
+                <Switch
+                  checked={false}
+                  onChange={() => {}}
+                  disabled
+                  label={n.title}
+                />
               </div>
-              <div className="w-12 h-6 rounded-full bg-slate-700 relative cursor-not-allowed opacity-50">
-                <div className="w-5 h-5 rounded-full bg-slate-500 absolute top-0.5 left-0.5"></div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-white">License Expiry Warnings</p>
-                <p className="text-xs text-slate-500">
-                  Alert before licenses expire
-                </p>
-              </div>
-              <div className="w-12 h-6 rounded-full bg-slate-700 relative cursor-not-allowed opacity-50">
-                <div className="w-5 h-5 rounded-full bg-slate-500 absolute top-0.5 left-0.5"></div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-white">Security Alerts</p>
-                <p className="text-xs text-slate-500">
-                  Critical security notifications
-                </p>
-              </div>
-              <div className="w-12 h-6 rounded-full bg-slate-700 relative cursor-not-allowed opacity-50">
-                <div className="w-5 h-5 rounded-full bg-slate-500 absolute top-0.5 left-0.5"></div>
-              </div>
-            </div>
+            ))}
           </div>
-
-          <p className="text-xs text-slate-500 mt-4 italic">
-            Notification settings coming soon
-          </p>
         </div>
 
         {/* Security */}
@@ -144,32 +149,17 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-2">
-                Session Timeout
-              </label>
-              <select
-                disabled
-                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300"
-              >
-                <option>30 minutes</option>
-                <option>1 hour</option>
-                <option>4 hours</option>
-                <option>24 hours</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-slate-400 mb-2">
+              <p className="text-sm text-slate-400 mb-2">
                 Two-Factor Authentication
-              </label>
-              <button className="btn btn-secondary text-sm opacity-50 cursor-not-allowed">
-                Enable 2FA (Coming Soon)
-              </button>
+              </p>
+              <Link href="/profile" className="btn btn-secondary text-sm">
+                Manage 2FA in your profile
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* Database */}
+        {/* System Info */}
         <div className="card lg:col-span-2">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 rounded-lg bg-rose-500/20">
@@ -189,11 +179,13 @@ export default function SettingsPage() {
             </div>
             <div className="p-4 rounded-lg bg-slate-800/50">
               <p className="text-xs text-slate-500 mb-1">Server Version</p>
-              <p className="text-white font-medium">1.0.0</p>
+              <p className="text-white font-medium">
+                {health?.version || "Unavailable"}
+              </p>
             </div>
             <div className="p-4 rounded-lg bg-slate-800/50">
               <p className="text-xs text-slate-500 mb-1">Dashboard Version</p>
-              <p className="text-white font-medium">1.0.0</p>
+              <p className="text-white font-medium">{DASHBOARD_VERSION}</p>
             </div>
           </div>
         </div>

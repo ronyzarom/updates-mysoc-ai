@@ -144,26 +144,24 @@ func (s *Server) setupRoutes() {
 		// Instance endpoints
 		// =====================
 		r.Route("/instances", func(r chi.Router) {
-			// Read endpoints - require JWT auth for dashboard
-			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/", s.handleListInstances)
-			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/paged", s.handleListInstancesPaged) // New paginated endpoint
-			r.With(auth.OptionalJWTMiddleware(s.authService)).Get("/{id}", s.handleGetInstance)
-			// Update and delete require admin
+			// Read endpoints - require an authenticated dashboard user.
+			r.With(auth.JWTMiddleware(s.authService)).Get("/", s.handleListInstances)
+			r.With(auth.JWTMiddleware(s.authService)).Get("/paged", s.handleListInstancesPaged)
+			r.With(auth.JWTMiddleware(s.authService)).Get("/{id}", s.handleGetInstance)
+			// Mutations require admin authorization.
 			r.With(s.adminAuth).Put("/{id}", s.handleUpdateInstance)
 			r.With(s.adminAuth).Delete("/{id}", s.handleDeleteInstance)
-			// Toggle auto-update - public for now (can add auth later)
-			r.Put("/{id}/auto-update", s.handleSetAutoUpdate)
-			// Set update group (alpha, beta, stable, production)
-			r.Put("/{id}/update-group", s.handleSetUpdateGroup)
+			r.With(s.adminAuth).Put("/{id}/auto-update", s.handleSetAutoUpdate)
+			r.With(s.adminAuth).Put("/{id}/update-group", s.handleSetUpdateGroup)
 		})
 
 		// =====================
 		// Admin endpoints
 		// =====================
 		r.Route("/admin", func(r chi.Router) {
-			// License management - read is public for dashboard, write requires JWT admin
-			r.Get("/licenses", s.handleListLicenses)
-			r.Get("/licenses/{id}", s.handleGetLicense)
+			// License management - reads and writes require admin authorization.
+			r.With(s.adminAuth).Get("/licenses", s.handleListLicenses)
+			r.With(s.adminAuth).Get("/licenses/{id}", s.handleGetLicense)
 			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Post("/licenses", s.handleCreateLicense)
 			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Put("/licenses/{id}", s.handleUpdateLicense)
 			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Delete("/licenses/{id}", s.handleDeleteLicense)

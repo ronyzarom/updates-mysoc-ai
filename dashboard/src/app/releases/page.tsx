@@ -2,9 +2,11 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle } from "lucide-react";
+import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useRef } from "react";
+import { LoadingState, ErrorState, EmptyState } from "@/components/ui";
+import { RequireRole } from "@/lib/auth-context";
 
 interface UploadFormData {
   product: string;
@@ -19,9 +21,10 @@ export default function ReleasesPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const { data: releases, isLoading, refetch } = useQuery({
+  const { data: releases, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["releases"],
     queryFn: () => api.getReleases(),
+    retry: false,
   });
 
   const [filter, setFilter] = useState("");
@@ -201,13 +204,15 @@ export default function ReleasesPage() {
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
-          <button 
-            onClick={() => setShowUploadModal(true)} 
-            className="btn btn-primary"
-          >
-            <Upload className="w-4 h-4" />
-            Upload Release
-          </button>
+          <RequireRole roles={["admin"]}>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="btn btn-primary"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Release
+            </button>
+          </RequireRole>
         </div>
       </div>
 
@@ -224,7 +229,13 @@ export default function ReleasesPage() {
 
       {/* Releases */}
       {isLoading ? (
-        <div className="text-slate-400">Loading releases...</div>
+        <LoadingState label="Loading releases..." />
+      ) : isError ? (
+        <ErrorState
+          title="Failed to load releases"
+          error={error}
+          onRetry={() => refetch()}
+        />
       ) : (
         <div className="space-y-8">
           {productGroups &&
@@ -308,23 +319,30 @@ export default function ReleasesPage() {
                             {release.release_notes || "-"}
                           </td>
                           <td>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleEditRelease(release)}
-                                className="p-1.5 rounded-lg hover:bg-blue-500/20 text-slate-400 hover:text-blue-400 transition-colors"
-                                title="Edit release"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteRelease(release.product_name, release.version)}
-                                disabled={deleteMutation.isPending}
-                                className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors disabled:opacity-50"
-                                title="Delete release"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                            <RequireRole
+                              roles={["admin"]}
+                              fallback={<span className="text-slate-600">—</span>}
+                            >
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleEditRelease(release)}
+                                  className="p-1.5 rounded-lg hover:bg-blue-500/20 text-slate-400 hover:text-blue-400 transition-colors"
+                                  title="Edit release"
+                                  aria-label={`Edit ${release.product_name} ${release.version}`}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteRelease(release.product_name, release.version)}
+                                  disabled={deleteMutation.isPending}
+                                  className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors disabled:opacity-50"
+                                  title="Delete release"
+                                  aria-label={`Delete ${release.product_name} ${release.version}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </RequireRole>
                           </td>
                         </tr>
                       ))}
@@ -335,23 +353,45 @@ export default function ReleasesPage() {
             ))}
 
           {(!releases || releases.length === 0) && (
-            <div className="card text-center py-16">
-              <Package className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-white mb-2">
-                No releases yet
-              </h3>
-              <p className="text-slate-400 mb-6">
-                Upload your first release to get started.
-              </p>
-              <button 
-                onClick={() => setShowUploadModal(true)} 
-                className="btn btn-primary"
-              >
-                <Upload className="w-4 h-4" />
-                Upload Release
-              </button>
+            <div className="card">
+              <EmptyState
+                icon={<Package className="w-12 h-12" />}
+                title="No releases yet"
+                description="Upload your first release to get started."
+                action={
+                  <RequireRole roles={["admin"]}>
+                    <button
+                      onClick={() => setShowUploadModal(true)}
+                      className="btn btn-primary"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Upload Release
+                    </button>
+                  </RequireRole>
+                }
+              />
             </div>
           )}
+
+          {releases &&
+            releases.length > 0 &&
+            (!filteredReleases || filteredReleases.length === 0) && (
+              <div className="card">
+                <EmptyState
+                  icon={<Search className="w-12 h-12" />}
+                  title="No matching releases"
+                  description={`No releases match "${filter}". Try a different search.`}
+                  action={
+                    <button
+                      onClick={() => setFilter("")}
+                      className="btn btn-secondary"
+                    >
+                      Clear search
+                    </button>
+                  }
+                />
+              </div>
+            )}
         </div>
       )}
 

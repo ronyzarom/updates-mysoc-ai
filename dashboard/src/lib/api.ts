@@ -1,5 +1,6 @@
-// Use relative URLs for same-origin requests
-const API_URL = "";
+// Honor an explicit API base URL (e.g. for local dev against a separate API
+// port). Defaults to "" so production stays same-origin/relative.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export interface Instance {
   id: string;
@@ -88,16 +89,29 @@ export interface SecurityStatus {
   reboot_required: boolean;
 }
 
+// License types supported by the server (see pkg/types License.Type).
+export type LicenseType = "mysoc-cloud" | "siemcore" | "siemcore-lite";
+
+export const LICENSE_TYPES: LicenseType[] = [
+  "mysoc-cloud",
+  "siemcore",
+  "siemcore-lite",
+];
+
 export interface License {
   id: string;
   license_key: string;
   customer_id: string;
   customer_name: string;
-  type: string;
+  type: LicenseType | string;
   products: string[];
+  features?: string[];
+  issued_at?: string;
   expires_at: string;
+  bound_to?: string;
   is_active: boolean;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Release {
@@ -180,6 +194,8 @@ class ApiClient {
   private baseUrl: string;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
+  // Single-flight guard so concurrent 401s trigger exactly one token refresh.
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor() {
     this.baseUrl = API_URL;
@@ -212,35 +228,44 @@ class ApiClient {
     return !!this.accessToken;
   }
 
+  // fetch performs an authenticated request with automatic, single-flight token
+  // refresh on 401. Requests are authenticated by default; pass requireAuth =
+  // false only for genuinely public endpoints (login, health, token refresh).
+  // FormData bodies are sent as-is so the browser can set the multipart
+  // Content-Type boundary.
   private async fetch<T>(
     path: string,
     options: RequestInit = {},
-    requireAuth = false
+    requireAuth = true
   ): Promise<T> {
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    };
+    const isFormData =
+      typeof FormData !== "undefined" && options.body instanceof FormData;
 
-    if (this.accessToken && requireAuth) {
-      (headers as Record<string, string>)["Authorization"] =
-        `Bearer ${this.accessToken}`;
-    }
+    const buildHeaders = (): Record<string, string> => {
+      const headers: Record<string, string> = {
+        ...(options.headers as Record<string, string> | undefined),
+      };
+      if (!isFormData && !("Content-Type" in headers)) {
+        headers["Content-Type"] = "application/json";
+      }
+      if (requireAuth && this.accessToken) {
+        headers["Authorization"] = `Bearer ${this.accessToken}`;
+      }
+      return headers;
+    };
 
     let response = await fetch(`${this.baseUrl}${path}`, {
       ...options,
-      headers,
+      headers: buildHeaders(),
     });
 
-    // If 401 and we have a refresh token, try to refresh
-    if (response.status === 401 && this.refreshToken && requireAuth) {
+    // If unauthorized and we can refresh, refresh once (shared) and retry.
+    if (response.status === 401 && requireAuth && this.refreshToken) {
       const refreshed = await this.refreshTokens();
       if (refreshed) {
-        (headers as Record<string, string>)["Authorization"] =
-          `Bearer ${this.accessToken}`;
         response = await fetch(`${this.baseUrl}${path}`, {
           ...options,
-          headers,
+          headers: buildHeaders(),
         });
       }
     }
@@ -252,15 +277,24 @@ class ApiClient {
       throw new Error(error.error || `API error: ${response.status}`);
     }
 
-    return response.json();
+    // Some endpoints (e.g. 204) return no body.
+    if (response.status === 204) {
+      return undefined as T;
+    }
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   // Auth methods
   async login(email: string, password: string): Promise<LoginResponse> {
-    const response = await this.fetch<LoginResponse>("/api/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
+    const response = await this.fetch<LoginResponse>(
+      "/api/v1/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      },
+      false
+    );
 
     if (!response.requires_mfa && response.access_token && response.refresh_token) {
       this.setTokens(response.access_token, response.refresh_token);
@@ -270,10 +304,14 @@ class ApiClient {
   }
 
   async verifyMFA(mfaToken: string, totpCode: string): Promise<LoginResponse> {
-    const response = await this.fetch<LoginResponse>("/api/v1/auth/mfa/verify", {
-      method: "POST",
-      body: JSON.stringify({ mfa_token: mfaToken, totp_code: totpCode }),
-    });
+    const response = await this.fetch<LoginResponse>(
+      "/api/v1/auth/mfa/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({ mfa_token: mfaToken, totp_code: totpCode }),
+      },
+      false
+    );
 
     if (response.access_token && response.refresh_token) {
       this.setTokens(response.access_token, response.refresh_token);
@@ -284,12 +322,25 @@ class ApiClient {
 
   async refreshTokens(): Promise<boolean> {
     if (!this.refreshToken) return false;
+    // Coalesce concurrent refreshes: rotating the refresh token more than once
+    // in parallel would invalidate sessions and log the user out.
+    if (this.refreshPromise) return this.refreshPromise;
+
+    this.refreshPromise = this.doRefresh().finally(() => {
+      this.refreshPromise = null;
+    });
+    return this.refreshPromise;
+  }
+
+  private async doRefresh(): Promise<boolean> {
+    const refreshToken = this.refreshToken;
+    if (!refreshToken) return false;
 
     try {
       const response = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: this.refreshToken }),
+        body: JSON.stringify({ refresh_token: refreshToken }),
       });
 
       if (!response.ok) {
@@ -504,23 +555,16 @@ class ApiClient {
     }
     formData.append("artifact", data.artifact);
 
-    const headers: HeadersInit = {};
-    if (this.accessToken) {
-      headers["Authorization"] = `Bearer ${this.accessToken}`;
-    }
-
-    const response = await fetch(`${this.baseUrl}/api/v1/releases`, {
-      method: "POST",
-      headers,
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Upload failed" }));
-      throw new Error(error.error || `Upload failed: ${response.status}`);
-    }
-
-    return response.json();
+    // Route through the shared request path so uploads get the same auth,
+    // single-flight refresh, and error handling as every other call.
+    return this.fetch<Release>(
+      "/api/v1/releases",
+      {
+        method: "POST",
+        body: formData,
+      },
+      true
+    );
   }
 
   async deleteRelease(product: string, version: string): Promise<void> {
@@ -594,7 +638,7 @@ class ApiClient {
 
   // Health
   async getHealth(): Promise<{ status: string; version: string }> {
-    return this.fetch("/health");
+    return this.fetch("/health", {}, false);
   }
 }
 

@@ -59,6 +59,10 @@ body {
     @apply bg-amber-500/20 text-amber-400;
   }
   
+  .input {
+    @apply px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all;
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200;
   }

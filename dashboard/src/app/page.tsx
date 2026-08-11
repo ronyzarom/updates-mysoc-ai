@@ -1,38 +1,54 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api, Instance, Release } from "@/lib/api";
+import { api } from "@/lib/api";
 import {
   Server,
   Package,
   Key,
-  Shield,
   AlertTriangle,
   CheckCircle,
   XCircle,
   Clock,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { ErrorState } from "@/components/ui";
+import { isLicenseActive, sortInstancesByHeartbeat } from "@/lib/derive";
 
 export default function DashboardPage() {
-  const { data: instances, isLoading: instancesLoading } = useQuery({
+  const {
+    data: instances,
+    isLoading: instancesLoading,
+    isError: instancesError,
+    error: instancesErrorObj,
+    refetch: refetchInstances,
+  } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.getInstances(),
+    retry: false,
   });
 
   const { data: releases } = useQuery({
     queryKey: ["releases"],
     queryFn: () => api.getReleases(),
+    retry: false,
   });
 
   const { data: licenses } = useQuery({
     queryKey: ["licenses"],
     queryFn: () => api.getLicenses(),
+    retry: false,
   });
 
   const onlineCount = instances?.filter((i) => i.status === "online").length || 0;
   const offlineCount = instances?.filter((i) => i.status === "offline").length || 0;
   const degradedCount = instances?.filter((i) => i.status === "degraded").length || 0;
+
+  const activeLicenses =
+    licenses?.filter((l) => isLicenseActive(l.expires_at, l.is_active)).length || 0;
+
+  // Most recently active instances first.
+  const recentInstances = sortInstancesByHeartbeat(instances).slice(0, 5);
 
   const stats = [
     {
@@ -51,7 +67,7 @@ export default function DashboardPage() {
     },
     {
       name: "Active Licenses",
-      value: licenses?.filter((l) => l.is_active).length || 0,
+      value: activeLicenses,
       icon: Key,
       color: "text-amber-400",
       bgColor: "bg-amber-500/20",
@@ -74,6 +90,14 @@ export default function DashboardPage() {
           Fleet overview and system status
         </p>
       </div>
+
+      {instancesError && (
+        <ErrorState
+          title="Failed to load fleet data"
+          error={instancesErrorObj}
+          onRetry={() => refetchInstances()}
+        />
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -128,7 +152,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {instancesLoading ? (
               <div className="text-slate-400 text-sm">Loading...</div>
-            ) : instances?.slice(0, 5).map((instance) => (
+            ) : recentInstances.map((instance) => (
               <div
                 key={instance.id}
                 className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50"

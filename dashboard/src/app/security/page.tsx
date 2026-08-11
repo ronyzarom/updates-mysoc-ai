@@ -11,13 +11,14 @@ import {
   Flame,
   Lock,
   FileCheck,
-  Wifi,
 } from "lucide-react";
+import { LoadingState, ErrorState } from "@/components/ui";
 
 export default function SecurityPage() {
-  const { data: instances, isLoading, refetch } = useQuery({
+  const { data: instances, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.getInstances(),
+    retry: false,
   });
 
   // Calculate security stats
@@ -92,15 +93,23 @@ export default function SecurityPage() {
         <div className="card lg:col-span-1">
           <div className="flex flex-col items-center justify-center py-8">
             <div
-              className={`w-32 h-32 rounded-full ${getScoreBg(avgScore)} flex items-center justify-center mb-4`}
+              className={`w-32 h-32 rounded-full ${
+                securityStats.count > 0 ? getScoreBg(avgScore) : "bg-slate-700/40"
+              } flex items-center justify-center mb-4`}
             >
-              <span className={`text-5xl font-bold ${getScoreColor(avgScore)}`}>
-                {avgScore}
+              <span
+                className={`text-5xl font-bold ${
+                  securityStats.count > 0 ? getScoreColor(avgScore) : "text-slate-500"
+                }`}
+              >
+                {securityStats.count > 0 ? avgScore : "—"}
               </span>
             </div>
             <p className="text-slate-400 text-sm">Average Security Score</p>
             <p className="text-white font-medium mt-1">
-              {securityStats.count} instances reporting
+              {securityStats.count > 0
+                ? `${securityStats.count} instance${securityStats.count === 1 ? "" : "s"} reporting`
+                : "No telemetry yet"}
             </p>
           </div>
         </div>
@@ -171,7 +180,13 @@ export default function SecurityPage() {
         </h2>
 
         {isLoading ? (
-          <div className="text-slate-400">Loading...</div>
+          <LoadingState />
+        ) : isError ? (
+          <ErrorState
+            title="Failed to load security data"
+            error={error}
+            onRetry={() => refetch()}
+          />
         ) : (
           <div className="table-container">
             <table className="table">
@@ -189,6 +204,25 @@ export default function SecurityPage() {
                 {instances?.map((instance) => {
                   const security = instance.last_heartbeat_data?.security;
                   const score = security?.security_score || 0;
+
+                  // Distinguish "reported and failing" from "never reported".
+                  if (!security) {
+                    return (
+                      <tr key={instance.id}>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-slate-400" />
+                            <span className="font-medium text-white">
+                              {instance.instance_id}
+                            </span>
+                          </div>
+                        </td>
+                        <td colSpan={5} className="text-slate-500 italic">
+                          No telemetry reported
+                        </td>
+                      </tr>
+                    );
+                  }
 
                   return (
                     <tr key={instance.id}>
@@ -218,30 +252,30 @@ export default function SecurityPage() {
                         </div>
                       </td>
                       <td>
-                        {security?.firewall_enabled ? (
+                        {security.firewall_enabled ? (
                           <CheckCircle className="w-5 h-5 text-emerald-400" />
                         ) : (
                           <XCircle className="w-5 h-5 text-red-400" />
                         )}
                       </td>
                       <td>
-                        {security?.ssh_hardened ? (
+                        {security.ssh_hardened ? (
                           <CheckCircle className="w-5 h-5 text-emerald-400" />
                         ) : (
                           <XCircle className="w-5 h-5 text-red-400" />
                         )}
                       </td>
                       <td>
-                        {(security?.pending_updates || 0) > 0 ? (
+                        {(security.pending_updates || 0) > 0 ? (
                           <span className="text-amber-400">
-                            {security?.pending_updates} pending
+                            {security.pending_updates} pending
                           </span>
                         ) : (
                           <span className="text-emerald-400">Up to date</span>
                         )}
                       </td>
                       <td>
-                        {security?.reboot_required ? (
+                        {security.reboot_required ? (
                           <span className="status-badge status-degraded">
                             Required
                           </span>
