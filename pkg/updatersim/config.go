@@ -17,6 +17,7 @@ const (
 	defaultTimeout          = 30 * time.Second
 	defaultHeartbeat        = 60 * time.Second
 	defaultJitter           = 5 * time.Second
+	defaultDrainTimeout     = 30 * time.Second
 	defaultMaxResponseBytes = int64(1 << 20)
 	defaultMaxDownloadBytes = int64(1 << 30)
 )
@@ -98,11 +99,13 @@ type HeartbeatConfig struct {
 
 // SimulationConfig controls safe simulator behavior.
 type SimulationConfig struct {
-	Mode             Mode   `yaml:"mode"`
-	ArtifactDir      string `yaml:"artifact_dir"`
-	StateFile        string `yaml:"state_file"`
-	MaxDownloadBytes int64  `yaml:"max_download_bytes"`
-	LegacyFallback   bool   `yaml:"legacy_fallback"`
+	Mode             Mode     `yaml:"mode"`
+	ArtifactDir      string   `yaml:"artifact_dir"`
+	StateFile        string   `yaml:"state_file"`
+	ManifestFile     string   `yaml:"manifest_file,omitempty"`
+	MaxDownloadBytes int64    `yaml:"max_download_bytes"`
+	LegacyFallback   bool     `yaml:"legacy_fallback"`
+	DrainTimeout     Duration `yaml:"drain_timeout"`
 }
 
 // ProductConfig identifies one simulated managed product.
@@ -161,6 +164,9 @@ func (c *Config) setDefaults() {
 	if c.Simulation.MaxDownloadBytes == 0 {
 		c.Simulation.MaxDownloadBytes = defaultMaxDownloadBytes
 	}
+	if c.Simulation.DrainTimeout.Duration == 0 {
+		c.Simulation.DrainTimeout.Duration = defaultDrainTimeout
+	}
 	if c.Instance.Hostname == "" {
 		c.Instance.Hostname, _ = os.Hostname()
 	}
@@ -199,6 +205,9 @@ func (c *Config) resolvePaths(configDir string) {
 	if !filepath.IsAbs(c.Simulation.StateFile) {
 		c.Simulation.StateFile = filepath.Join(configDir, c.Simulation.StateFile)
 	}
+	if c.Simulation.ManifestFile != "" && !filepath.IsAbs(c.Simulation.ManifestFile) {
+		c.Simulation.ManifestFile = filepath.Join(configDir, c.Simulation.ManifestFile)
+	}
 }
 
 // Validate checks configuration that is common to all commands.
@@ -232,6 +241,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Simulation.MaxDownloadBytes <= 0 {
 		return fmt.Errorf("max_download_bytes must be positive")
+	}
+	if c.Simulation.DrainTimeout.Duration <= 0 {
+		return fmt.Errorf("drain_timeout must be positive")
 	}
 	switch c.Simulation.Mode {
 	case ModeObserve, ModeDownload, ModeSimulate:
