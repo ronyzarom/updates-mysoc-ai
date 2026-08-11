@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Document Version** | 1.1.0 |
-| **Last Updated** | August 10, 2026 |
+| **Document Version** | 1.2.0 |
+| **Last Updated** | August 11, 2026 |
 | **Status** | Draft |
 | **Audience** | Platform engineering, release engineering, and operations |
 | **Maintained By** | MySoc / SiemCore Platform Team |
@@ -535,6 +535,120 @@ Updater self-update MUST:
 - Honor server retry guidance.
 - Never loop indefinitely without reporting a degraded state.
 
+### 8.7 Desired-State Manifest (`system-template.json`)
+
+A single release describes far more than one binary: it may change code,
+database schema, a set of containers, rendered configuration, and the updater
+itself. The agent MUST treat one signed **desired-state manifest**
+(`system-template.json`) as the unit of work and reconcile the machine toward it,
+rather than applying each concern through an independent code path.
+
+The manifest MUST be:
+
+- Fetched over the authorized channel and verified (signature and per-artifact
+  SHA-256) before any action.
+- Schema-validated, including unique container names, resolvable dependencies,
+  and an acyclic dependency graph.
+- Diffed against current state to produce an ordered plan; when current already
+  equals desired, the agent MUST take no action.
+- Applied transactionally, keeping the prior manifest and restore point until
+  the change is committed.
+
+Illustrative schema (**Target**):
+
+```json
+{
+  "schema_version": 1,
+  "product": "siemcore",
+  "release": "2.2.0",
+  "required_db_schema": "2025.08.11-0007",
+  "self_update": { "version": "mysoc-updater/2.2.0", "url": "/api/v1/releases/mysoc-updater/2.2.0/download", "sha256": "..." },
+  "containers": [
+    { "name": "siemcore-db", "image": "registry.mysoc.ai/siemcore/postgres", "version": "15.6", "strategy": "recreate", "health": "pg_isready" },
+    { "name": "siemcore-api", "image": "registry.mysoc.ai/siemcore/api", "version": "2.2.0", "depends_on": ["siemcore-db"], "strategy": "rolling", "health": "http://127.0.0.1:8080/health" }
+  ],
+  "config_templates": [ { "path": "/opt/siemcore/config/siemcore.yaml", "sha256": "..." } ],
+  "signature": "..."
+}
+```
+
+### 8.8 Reconcile Pipeline
+
+The agent MUST apply a manifest through a staged, health-gated,
+rollback-capable pipeline. Each stage runs only after the previous stage
+succeeds; any failure triggers rollback of the prior stages and a failure
+report.
+
+```mermaid
+flowchart TD
+    acquire["Acquire: fetch manifest, verify signature + SHA-256"] --> plan["Plan: diff desired vs running"]
+    plan --> guard["Prepare: backup binaries, DB snapshot/expand, acquire migration lock"]
+    guard --> migrate["Migrate (expand phase)"]
+    migrate --> containers["ApplyContainers: ordered roll, per-container health gate"]
+    containers --> config["RenderConfig: manifest configuration render"]
+    config --> selfUpdate["SelfUpdate: two-phase re-exec + watchdog"]
+    selfUpdate --> verify{"Verify: health + security gates"}
+    verify -->|pass| commit["Commit (contract phase) + report success"]
+    verify -->|fail| rollback["Rollback binaries/containers, restore DB + report failure"]
+```
+
+### 8.9 Code Change Application
+
+For any executable, image, or package change the agent MUST:
+
+- Verify the artifact SHA-256 **and** release signature before activation.
+  (**Current gap**: the bundled Linux updater in
+  [internal/updater/update/checker.go](../internal/updater/update/checker.go)
+  downloads and swaps the binary without verifying the advertised checksum; the
+  simulator client enforces it. This MUST be closed before checksum enforcement
+  is described as implemented.)
+- Activate atomically (atomic rename or an OS-native transactional installer).
+- Retain the previous artifact as a restore point until health and security
+  gates pass.
+- Commit only after post-change verification succeeds.
+
+### 8.10 Multi-Container Orchestration
+
+When a product is delivered as multiple containers, the agent owns their
+lifecycle directly (for example through Compose or a pod set). The agent MUST:
+
+- Start and stop containers in dependency order derived from `depends_on`.
+- Apply each container according to its `strategy` (`rolling` or `recreate`).
+- Gate promotion of each container on its readiness/health check.
+- Roll the set back to the prior images when any container fails its gate.
+
+### 8.11 Boot Sequence and Signal Handling
+
+The agent MUST manage orderly startup and shutdown:
+
+- Start managed services in dependency order and wait for readiness, not fixed
+  sleeps.
+- On `SIGTERM`/`SIGINT`, stop scheduling new update work, allow the in-flight
+  operation a bounded drain window, then escalate to forced termination.
+- Never begin a new update while a shutdown is in progress.
+- Recover deterministically after power loss, including finishing or reversing a
+  self-update marked in durable state.
+
+### 8.12 Health and Security Gates
+
+Post-change health and security checks are **commit gates**, not advisory:
+
+- Verify liveness, readiness, and expected versions before commit.
+- Verify the post-change security posture (for example firewall, hardening, and
+  file-integrity expectations) before commit.
+- On any gate failure, roll back and report the failing stage.
+
+### 8.13 Update Monitoring and Telemetry
+
+The agent MUST make update progress observable:
+
+- Track a per-stage update state machine (prepare, migrate, containers, config,
+  self-update, health, security, commit).
+- Report the current stage and outcome on the heartbeat and result endpoints,
+  distinguishing single-artifact updates from manifest reconciliation.
+- Persist the last reconcile outcome durably so a restarted agent and the server
+  can recover the last known state.
+
 ---
 
 ## 9. Topology-Specific Behavior
@@ -784,13 +898,27 @@ The repository currently provides:
 - Local binary backup, replacement, service restart, and manual rollback
 - A dashboard for instances, releases, licenses, users, and settings
 
+The updater simulator ([pkg/updatersim](../pkg/updatersim)) additionally provides
+a safe, product-agnostic skeleton for the desired-state reconcile model of
+Section 8.7-8.13: a `system-template.json` schema with load, validation, and
+diff; a staged, health-gated, rollback-capable reconcile pipeline; a two-phase
+self-update with watchdog recovery; graceful signal draining; and per-stage
+telemetry. All stages delegate to a `ReconcilingExecutor` seam that defaults to a
+no-op so nothing on the host is changed. Product teams (SiemCore, SWF) implement
+that seam to make the model real.
+
 The following target requirements are not complete:
 
 - Company-scoped tenant authorization throughout the API
 - Enforcement of per-device credentials on heartbeat and update delivery
 - Heartbeat response consumption by the bundled updater
 - Idempotent device grants and cluster leases
-- Agent-side checksum and signature enforcement
+- Agent-side checksum and signature enforcement in the bundled Linux updater
+  (the simulator enforces checksums; the production updater in
+  [internal/updater/update/checker.go](../internal/updater/update/checker.go)
+  does not yet)
+- Real (non-simulated) manifest reconciliation: database migration, container
+  orchestration, configuration render, and self-update in a product executor
 - Durable update-result reporting
 - Cluster registry and rolling-update policy
 - Windows and macOS workstation agents

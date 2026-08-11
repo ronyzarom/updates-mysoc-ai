@@ -71,13 +71,18 @@ type UpdateCheckResponse struct {
 	AutoUpdate      *bool  `json:"auto_update,omitempty"`
 }
 
-// UpdateReportRequest is the current update-result request.
+// UpdateReportRequest is the current update-result request. Kind and Stage are
+// optional monitoring fields that let the server distinguish single-artifact
+// updates from manifest reconciliation and record the stage a failure occurred
+// in. Servers that do not understand them ignore the extra fields.
 type UpdateReportRequest struct {
 	InstanceID  string `json:"instance_id"`
 	FromVersion string `json:"from_version"`
 	ToVersion   string `json:"to_version"`
 	Success     bool   `json:"success"`
 	Error       string `json:"error,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	Stage       string `json:"stage,omitempty"`
 }
 
 // UpdateOffer normalizes the current policy and legacy response formats.

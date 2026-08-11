@@ -172,9 +172,38 @@ It never starts or executes the artifact.
 ```
 
 The first cycle runs immediately. Later cycles use the configured heartbeat
-interval with jitter. `SIGINT` and `SIGTERM` stop the process cleanly.
+interval with jitter. On `SIGINT` or `SIGTERM` the simulator stops scheduling new
+work, gives any in-flight cycle a bounded drain window (`simulation.drain_timeout`,
+default `30s`), and then exits.
 
 `run --download` and `run --simulate` override the configured mode.
+
+### Reconcile a Desired-State Manifest
+
+Reconcile drives the staged, health-gated pipeline (Section 8.7-8.13 of the
+[Updater Guidelines](UPDATER-GUIDELINES.md)) toward a `system-template.json`
+manifest instead of a single artifact. It covers the eight updater
+responsibilities in one flow: code change, database migration, multi-container
+orchestration, self-update, boot/signal handling, configuration render, health
+and security gates, and per-stage monitoring.
+
+Set `simulation.manifest_file` (see
+[examples/updater-simulator/system-template.json](../examples/updater-simulator/system-template.json)),
+then:
+
+```bash
+./bin/updater-simulator \
+  --config examples/updater-simulator/siemcore.yaml \
+  reconcile --simulate
+```
+
+The pipeline runs `prepare -> migrate -> containers -> config -> self-update ->
+health -> security -> commit`. Any stage failure rolls back the prior stages and
+reports the failing stage. `observe` computes and logs the plan only; `download`
+runs the stages without committing state or reporting success; `simulate` commits
+the simulated state and reports the result. Every stage is delegated to the
+`ReconcilingExecutor` seam, which defaults to a no-op, so nothing on the host is
+changed.
 
 ## Configuration
 
@@ -204,8 +233,10 @@ simulation:
   mode: observe
   artifact_dir: ./artifacts
   state_file: ./.updater-simulator-state.json
+  manifest_file: ./system-template.json   # optional; required by `reconcile`
   max_download_bytes: 1073741824
   legacy_fallback: false
+  drain_timeout: 30s                       # graceful shutdown window for `run`
 
 products:
   - name: siemcore
@@ -260,7 +291,8 @@ Reusable client and orchestration code lives in:
 pkg/updatersim
 ```
 
-Product teams replace `NoopExecutor` with an implementation of:
+Product teams replace `NoopExecutor` with an implementation of the
+single-artifact seam:
 
 ```go
 type Executor interface {
@@ -269,6 +301,24 @@ type Executor interface {
     Rollback(context.Context, Update) error
 }
 ```
+
+and, for desired-state reconciliation, the staged seam:
+
+```go
+type ReconcilingExecutor interface {
+    Prepare(context.Context, Plan) error           // guard: backups, DB snapshot/expand, migration lock
+    Migrate(context.Context, Plan) error           // database migrations (expand/contract, locked)
+    ApplyContainers(context.Context, Plan) error   // ordered container roll with health gates
+    RenderConfig(context.Context, Plan) error       // render manifest configuration
+    SelfUpdate(context.Context, Plan) error         // replace the running updater
+    HealthCheck(context.Context, Plan) error        // commit gate
+    SecurityCheck(context.Context, Plan) error      // commit gate
+    RollbackReconcile(context.Context, Plan) error  // restore the Prepare restore point
+}
+```
+
+`NoopExecutor` satisfies both seams so the simulator can exercise the full
+reconcile pipeline safely by default.
 
 SiemCore and SWF executors must follow
 [Update Server and Agent Guidelines](UPDATER-GUIDELINES.md), including:

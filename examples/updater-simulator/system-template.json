@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "product": "siemcore",
+  "release": "2.2.0",
+  "required_db_schema": "2025.08.11-0007",
+  "self_update": {
+    "version": "updater-simulator/1.3.0.1",
+    "url": "/api/v1/releases/mysoc-updater/2.2.0/download",
+    "sha256": ""
+  },
+  "containers": [
+    {
+      "name": "siemcore-db",
+      "image": "registry.mysoc.ai/siemcore/postgres",
+      "version": "15.6",
+      "health": "pg_isready",
+      "strategy": "recreate"
+    },
+    {
+      "name": "siemcore-api",
+      "image": "registry.mysoc.ai/siemcore/api",
+      "version": "2.2.0",
+      "depends_on": ["siemcore-db"],
+      "health": "http://127.0.0.1:8080/health",
+      "strategy": "rolling"
+    },
+    {
+      "name": "siemcore-worker",
+      "image": "registry.mysoc.ai/siemcore/worker",
+      "version": "2.2.0",
+      "depends_on": ["siemcore-api"],
+      "health": "http://127.0.0.1:8081/health",
+      "strategy": "rolling"
+    }
+  ],
+  "config_templates": [
+    {
+      "path": "/opt/siemcore/config/siemcore.yaml",
+      "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+    }
+  ],
+  "signature": ""
+}

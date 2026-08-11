@@ -17,14 +17,46 @@ type State struct {
 	APIKey            string                       `json:"api_key,omitempty"`
 	ProductVersions   map[string]string            `json:"product_versions,omitempty"`
 	LastUpdateAttempt *platformtypes.UpdateAttempt `json:"last_update_attempt,omitempty"`
-	UpdatedAt         time.Time                    `json:"updated_at"`
+
+	// Desired-state reconciliation tracking.
+	SystemRelease     string            `json:"system_release,omitempty"`
+	DBSchemaVersion   string            `json:"db_schema_version,omitempty"`
+	ContainerVersions map[string]string `json:"container_versions,omitempty"`
+	ConfigHashes      map[string]string `json:"config_hashes,omitempty"`
+	UpdaterVersion    string            `json:"updater_version,omitempty"`
+	PendingSelfUpdate *SelfUpdateState  `json:"pending_self_update,omitempty"`
+	LastReconcile     *ReconcileStatus  `json:"last_reconcile,omitempty"`
+
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SelfUpdateState marks an in-flight updater self-update. It is persisted before
+// the handoff so a crash mid-swap is recoverable by a watchdog.
+type SelfUpdateState struct {
+	FromVersion string    `json:"from_version"`
+	ToVersion   string    `json:"to_version"`
+	StartedAt   time.Time `json:"started_at"`
+}
+
+// ReconcileStatus is the outcome of the most recent reconcile stage. It backs
+// per-stage monitoring reported on the heartbeat and result endpoints.
+type ReconcileStatus struct {
+	Release   string    `json:"release"`
+	Stage     string    `json:"stage"`
+	Success   bool      `json:"success"`
+	Error     string    `json:"error,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // LoadState loads a state file. A missing file returns an empty state.
 func LoadState(path string) (*State, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return &State{ProductVersions: make(map[string]string)}, nil
+		return &State{
+			ProductVersions:   make(map[string]string),
+			ContainerVersions: make(map[string]string),
+			ConfigHashes:      make(map[string]string),
+		}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read simulator state: %w", err)
@@ -36,6 +68,12 @@ func LoadState(path string) (*State, error) {
 	}
 	if state.ProductVersions == nil {
 		state.ProductVersions = make(map[string]string)
+	}
+	if state.ContainerVersions == nil {
+		state.ContainerVersions = make(map[string]string)
+	}
+	if state.ConfigHashes == nil {
+		state.ConfigHashes = make(map[string]string)
 	}
 	return &state, nil
 }
@@ -102,6 +140,9 @@ func ApplyState(cfg *Config, state *State) {
 	}
 	if cfg.Server.APIKey == "" && state.APIKey != "" {
 		cfg.Server.APIKey = state.APIKey
+	}
+	if state.UpdaterVersion != "" {
+		cfg.Instance.UpdaterVersion = state.UpdaterVersion
 	}
 	for i := range cfg.Products {
 		if version := state.ProductVersions[cfg.Products[i].Name]; version != "" {

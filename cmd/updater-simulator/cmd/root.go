@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -53,6 +54,7 @@ func newRootCommand(opts *options) *cobra.Command {
 	root.AddCommand(newHeartbeatCommand(opts))
 	root.AddCommand(newCheckCommand(opts))
 	root.AddCommand(newOnceCommand(opts))
+	root.AddCommand(newReconcileCommand(opts))
 	root.AddCommand(newRunCommand(opts))
 	return root
 }
@@ -217,6 +219,53 @@ func newOnceCommand(opts *options) *cobra.Command {
 	return command
 }
 
+func newReconcileCommand(opts *options) *cobra.Command {
+	var download bool
+	var simulate bool
+	command := &cobra.Command{
+		Use:   "reconcile",
+		Short: "Reconcile the machine toward a system-template.json manifest",
+		Long: `Reconcile loads the desired-state manifest configured by
+simulation.manifest_file and drives the staged, health-gated pipeline (prepare,
+migrate, containers, config, self-update, health, security). All work is
+delegated to the safe no-op executor unless a product executor is supplied.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			simulator, cfg, err := loadSimulator(opts)
+			if err != nil {
+				return err
+			}
+			if cfg.Simulation.ManifestFile == "" {
+				return fmt.Errorf("simulation.manifest_file is required for reconcile")
+			}
+			manifest, err := updatersim.LoadManifest(cfg.Simulation.ManifestFile)
+			if err != nil {
+				return err
+			}
+			mode, err := selectedMode(cfg.Simulation.Mode, download, simulate)
+			if err != nil {
+				return err
+			}
+
+			ctx, stop := signal.NotifyContext(
+				context.Background(),
+				os.Interrupt,
+				syscall.SIGTERM,
+			)
+			defer stop()
+			logger(opts).Info(
+				"reconcile started",
+				"instance_id", cfg.Instance.ID,
+				"manifest", cfg.Simulation.ManifestFile,
+				"mode", mode,
+			)
+			return simulator.RunReconcile(ctx, mode, manifest)
+		},
+	}
+	addModeFlags(command, &download, &simulate)
+	return command
+}
+
 func newRunCommand(opts *options) *cobra.Command {
 	var download bool
 	var simulate bool
@@ -240,13 +289,40 @@ func newRunCommand(opts *options) *cobra.Command {
 				syscall.SIGTERM,
 			)
 			defer stop()
-			logger(opts).Info(
+			log := logger(opts)
+			log.Info(
 				"simulator started",
 				"instance_id", cfg.Instance.ID,
 				"mode", mode,
 				"interval", cfg.Heartbeat.Interval.String(),
 			)
-			return simulator.Run(ctx, mode)
+
+			// Graceful shutdown: on a signal, stop starting new update work and
+			// give any in-flight cycle a bounded window to drain before forcing
+			// exit so a stuck stage cannot hang shutdown indefinitely.
+			runErr := make(chan error, 1)
+			go func() {
+				runErr <- simulator.Run(ctx, mode)
+			}()
+
+			select {
+			case err := <-runErr:
+				return err
+			case <-ctx.Done():
+				drain := cfg.Simulation.DrainTimeout.Duration
+				log.Info(
+					"shutdown signal received; pausing updates and draining",
+					"drain_timeout", drain.String(),
+				)
+				select {
+				case err := <-runErr:
+					log.Info("simulator drained cleanly")
+					return err
+				case <-time.After(drain):
+					log.Warn("drain timeout exceeded; forcing shutdown", "drain_timeout", drain.String())
+					return nil
+				}
+			}
 		},
 	}
 	addModeFlags(command, &download, &simulate)
