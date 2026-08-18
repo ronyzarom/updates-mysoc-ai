@@ -138,6 +138,7 @@ mysoc-updater rollback [product]   # Rollback to previous version
 
 ## Documentation
 
+- [API Contract](docs/API-CONTRACT.md) - Authoritative HTTP API reference: endpoints, auth model, updater lifecycle, schemas, and implemented-vs-target behavior
 - [Updater Simulator](docs/UPDATER-SIMULATOR.md) - Safe live-protocol testing and reusable SiemCore/SWF agent skeleton
 - [Update Server and Agent Guidelines](docs/UPDATER-GUIDELINES.md) - Release lifecycle, heartbeat/grant flow, agent safety, and topology-specific operations
 - [SiemCore Deployment Guide](docs/SIEMCORE_DEPLOYMENT_GUIDE.md) - Deployment and staged rollout operations

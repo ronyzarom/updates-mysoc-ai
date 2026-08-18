@@ -1,0 +1,52 @@
+# Local end-to-end example: real filesystem install against a LOCAL server.
+#
+# Unlike the observe-only examples, this configuration uses the filesystem
+# executor, which WRITES TO DISK. Point it at a local update-server and a
+# scratch install_root you control. Do not aim it at production.
+#
+# Typical local loop:
+#   1. Run a local update-server (see docs/DEPLOYMENT.md) on 127.0.0.1:8091.
+#   2. Upload a release (tar.gz) for product "siemcore".
+#   3. If IP_ALLOWLIST_ENFORCED=true on the server, add an allowlist entry for
+#      127.0.0.1 via POST /api/v1/admin/ip-allowlist.
+#   4. updater-simulator --config this-file once --simulate
+
+server:
+  url: http://127.0.0.1:8091
+  timeout: 60s
+  max_response_bytes: 1048576
+  allow_external_downloads: false
+
+instance:
+  id: sim-local-e2e
+  type: simulator
+  hostname: sim-local-e2e
+  machine_id: sim-local-e2e
+  updater_version: updater-simulator/dev
+  os: linux
+  arch: amd64
+
+heartbeat:
+  interval: 60s
+  jitter: 5s
+
+simulation:
+  mode: simulate
+  executor: filesystem
+  artifact_dir: ./artifacts
+  state_file: ./state.json
+  max_download_bytes: 1073741824
+  legacy_fallback: true
+  drain_timeout: 30s
+  filesystem:
+    install_root: ./install
+    # The started "service" writes a line to $INSTALL_ROOT/service.log on each
+    # (re)start. Replace with your product's real start/restart command.
+    restart_command: ["sh", "-c", "\"$CURRENT_DIR/app/run.sh\""]
+    keep_releases: 3
+    command_timeout: 30s
+
+products:
+  - name: siemcore
+    current_version: v2.0.0
+    channel: stable

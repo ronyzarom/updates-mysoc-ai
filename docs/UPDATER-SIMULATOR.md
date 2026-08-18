@@ -51,6 +51,7 @@ go run ./cmd/updater-simulator version
 
 - [SiemCore](../examples/updater-simulator/siemcore.yaml)
 - [SWF](../examples/updater-simulator/swf.yaml)
+- [Local filesystem install](../examples/updater-simulator/filesystem-local.yaml) - real install/update against a local server
 
 Both examples:
 
@@ -248,7 +249,57 @@ products:
 
 - `observe`: heartbeat and policy check only
 - `download`: download and verify only
-- `simulate`: run the no-op lifecycle, report, and update simulator state
+- `simulate`: run the configured executor lifecycle, report, and update state
+
+### Executors
+
+The `simulation.executor` field selects what happens after an artifact is
+downloaded and verified in `simulate` mode:
+
+- `noop` (default): simulates apply/validate/rollback latency without changing
+  the machine. Safe for protocol testing against any server.
+- `filesystem`: a **real** installer that writes to disk. Use it to exercise a
+  genuine install/update on a local machine.
+
+The filesystem executor installs each version into its own directory and
+activates it by atomically flipping a `current` symlink, so upgrades and
+rollbacks are safe:
+
+```text
+<install_root>/<product>/releases/<version>/   extracted artifact per version
+<install_root>/<product>/current               symlink -> releases/<version>
+<install_root>/<product>/.previous             prior target, used by rollback
+```
+
+Behavior:
+
+- A gzip'd tar artifact is extracted (with a zip-slip guard); any other content
+  is copied as a single file.
+- After the symlink swap, `restart_command` runs with `PRODUCT`, `VERSION`,
+  `FROM_VERSION`, `CURRENT_DIR`, and `INSTALL_ROOT` in its environment.
+- `Validate` confirms the live version and runs `health_command`; a failure
+  triggers rollback to `.previous` (or removal of the symlink for a fresh
+  install), then restart.
+- `keep_releases` bounds retained version directories (current and previous are
+  always kept).
+
+```yaml
+simulation:
+  mode: simulate
+  executor: filesystem
+  artifact_dir: ./artifacts
+  state_file: ./state.json
+  filesystem:
+    install_root: ./install
+    restart_command: ["sh", "-c", "\"$CURRENT_DIR/app/run.sh\""]
+    health_command: []            # optional; non-zero exit triggers rollback
+    keep_releases: 3
+    command_timeout: 30s
+```
+
+Because the filesystem executor changes the machine, run it only against paths
+you control (a scratch `install_root`), and pair it with a local server when you
+want a fully local end-to-end.
 
 ### Download Controls
 
