@@ -7,6 +7,7 @@ import (
 
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/auth"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/config"
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/security"
 )
 
 // newTestServer builds a Server wired with a real auth service (backed by a nil
@@ -114,6 +115,9 @@ func TestProtectedRoutesRejectAnonymous(t *testing.T) {
 		{http.MethodPut, "/api/v1/instances/abc/update-group"},
 		{http.MethodPut, "/api/v1/instances/abc/auto-update"},
 		{http.MethodPost, "/api/v1/releases/"},
+		{http.MethodGet, "/api/v1/admin/api-keys"},
+		{http.MethodPost, "/api/v1/admin/api-keys"},
+		{http.MethodDelete, "/api/v1/admin/api-keys/abc"},
 	}
 
 	for _, tc := range cases {
@@ -125,6 +129,36 @@ func TestProtectedRoutesRejectAnonymous(t *testing.T) {
 				t.Fatalf("expected 401 for anonymous %s %s, got %d", tc.method, tc.path, rr.Code)
 			}
 		})
+	}
+}
+
+// TestRequireScopeMasterKey verifies the static admin key satisfies any scope
+// (full-admin), while a presented-but-invalid key is rejected — it must not
+// fall through to the JWT path.
+func TestRequireScopeMasterKey(t *testing.T) {
+	s := newTestServer("secret-key")
+
+	run := func(scope string, key string) int {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/releases/", nil)
+		if key != "" {
+			req.Header.Set("X-API-Key", key)
+		}
+		s.requireScope(scope)(okHandler()).ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	if code := run(security.ScopeReleases, "secret-key"); code != http.StatusOK {
+		t.Fatalf("master key on releases scope: expected 200, got %d", code)
+	}
+	if code := run(security.ScopeAdmin, "secret-key"); code != http.StatusOK {
+		t.Fatalf("master key on admin scope: expected 200, got %d", code)
+	}
+	if code := run(security.ScopeReleases, "wrong"); code != http.StatusUnauthorized {
+		t.Fatalf("wrong key on releases scope: expected 401, got %d", code)
+	}
+	if code := run(security.ScopeReleases, ""); code != http.StatusUnauthorized {
+		t.Fatalf("no creds on releases scope: expected 401, got %d", code)
 	}
 }
 

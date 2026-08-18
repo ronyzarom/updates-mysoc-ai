@@ -23,6 +23,7 @@ type Server struct {
 	authService *auth.Service
 	authHandler *auth.Handlers
 	ipACL       *security.IPAllowlistRepository
+	apiKeys     *security.APIKeyRepository
 }
 
 // NewServer creates a new API server
@@ -39,6 +40,7 @@ func NewServer(cfg *config.Config, db *database.DB, store storage.Storage) *Serv
 		authService: authService,
 		authHandler: authHandlers,
 		ipACL:       security.NewIPAllowlistRepository(db),
+		apiKeys:     security.NewAPIKeyRepository(db),
 	}
 
 	s.setupRoutes()
@@ -122,12 +124,13 @@ func (s *Server) setupRoutes() {
 			r.Get("/{product}/latest", s.handleGetLatestRelease)
 			r.Get("/{product}/{version}", s.handleGetRelease)
 			r.Get("/{product}/{version}/download", s.handleDownloadRelease)
-			// Protected: upload releases and manage target groups
-			r.With(s.adminAuth).Post("/", s.handleUploadRelease)
-			r.With(s.adminAuth).Put("/{product}/{version}/{filename}", s.handleUploadBinary)
-			r.With(s.adminAuth).Put("/{product}/{version}/target-groups", s.handleUpdateReleaseTargetGroups)
-			r.With(s.adminAuth).Put("/{product}/{version}", s.handleUpdateRelease)
-			r.With(s.adminAuth).Delete("/{product}/{version}", s.handleDeleteRelease)
+			// Protected: upload releases and manage target groups. These accept
+			// a releases-scoped managed key (or full-admin key / admin JWT).
+			r.With(s.requireScope(security.ScopeReleases)).Post("/", s.handleUploadRelease)
+			r.With(s.requireScope(security.ScopeReleases)).Put("/{product}/{version}/{filename}", s.handleUploadBinary)
+			r.With(s.requireScope(security.ScopeReleases)).Put("/{product}/{version}/target-groups", s.handleUpdateReleaseTargetGroups)
+			r.With(s.requireScope(security.ScopeReleases)).Put("/{product}/{version}", s.handleUpdateRelease)
+			r.With(s.requireScope(security.ScopeReleases)).Delete("/{product}/{version}", s.handleDeleteRelease)
 		})
 
 		// =====================
@@ -174,6 +177,12 @@ func (s *Server) setupRoutes() {
 			r.With(s.adminAuth).Get("/ip-allowlist", s.handleListIPAllowlist)
 			r.With(s.adminAuth).Post("/ip-allowlist", s.handleCreateIPAllowlist)
 			r.With(s.adminAuth).Delete("/ip-allowlist/{id}", s.handleDeleteIPAllowlist)
+
+			// Managed API keys (named, scoped, revocable credentials for
+			// automation/upload). Managing keys is a full-admin action.
+			r.With(s.adminAuth).Get("/api-keys", s.handleListAPIKeys)
+			r.With(s.adminAuth).Post("/api-keys", s.handleCreateAPIKey)
+			r.With(s.adminAuth).Delete("/api-keys/{id}", s.handleRevokeAPIKey)
 
 			// User management - requires JWT admin
 			r.Group(func(r chi.Router) {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Server, Key, Bell, Shield, Database } from "lucide-react";
 import { api } from "@/lib/api";
 import { Switch } from "@/components/ui";
+import { ApiKeysManager } from "@/components/ApiKeysManager";
 
 const DASHBOARD_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || "same origin";
@@ -73,7 +74,7 @@ export default function SettingsPage() {
         </div>
 
         {/* API Keys */}
-        <div className="card">
+        <div className="card lg:col-span-2">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 rounded-lg bg-amber-500/20">
               <Key className="w-5 h-5 text-amber-400" />
@@ -81,18 +82,7 @@ export default function SettingsPage() {
             <h2 className="text-lg font-semibold text-white">API Keys</h2>
           </div>
 
-          <div className="space-y-4">
-            <p className="text-sm text-slate-400">
-              The admin API key is configured on the server via the{" "}
-              <code className="text-cyan-400">ADMIN_API_KEY</code> environment
-              variable and is not managed from the dashboard.
-            </p>
-            <p className="text-xs text-slate-500">
-              Used for administrative operations like creating licenses and
-              uploading releases. Rotate it by updating the server environment
-              and restarting the service.
-            </p>
-          </div>
+          <ApiKeysManager />
         </div>
 
         {/* Notifications */}

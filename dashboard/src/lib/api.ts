@@ -34,6 +34,28 @@ export interface LicenseStatus {
   last_check?: string;
 }
 
+export type ApiKeyScope = "releases" | "admin";
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scope: ApiKeyScope;
+  created_by?: string;
+  created_at: string;
+  expires_at?: string;
+  last_used_at?: string;
+  revoked_at?: string;
+  status: "active" | "expired" | "revoked";
+}
+
+// Returned once, at creation. `api_key` is the full plaintext value.
+export interface CreatedApiKey {
+  api_key: string;
+  key: ApiKey;
+  warning: string;
+}
+
 export interface UpdateAttempt {
   from_version: string;
   target_version: string;
@@ -595,6 +617,35 @@ class ApiClient {
       },
       true
     );
+  }
+
+  // Admin - API keys
+  async getApiKeys(): Promise<ApiKey[]> {
+    const res = await this.fetch<{ keys: ApiKey[] }>(
+      "/api/v1/admin/api-keys",
+      {},
+      true
+    );
+    return res.keys ?? [];
+  }
+
+  async createApiKey(data: {
+    name: string;
+    scope: ApiKeyScope;
+    expires_in_days?: number;
+  }): Promise<CreatedApiKey> {
+    return this.fetch<CreatedApiKey>(
+      "/api/v1/admin/api-keys",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      true
+    );
+  }
+
+  async revokeApiKey(id: string): Promise<void> {
+    await this.fetch(`/api/v1/admin/api-keys/${id}`, { method: "DELETE" }, true);
   }
 
   // Admin - Users

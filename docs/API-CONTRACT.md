@@ -58,6 +58,14 @@ It **fails closed** (`internal/server/api/middleware.go`):
 - API keys are accepted **only** from the `X-API-Key` header, never from the
   query string (which leaks into logs and referrers).
 - Keys are compared with a constant-time comparison.
+- Besides the static `ADMIN_API_KEY`, the `X-API-Key` header also accepts
+  **managed API keys** (see [Section 2.5](#25-managed-api-keys)). Endpoints are
+  authorized by **scope**: an `admin`-scoped key (or the static key, or an admin
+  JWT) satisfies any endpoint; a `releases`-scoped key satisfies only the
+  release-management endpoints. A valid key with an insufficient scope receives
+  `403`.
+- A presented-but-invalid `X-API-Key` is rejected with `401`; it does **not**
+  fall through to the JWT path.
 - Unauthenticated callers receive `401`; authenticated non-admin callers receive
   `403`.
 - The JWT path requires an active user (`is_active = true`) with `role = admin`.
@@ -87,6 +95,21 @@ source IP to match an administrator-provisioned allowlist entry; otherwise the
 request is rejected with `403`. This is independent of the credentials above and
 is managed via [Section 5.10](#510-ip-allowlist-updater-channel-firewall). It
 defaults to off.
+
+### 2.5 Managed API keys
+
+Administrators can mint named, scoped, revocable API keys from the dashboard
+(**Settings → API Keys**) or the admin API
+([Section 5.11](#511-api-keys-managed-credentials)). These let a team or CI
+authenticate uploads without receiving the master `ADMIN_API_KEY`.
+
+- Presented in the `X-API-Key` header, exactly like the static key.
+- **Scopes:** `releases` (release management only — recommended for external
+  teams) or `admin` (full admin surface, equivalent to `ADMIN_API_KEY`).
+- Only the SHA-256 hash is stored; the full key (prefixed `msk_`) is returned
+  **once** at creation and is unrecoverable afterward.
+- Keys may carry an optional expiry and can be revoked at any time; revoked or
+  expired keys are rejected as if unknown.
 
 ---
 
@@ -515,6 +538,60 @@ the entries.
 Returns `201` with the created entry. Invalid CIDRs return `400`.
 
 **`DELETE /admin/ip-allowlist/{id}`** → `200 { "status": "deleted" }` (or `404`).
+
+---
+
+### 5.11 API keys (managed credentials)
+
+Managed API keys (see [Section 2.5](#25-managed-api-keys)) authenticate via the
+`X-API-Key` header and are authorized by scope. Managing keys is a **full-admin**
+action (static `ADMIN_API_KEY` or an admin JWT).
+
+| Endpoint                        | Auth  | Description                         |
+| ------------------------------- | ----- | ----------------------------------- |
+| `GET    /admin/api-keys`        | Admin | List keys (metadata only, no value) |
+| `POST   /admin/api-keys`        | Admin | Create a key; returns value **once**|
+| `DELETE /admin/api-keys/{id}`   | Admin | Revoke a key                        |
+
+**`POST /admin/api-keys`** (`CreateAPIKeyRequest`)
+
+```json
+{ "name": "SWF release upload", "scope": "releases", "expires_in_days": 90 }
+```
+
+- `name` (required): human label shown in the dashboard.
+- `scope` (optional): `releases` (default) or `admin`.
+- `expires_in_days` (optional): omit or `0` for no expiry.
+
+Returns `201`; the full key is present **only** in this response:
+
+```json
+{
+  "api_key": "msk_9f3c1a2b7d4e…",
+  "key": {
+    "id": "b7c2…", "name": "SWF release upload", "key_prefix": "msk_9f3c1a2b",
+    "scope": "releases", "created_by": "admin@mysoc.ai",
+    "created_at": "2026-08-18T12:40:00Z", "expires_at": "2026-11-16T12:40:00Z",
+    "status": "active"
+  },
+  "warning": "Store this key now — it is shown only once and cannot be retrieved later."
+}
+```
+
+**`GET /admin/api-keys`** → `{ "keys": [ { …metadata…, "status": "active|expired|revoked" } ] }`
+(never includes the key value; `key_prefix` is a non-sensitive display hint).
+
+**`DELETE /admin/api-keys/{id}`** → `200 { "status": "revoked" }` (or `404`).
+Revocation is immediate and permanent.
+
+**Upload with a scoped key** (what an external team uses):
+
+```bash
+curl -X POST https://updates.mysoc.ai/api/v1/releases \
+  -H "X-API-Key: msk_9f3c1a2b7d4e…" \
+  -F "product=swf" -F "version=v2.2.0" -F "channel=stable" \
+  -F "artifact=@SiemCoreWinForwarder-2.2.0.exe"
+```
 
 ---
 
