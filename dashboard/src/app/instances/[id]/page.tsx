@@ -22,6 +22,7 @@ import {
   KeyRound,
   ArrowUpCircle,
   Monitor,
+  Network,
 } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow, format } from "date-fns";
@@ -29,6 +30,8 @@ import { useState, useEffect } from "react";
 import { LoadingState, ErrorState, Switch } from "@/components/ui";
 import { RequireRole } from "@/lib/auth-context";
 import { effectiveUpdateGroup } from "@/lib/derive";
+import { TierBadge } from "@/components/InstanceTree";
+import type { Instance } from "@/lib/api";
 
 export default function InstanceDetailPage() {
   const params = useParams();
@@ -40,6 +43,13 @@ export default function InstanceDetailPage() {
     queryKey: ["instance", id],
     queryFn: () => api.getInstance(id),
     retry: false,
+  });
+
+  // The full fleet lets us resolve this node's parent chain and children by
+  // instance_id (self-reported hierarchy: mysoc > siemcore > swf).
+  const { data: allInstances } = useQuery({
+    queryKey: ["instances"],
+    queryFn: () => api.getInstances(),
   });
 
   const [selectedGroup, setSelectedGroup] = useState<string>("");
@@ -171,6 +181,24 @@ export default function InstanceDetailPage() {
   const currentGroup = instance.update_group || "stable";
   const effectiveGroup = effectiveUpdateGroup(selectedGroup, instance.update_group);
 
+  // Resolve hierarchy relationships from the fleet snapshot.
+  const fleet = allInstances || [];
+  const byInstanceId = new Map(fleet.map((i) => [i.instance_id, i]));
+  const ancestors: Instance[] = [];
+  {
+    let cursor = instance.parent_instance_id;
+    const seen = new Set<string>([instance.instance_id]);
+    while (cursor && byInstanceId.has(cursor) && !seen.has(cursor)) {
+      seen.add(cursor);
+      const parent = byInstanceId.get(cursor)!;
+      ancestors.unshift(parent);
+      cursor = parent.parent_instance_id;
+    }
+  }
+  const children = fleet.filter((i) => i.parent_instance_id === instance.instance_id);
+  const parentKnown = instance.parent_instance_id ? byInstanceId.get(instance.parent_instance_id) : undefined;
+  const hasHierarchy = Boolean(instance.product_tier || instance.parent_instance_id || children.length > 0);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -252,6 +280,31 @@ export default function InstanceDetailPage() {
           </RequireRole>
         </div>
       </div>
+
+      {/* Hierarchy breadcrumb */}
+      {hasHierarchy && (
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-sm">
+          {ancestors.map((a) => (
+            <span key={a.id} className="flex items-center gap-2">
+              <TierBadge tier={a.product_tier} />
+              <Link href={`/instances/${a.id}`} className="text-slate-300 hover:text-cyan-300">
+                {a.instance_id}
+              </Link>
+              <span className="text-slate-600">&rsaquo;</span>
+            </span>
+          ))}
+          {instance.parent_instance_id && !parentKnown && (
+            <span className="flex items-center gap-2 text-slate-500">
+              {instance.parent_instance_id} (not enrolled)
+              <span className="text-slate-600">&rsaquo;</span>
+            </span>
+          )}
+          <span className="flex items-center gap-2">
+            <TierBadge tier={instance.product_tier} />
+            <span className="text-white font-medium">{instance.instance_id}</span>
+          </span>
+        </div>
+      )}
 
       {/* Error Banner */}
       {mutationError && (
@@ -360,6 +413,62 @@ export default function InstanceDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Hierarchy */}
+        {hasHierarchy && (
+          <div className="card">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Network className="w-5 h-5 text-cyan-400" />
+              Hierarchy
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Product Tier</span>
+                {instance.product_tier ? (
+                  <TierBadge tier={instance.product_tier} />
+                ) : (
+                  <span className="text-slate-400">Untiered</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Parent</span>
+                {parentKnown ? (
+                  <Link href={`/instances/${parentKnown.id}`} className="text-cyan-400 hover:text-cyan-300">
+                    {parentKnown.instance_id}
+                  </Link>
+                ) : instance.parent_instance_id ? (
+                  <span className="text-amber-400" title="Declared parent not enrolled yet">
+                    {instance.parent_instance_id} (orphan)
+                  </span>
+                ) : (
+                  <span className="text-slate-400">
+                    {(instance.product_tier || "").toLowerCase() === "mysoc" ? "Root" : "None"}
+                  </span>
+                )}
+              </div>
+              <div className="pt-2 border-t border-slate-700">
+                <p className="text-xs text-slate-400 mb-2">Children ({children.length})</p>
+                {children.length === 0 ? (
+                  <p className="text-sm text-slate-500">No child nodes</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {children.map((child) => (
+                      <li key={child.id} className="flex items-center gap-2">
+                        <TierBadge tier={child.product_tier} />
+                        <Link
+                          href={`/instances/${child.id}`}
+                          className="text-sm text-white hover:text-cyan-300 truncate"
+                        >
+                          {child.instance_id}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Server Identification */}
         <div className="card">

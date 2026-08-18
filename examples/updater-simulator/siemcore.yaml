@@ -1,8 +1,11 @@
-# Safe observe-only SiemCore simulator.
-# Supply a dedicated test license through UPDATER_SIM_LICENSE_KEY.
+# Safe observe-only SiemCore simulator (middle tier).
+#
+# Product hierarchy: mysoc > siemcore > swf. This node reports tier=siemcore and
+# its parent_id points at a mysoc instance. Use the SAME customer license as the
+# mysoc/swf configs (one license spans the whole tree) via UPDATER_SIM_LICENSE_KEY.
 server:
   url: https://updates.mysoc.ai
-  license_key: ""
+  license_key: "" # shared customer license; prefer UPDATER_SIM_LICENSE_KEY
   api_key: ""
   timeout: 30s
   max_response_bytes: 1048576
@@ -10,12 +13,14 @@ server:
 
 instance:
   id: sim-siemcore-dev-01
-  type: simulator
+  type: siemcore-linux # OS/sub-type; product_tier below is the canonical tier
   hostname: sim-siemcore-dev-01
   machine_id: sim-siemcore-dev-01
   updater_version: updater-simulator/1.1.0.3
   os: linux
   arch: amd64
+  product_tier: siemcore
+  parent_id: sim-mysoc-dev-01 # the parent mysoc node's instance id
 
 heartbeat:
   interval: 60s

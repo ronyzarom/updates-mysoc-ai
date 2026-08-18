@@ -1,16 +1,32 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Server, RefreshCw, Clock, Cpu, HardDrive } from "lucide-react";
+import { Server, RefreshCw, Clock, Cpu, HardDrive, LayoutGrid, ListTree } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
+import { InstanceTree, TierBadge } from "@/components/InstanceTree";
+
+const TIER_FILTERS = [
+  { value: "all", label: "All tiers" },
+  { value: "mysoc", label: "MySoc" },
+  { value: "siemcore", label: "SiemCore" },
+  { value: "swf", label: "SWF" },
+];
 
 export default function InstancesPage() {
+  const [view, setView] = useState<"tree" | "cards">("tree");
+  const [tierFilter, setTierFilter] = useState<string>("all");
+
   const { data: instances, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.getInstances(),
   });
+
+  const visibleInstances = (instances || []).filter(
+    (i) => tierFilter === "all" || (i.product_tier || "").toLowerCase() === tierFilter
+  );
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 B";
@@ -27,20 +43,54 @@ export default function InstancesPage() {
         <div>
           <h1 className="text-3xl font-bold text-white">Instances</h1>
           <p className="text-slate-400 mt-1">
-            Manage MySoc and SIEMCore instances
+            Fleet hierarchy: MySoc &rsaquo; SiemCore &rsaquo; SWF
           </p>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="btn btn-secondary"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            value={tierFilter}
+            onChange={(e) => setTierFilter(e.target.value)}
+            className="input py-2"
+            aria-label="Filter by product tier"
+          >
+            {TIER_FILTERS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <div className="flex rounded-lg border border-slate-700 overflow-hidden">
+            <button
+              onClick={() => setView("tree")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm ${
+                view === "tree" ? "bg-slate-700 text-white" : "bg-transparent text-slate-400 hover:text-white"
+              }`}
+              aria-pressed={view === "tree"}
+            >
+              <ListTree className="w-4 h-4" />
+              Tree
+            </button>
+            <button
+              onClick={() => setView("cards")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm ${
+                view === "cards" ? "bg-slate-700 text-white" : "bg-transparent text-slate-400 hover:text-white"
+              }`}
+              aria-pressed={view === "cards"}
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Cards
+            </button>
+          </div>
+          <button onClick={() => refetch()} className="btn btn-secondary">
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Instances Grid */}
-      {isLoading ? (
+      {view === "tree" ? (
+        <InstanceTree tierFilter={tierFilter} />
+      ) : isLoading ? (
         <div className="text-slate-400">Loading instances...</div>
       ) : isError ? (
         <div className="card border-red-500/50 bg-red-900/20">
@@ -59,7 +109,7 @@ export default function InstancesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {instances?.map((instance) => (
+          {visibleInstances.map((instance) => (
             <Link
               key={instance.id}
               href={`/instances/${instance.id}`}
@@ -71,9 +121,12 @@ export default function InstancesPage() {
                     <Server className="w-5 h-5 text-cyan-400" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">
-                      {instance.instance_id}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-white">
+                        {instance.instance_id}
+                      </h3>
+                      {instance.product_tier && <TierBadge tier={instance.product_tier} />}
+                    </div>
                     <p className="text-sm text-slate-500">
                       {instance.display_name || instance.hostname}
                     </p>
@@ -151,11 +204,11 @@ export default function InstancesPage() {
             </Link>
           ))}
 
-          {(!instances || instances.length === 0) && (
+          {visibleInstances.length === 0 && (
             <div className="col-span-full text-center py-16">
               <Server className="w-12 h-12 text-slate-600 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-white mb-2">
-                No instances yet
+                {tierFilter === "all" ? "No instances yet" : "No instances in this tier"}
               </h3>
               <p className="text-slate-400">
                 Instances will appear here once they connect to the update server.

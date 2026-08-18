@@ -1,0 +1,41 @@
+# Safe observe-only MySoc simulator (root of the product hierarchy).
+#
+# Product hierarchy: mysoc > siemcore > swf. One customer owns ONE license that
+# spans the whole tree; every node presents the SAME license_key. Supply it once
+# through UPDATER_SIM_LICENSE_KEY and reuse it for the siemcore and swf configs.
+#
+# The root tier (mysoc) has no parent, so parent_id must be omitted.
+server:
+  url: https://updates.mysoc.ai
+  license_key: "" # shared customer license; prefer UPDATER_SIM_LICENSE_KEY
+  api_key: ""
+  timeout: 30s
+  max_response_bytes: 1048576
+  allow_external_downloads: false
+
+instance:
+  id: sim-mysoc-dev-01
+  type: mysoc-linux # OS/sub-type; product_tier below is the canonical tier
+  hostname: sim-mysoc-dev-01
+  machine_id: sim-mysoc-dev-01
+  updater_version: updater-simulator/1.1.0.3
+  os: linux
+  arch: amd64
+  product_tier: mysoc
+  # parent_id: (none) — mysoc is the root and must not set a parent
+
+heartbeat:
+  interval: 60s
+  jitter: 5s
+
+simulation:
+  mode: observe
+  artifact_dir: ./artifacts
+  state_file: ./.mysoc-simulator-state.json
+  max_download_bytes: 1073741824
+  legacy_fallback: false
+
+products:
+  - name: mysoc
+    current_version: 0.0.0
+    channel: stable

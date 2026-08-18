@@ -115,6 +115,10 @@ func (s *Server) setupRoutes() {
 			r.Post("/validate", s.handleLicenseValidate)
 		})
 
+		// Canonical product-tier catalog (mysoc > siemcore > swf) for
+		// dashboard dropdowns and agent self-configuration. Static data.
+		r.Get("/products", s.handleListProducts)
+
 		// =====================
 		// Release endpoints
 		// =====================
@@ -153,6 +157,8 @@ func (s *Server) setupRoutes() {
 			// Read endpoints - require an authenticated dashboard user.
 			r.With(auth.JWTMiddleware(s.authService)).Get("/", s.handleListInstances)
 			r.With(auth.JWTMiddleware(s.authService)).Get("/paged", s.handleListInstancesPaged)
+			// Fleet as a per-customer tier tree (mysoc > siemcore > swf).
+			r.With(auth.JWTMiddleware(s.authService)).Get("/tree", s.handleInstanceTree)
 			r.With(auth.JWTMiddleware(s.authService)).Get("/{id}", s.handleGetInstance)
 			// Mutations require admin authorization.
 			r.With(s.adminAuth).Put("/{id}", s.handleUpdateInstance)

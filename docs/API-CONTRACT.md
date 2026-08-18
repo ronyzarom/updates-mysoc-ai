@@ -336,13 +336,22 @@ and `products[]` are meaningful.
 ```json
 {
   "instance_id": "sim-e2e-20260811",
-  "instance_type": "simulator",
+  "instance_type": "siemcore-linux",
+  "product_tier": "siemcore",
+  "parent_instance_id": "sim-mysoc-dev-01",
   "hostname": "sim-e2e-20260811",
   "updater_version": "updater-simulator/1.3.0.1",
   "products": [{ "name": "siemcore", "version": "v2.0.0", "channel": "stable" }],
   "timestamp": "2026-08-11T20:42:13Z"
 }
 ```
+
+`product_tier` (`mysoc`|`siemcore`|`swf`) and `parent_instance_id` are optional
+self-reported hierarchy fields ([Section 4.4 of the guidelines](UPDATER-GUIDELINES.md)).
+When `product_tier` is supplied it must be canonical; if the declared parent
+already exists its tier must be exactly one rank above (else `400`). An unknown
+parent is accepted and reconciled later (orphan). `instance_type` stays the
+OS/sub-type.
 
 Response `200` — the server upserts the instance and returns update hints for
 every product that has a newer release:
@@ -379,9 +388,15 @@ every product that has a newer release:
   "updater_version": "updater-simulator/1.3.0.1",
   "os": "linux", "arch": "amd64",
   "hostname": "sim-e2e-20260811",
-  "channel": "stable"
+  "channel": "stable",
+  "product_tier": "siemcore",
+  "parent_instance_id": "sim-mysoc-dev-01"
 }
 ```
+
+`product_tier` and `parent_instance_id` are optional (same hierarchy rules as the
+heartbeat). If `product_tier` is omitted it defaults to `{product}` when that
+path segment names a canonical tier.
 
 The server upserts the instance, honors its `auto_update_enabled` flag, and
 selects the newest release visible to the instance's **update group**
@@ -431,6 +446,7 @@ ignored. Response `200`:
 | -------------------------------------- | ----------- | ----------------------------- |
 | `GET  /instances`                      | User (JWT)  | List all instances            |
 | `GET  /instances/paged`                | User (JWT)  | Paginated list                |
+| `GET  /instances/tree`                 | User (JWT)  | Fleet as a per-customer tier tree |
 | `GET  /instances/{id}`                 | User (JWT)  | Instance detail               |
 | `PUT  /instances/{id}`                 | Admin       | Update display/auto-update/group |
 | `DELETE /instances/{id}`               | Admin       | Delete instance               |
@@ -444,6 +460,42 @@ ignored. Response `200`:
 - `PUT /instances/{id}/auto-update` → `{ "enabled": true }`.
 - `PUT /instances/{id}/update-group` → `{ "group": "beta" }`
   (must be `alpha`/`beta`/`stable`/`production`).
+
+**`GET /instances/tree`** groups the fleet by customer/license and nests it as
+`mysoc -> siemcore -> swf` using each node's self-reported `product_tier` and
+`parent_instance_id`:
+
+```json
+{
+  "customers": [
+    {
+      "license_id": "…", "license_key": "SIEM…A9C9", "customer_name": "Acme",
+      "total_nodes": 3,
+      "roots": [
+        {
+          "instance_id": "sim-mysoc-dev-01", "product_tier": "mysoc", "status": "online",
+          "children": [
+            {
+              "instance_id": "sim-siemcore-dev-01", "product_tier": "siemcore",
+              "parent_instance_id": "sim-mysoc-dev-01", "status": "online",
+              "children": [
+                { "instance_id": "sim-swf-dev-01", "product_tier": "swf", "parent_instance_id": "sim-siemcore-dev-01", "status": "online", "children": [] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+`license_key` is masked. A node whose declared parent is absent within the same
+customer appears as a root with `"orphan": true`. Instances with no bound license
+fall into an `"Unlicensed / unbound"` customer bucket.
+
+**`GET /api/v1/products`** (public) returns the canonical tier catalog for
+dropdowns: `{ "tiers": [ { "name": "mysoc", "display_name": "MySoc", "rank": 0 }, { "name": "siemcore", …, "rank": 1, "parent_tier": "mysoc" }, { "name": "swf", …, "rank": 2, "parent_tier": "siemcore" } ] }`.
 
 ---
 
@@ -626,12 +678,12 @@ Each `artifact`: `{ name, arch, size, checksum }`.
 
 ### 7.3 Heartbeat
 
-`instance_id, instance_type, hostname, updater_version, config_hash, license{key,valid,expires_at,last_check}, products[], system{os,arch,cpu_usage,memory_*,disk_*,load_average,uptime}, security{…}?, timestamp, last_update_attempt?{from_version,target_version,success,error?,timestamp}`.
+`instance_id, instance_type, product_tier?, parent_instance_id?, hostname, updater_version, config_hash, license{key,valid,expires_at,last_check}, products[], system{os,arch,cpu_usage,memory_*,disk_*,load_average,uptime}, security{…}?, timestamp, last_update_attempt?{from_version,target_version,success,error?,timestamp}`.
 Each `product` (`ProductStatus`): `{ name, version, channel, status, uptime, last_restart, pid?, health_endpoint?, health_status? }`.
 
 ### 7.4 Instance
 
-`id, instance_id, instance_type, hostname, display_name?, license_id?, last_heartbeat?, last_heartbeat_data?, status, auto_update_enabled, update_group, last_ip_address?, last_ip_seen_at?, last_update_from_version?, last_update_target_version?, last_update_success?, last_update_error?, last_update_at?, created_at, updated_at`.
+`id, instance_id, instance_type, product_tier?, parent_instance_id?, hostname, display_name?, license_id?, last_heartbeat?, last_heartbeat_data?, status, auto_update_enabled, update_group, last_ip_address?, last_ip_seen_at?, last_update_from_version?, last_update_target_version?, last_update_success?, last_update_error?, last_update_at?, created_at, updated_at`.
 
 ### 7.5 License
 

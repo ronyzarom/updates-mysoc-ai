@@ -100,13 +100,15 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 
 	operatingSystem, architecture := s.platform()
 	offer, err := s.client.CheckUpdate(ctx, product.Name, UpdateCheckRequest{
-		InstanceID:     s.config.Instance.ID,
-		CurrentVersion: product.CurrentVersion,
-		UpdaterVersion: s.config.Instance.UpdaterVersion,
-		OS:             operatingSystem,
-		Arch:           architecture,
-		Hostname:       s.config.Instance.Hostname,
-		Channel:        product.Channel,
+		InstanceID:       s.config.Instance.ID,
+		CurrentVersion:   product.CurrentVersion,
+		UpdaterVersion:   s.config.Instance.UpdaterVersion,
+		OS:               operatingSystem,
+		Arch:             architecture,
+		Hostname:         s.config.Instance.Hostname,
+		Channel:          product.Channel,
+		ProductTier:      s.config.Instance.ProductTier,
+		ParentInstanceID: s.config.Instance.ParentID,
 	})
 	if err == nil {
 		return offer, nil
@@ -352,11 +354,13 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	}
 
 	return platformtypes.Heartbeat{
-		InstanceID:     s.config.Instance.ID,
-		InstanceType:   s.config.Instance.Type,
-		Hostname:       s.config.Instance.Hostname,
-		UpdaterVersion: s.config.Instance.UpdaterVersion,
-		ConfigHash:     s.configHash(),
+		InstanceID:       s.config.Instance.ID,
+		InstanceType:     s.config.Instance.Type,
+		ProductTier:      s.config.Instance.ProductTier,
+		ParentInstanceID: s.config.Instance.ParentID,
+		Hostname:         s.config.Instance.Hostname,
+		UpdaterVersion:   s.config.Instance.UpdaterVersion,
+		ConfigHash:       s.configHash(),
 		License: platformtypes.LicenseStatus{
 			Valid:     s.config.Server.LicenseKey != "",
 			LastCheck: time.Now().UTC(),

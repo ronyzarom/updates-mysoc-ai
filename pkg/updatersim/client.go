@@ -46,15 +46,19 @@ type HeartbeatResponse struct {
 	Updates []platformtypes.ReleaseInfo `json:"updates"`
 }
 
-// UpdateCheckRequest is the current group-aware update-check request.
+// UpdateCheckRequest is the current group-aware update-check request. ProductTier
+// and ParentInstanceID carry the self-reported product hierarchy; servers that
+// do not understand them ignore the extra fields.
 type UpdateCheckRequest struct {
-	InstanceID     string `json:"instance_id"`
-	CurrentVersion string `json:"current_version"`
-	UpdaterVersion string `json:"updater_version"`
-	OS             string `json:"os"`
-	Arch           string `json:"arch"`
-	Hostname       string `json:"hostname"`
-	Channel        string `json:"channel"`
+	InstanceID       string `json:"instance_id"`
+	CurrentVersion   string `json:"current_version"`
+	UpdaterVersion   string `json:"updater_version"`
+	OS               string `json:"os"`
+	Arch             string `json:"arch"`
+	Hostname         string `json:"hostname"`
+	Channel          string `json:"channel"`
+	ProductTier      string `json:"product_tier,omitempty"`
+	ParentInstanceID string `json:"parent_instance_id,omitempty"`
 }
 
 // UpdateCheckResponse is the current group-aware update-check response.

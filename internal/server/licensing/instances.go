@@ -41,12 +41,12 @@ const (
 		api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, 
 		update_group, last_ip_address, last_ip_seen_at, last_update_from_version, 
 		last_update_target_version, last_update_success, last_update_error, last_update_at,
-		created_at, updated_at`
+		product_tier, parent_instance_id, created_at, updated_at`
 
 	// selectInstanceListCols excludes last_heartbeat_data and update details for lighter list queries
 	selectInstanceListCols = `id, instance_id, instance_type, hostname, display_name, license_id, 
 		api_key_hash, last_heartbeat, status, auto_update_enabled, update_group, 
-		last_ip_address, created_at, updated_at`
+		last_ip_address, product_tier, parent_instance_id, created_at, updated_at`
 )
 
 // InstanceRepository handles instance database operations
@@ -67,6 +67,7 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 	var autoUpdateEnabled *bool
 	var lastIPAddress, lastUpdateFromVersion, lastUpdateTargetVersion, lastUpdateError *string
 	var lastUpdateSuccess *bool
+	var productTier, parentInstanceID *string
 
 	err := row.Scan(
 		&instance.ID, &instance.InstanceID, &instance.InstanceType, &instance.Hostname, &displayName,
@@ -74,7 +75,7 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 		&instance.Status, &autoUpdateEnabled, &updateGroup,
 		&lastIPAddress, &instance.LastIPSeenAt, &lastUpdateFromVersion,
 		&lastUpdateTargetVersion, &lastUpdateSuccess, &lastUpdateError, &instance.LastUpdateAt,
-		&instance.CreatedAt, &instance.UpdatedAt,
+		&productTier, &parentInstanceID, &instance.CreatedAt, &instance.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -86,6 +87,12 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 	}
 	if displayName != nil {
 		instance.DisplayName = *displayName
+	}
+	if productTier != nil {
+		instance.ProductTier = *productTier
+	}
+	if parentInstanceID != nil {
+		instance.ParentInstanceID = *parentInstanceID
 	}
 	if lastIPAddress != nil {
 		instance.LastIPAddress = *lastIPAddress
@@ -130,12 +137,13 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 	var instance types.Instance
 	var licenseID, displayName, updateGroup, lastIPAddress *string
 	var autoUpdateEnabled *bool
+	var productTier, parentInstanceID *string
 
 	err := row.Scan(
 		&instance.ID, &instance.InstanceID, &instance.InstanceType, &instance.Hostname, &displayName,
 		&licenseID, &instance.APIKeyHash, &instance.LastHeartbeat,
 		&instance.Status, &autoUpdateEnabled, &updateGroup,
-		&lastIPAddress, &instance.CreatedAt, &instance.UpdatedAt,
+		&lastIPAddress, &productTier, &parentInstanceID, &instance.CreatedAt, &instance.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -147,6 +155,12 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 	}
 	if displayName != nil {
 		instance.DisplayName = *displayName
+	}
+	if productTier != nil {
+		instance.ProductTier = *productTier
+	}
+	if parentInstanceID != nil {
+		instance.ParentInstanceID = *parentInstanceID
 	}
 	if lastIPAddress != nil {
 		instance.LastIPAddress = *lastIPAddress
@@ -238,7 +252,7 @@ func (r *InstanceRepository) GetByAPIKeyHash(ctx context.Context, apiKeyHash str
 // List retrieves all instances
 func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error) {
 	rows, err := r.db.Pool.Query(ctx, `
-		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, update_group, created_at, updated_at
+		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, update_group, product_tier, parent_instance_id, created_at, updated_at
 		FROM instances
 		ORDER BY created_at DESC
 	`)
@@ -255,11 +269,13 @@ func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error)
 		var displayName *string
 		var autoUpdateEnabled *bool
 		var updateGroup *string
+		var productTier, parentInstanceID *string
 
 		err := rows.Scan(
 			&instance.ID, &instance.InstanceID, &instance.InstanceType, &instance.Hostname, &displayName,
 			&licenseID, &instance.APIKeyHash, &instance.LastHeartbeat, &lastHeartbeatData,
-			&instance.Status, &autoUpdateEnabled, &updateGroup, &instance.CreatedAt, &instance.UpdatedAt)
+			&instance.Status, &autoUpdateEnabled, &updateGroup, &productTier, &parentInstanceID,
+			&instance.CreatedAt, &instance.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan instance: %w", err)
 		}
@@ -269,6 +285,12 @@ func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error)
 		}
 		if displayName != nil {
 			instance.DisplayName = *displayName
+		}
+		if productTier != nil {
+			instance.ProductTier = *productTier
+		}
+		if parentInstanceID != nil {
+			instance.ParentInstanceID = *parentInstanceID
 		}
 		if autoUpdateEnabled != nil {
 			instance.AutoUpdateEnabled = *autoUpdateEnabled
@@ -433,12 +455,22 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 		licenseIDPtr = &licenseID
 	}
 
+	// Self-reported hierarchy: store NULL when the agent omits a value so an
+	// existing tier/parent is preserved across heartbeats (COALESCE below).
+	var productTierPtr, parentInstanceIDPtr *string
+	if tier := heartbeat.ProductTier; tier != "" {
+		productTierPtr = &tier
+	}
+	if parent := heartbeat.ParentInstanceID; parent != "" {
+		parentInstanceIDPtr = &parent
+	}
+
 	// Base UPSERT query with IP tracking
 	query := `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash, 
 		                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at, 
-		                       created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $9, $9)
+		                       product_tier, parent_instance_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $9, $9)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			hostname = EXCLUDED.hostname,
 			license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
@@ -447,9 +479,11 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			status = 'online',
 			last_ip_address = EXCLUDED.last_ip_address,
 			last_ip_seen_at = EXCLUDED.last_ip_seen_at,
+			product_tier = COALESCE(EXCLUDED.product_tier, instances.product_tier),
+			parent_instance_id = COALESCE(EXCLUDED.parent_instance_id, instances.parent_instance_id),
 			updated_at = EXCLUDED.updated_at
 	`
-	args := []interface{}{id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now}
+	args := []interface{}{id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr}
 
 	// If heartbeat contains update attempt, include those columns
 	if heartbeat.LastUpdateAttempt != nil {
@@ -458,8 +492,8 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash, 
 			                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at,
 			                       last_update_from_version, last_update_target_version, last_update_success,
-			                       last_update_error, last_update_at, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $14, $9, $9)
+			                       last_update_error, last_update_at, product_tier, parent_instance_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $14, $15, $16, $9, $9)
 			ON CONFLICT (instance_id) DO UPDATE SET
 				hostname = EXCLUDED.hostname,
 				license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
@@ -473,11 +507,14 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 				last_update_success = EXCLUDED.last_update_success,
 				last_update_error = EXCLUDED.last_update_error,
 				last_update_at = EXCLUDED.last_update_at,
+				product_tier = COALESCE(EXCLUDED.product_tier, instances.product_tier),
+				parent_instance_id = COALESCE(EXCLUDED.parent_instance_id, instances.parent_instance_id),
 				updated_at = EXCLUDED.updated_at
 		`
 		args = []interface{}{
 			id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now,
 			attempt.FromVersion, attempt.TargetVersion, attempt.Success, attempt.Error, attempt.Timestamp,
+			productTierPtr, parentInstanceIDPtr,
 		}
 	}
 

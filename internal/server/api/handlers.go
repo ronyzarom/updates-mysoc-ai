@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/catalog"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/releases"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
@@ -549,6 +550,14 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize and validate the self-reported product hierarchy.
+	heartbeat.ProductTier = catalog.Normalize(heartbeat.ProductTier)
+	heartbeat.ParentInstanceID = strings.TrimSpace(heartbeat.ParentInstanceID)
+	if msg, ok := s.validateHierarchy(r.Context(), heartbeat.ProductTier, heartbeat.ParentInstanceID); !ok {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+
 	// Read license key from header (sent by siemcore-updater)
 	licenseKey := r.Header.Get("X-License-Key")
 
@@ -591,13 +600,15 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 // Accepts the format sent by siemcore-updater and creates/updates instances
 
 type UpdateCheckRequest struct {
-	InstanceID     string `json:"instance_id"`
-	CurrentVersion string `json:"current_version"`
-	UpdaterVersion string `json:"updater_version"`
-	OS             string `json:"os"`
-	Arch           string `json:"arch"`
-	Hostname       string `json:"hostname"`
-	Channel        string `json:"channel"`
+	InstanceID       string `json:"instance_id"`
+	CurrentVersion   string `json:"current_version"`
+	UpdaterVersion   string `json:"updater_version"`
+	OS               string `json:"os"`
+	Arch             string `json:"arch"`
+	Hostname         string `json:"hostname"`
+	Channel          string `json:"channel"`
+	ProductTier      string `json:"product_tier,omitempty"`       // canonical tier (defaults to {product} when it is a tier)
+	ParentInstanceID string `json:"parent_instance_id,omitempty"` // parent node's instance_id
 }
 
 func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
@@ -623,6 +634,18 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the product tier: prefer the explicit field, else fall back to the
+	// {product} path segment when it names a canonical tier.
+	productTier := catalog.Normalize(req.ProductTier)
+	if productTier == "" && catalog.IsValidTier(catalog.Normalize(product)) {
+		productTier = catalog.Normalize(product)
+	}
+	parentInstanceID := strings.TrimSpace(req.ParentInstanceID)
+	if msg, ok := s.validateHierarchy(r.Context(), productTier, parentInstanceID); !ok {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+
 	// Read license key from header
 	licenseKey := r.Header.Get("X-License-Key")
 
@@ -638,10 +661,12 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Convert to heartbeat format for upsert
 	heartbeat := &types.Heartbeat{
-		InstanceID:     req.InstanceID,
-		InstanceType:   product,
-		Hostname:       req.Hostname,
-		UpdaterVersion: req.UpdaterVersion,
+		InstanceID:       req.InstanceID,
+		InstanceType:     product,
+		ProductTier:      productTier,
+		ParentInstanceID: parentInstanceID,
+		Hostname:         req.Hostname,
+		UpdaterVersion:   req.UpdaterVersion,
 		Products: []types.ProductStatus{
 			{
 				Name:    product,

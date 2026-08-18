@@ -34,7 +34,9 @@ type LicenseLimits struct {
 type Instance struct {
 	ID                string     `json:"id"`
 	InstanceID        string     `json:"instance_id"`
-	InstanceType      string     `json:"instance_type"` // mysoc, siemcore
+	InstanceType      string     `json:"instance_type"`                // OS/sub-type, e.g. swf-windows, siemcore-linux
+	ProductTier       string     `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
+	ParentInstanceID  string     `json:"parent_instance_id,omitempty"` // instance_id of the parent node (siemcore for swf, mysoc for siemcore)
 	Hostname          string     `json:"hostname"`
 	DisplayName       string     `json:"display_name,omitempty"` // Friendly name / domain (e.g., cloud.siemcore.ai)
 	LicenseID         string     `json:"license_id,omitempty"`
@@ -119,16 +121,18 @@ type UpdateAttempt struct {
 
 // Heartbeat is the payload sent by updaters
 type Heartbeat struct {
-	InstanceID     string          `json:"instance_id"`
-	InstanceType   string          `json:"instance_type"`
-	Hostname       string          `json:"hostname"`
-	UpdaterVersion string          `json:"updater_version"`
-	ConfigHash     string          `json:"config_hash"`
-	License        LicenseStatus   `json:"license"`
-	Products       []ProductStatus `json:"products"`
-	System         SystemMetrics   `json:"system"`
-	Security       SecurityStatus  `json:"security,omitempty"`
-	Timestamp      time.Time       `json:"timestamp"`
+	InstanceID       string          `json:"instance_id"`
+	InstanceType     string          `json:"instance_type"`
+	ProductTier      string          `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
+	ParentInstanceID string          `json:"parent_instance_id,omitempty"` // parent node's instance_id (self-reported)
+	Hostname         string          `json:"hostname"`
+	UpdaterVersion   string          `json:"updater_version"`
+	ConfigHash       string          `json:"config_hash"`
+	License          LicenseStatus   `json:"license"`
+	Products         []ProductStatus `json:"products"`
+	System           SystemMetrics   `json:"system"`
+	Security         SecurityStatus  `json:"security,omitempty"`
+	Timestamp        time.Time       `json:"timestamp"`
 
 	// Last update attempt (included in next heartbeat after install)
 	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`

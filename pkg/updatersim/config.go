@@ -34,6 +34,28 @@ const (
 
 var productNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
+// Canonical product tiers (mysoc > siemcore > swf). A customer owns one license
+// that spans the whole tree; every node presents the same license_key and
+// self-reports its tier plus its parent node's instance id.
+const (
+	TierMySoc    = "mysoc"
+	TierSiemCore = "siemcore"
+	TierSWF      = "swf"
+)
+
+// tierRequiresParent maps each canonical tier to whether it must declare a
+// parent (the root, mysoc, must not).
+var tierRequiresParent = map[string]bool{
+	TierMySoc:    false,
+	TierSiemCore: true,
+	TierSWF:      true,
+}
+
+func validTier(t string) bool {
+	_, ok := tierRequiresParent[t]
+	return ok
+}
+
 // Mode controls how far the simulator proceeds after an update is offered.
 type Mode string
 
@@ -90,7 +112,8 @@ type ServerConfig struct {
 	AllowExternalDownloads bool     `yaml:"allow_external_downloads"`
 }
 
-// InstanceConfig identifies the simulated machine.
+// InstanceConfig identifies the simulated machine and its place in the product
+// hierarchy (mysoc > siemcore > swf).
 type InstanceConfig struct {
 	ID             string `yaml:"id"`
 	Type           string `yaml:"type"`
@@ -99,6 +122,12 @@ type InstanceConfig struct {
 	UpdaterVersion string `yaml:"updater_version"`
 	OS             string `yaml:"os,omitempty"`
 	Arch           string `yaml:"arch,omitempty"`
+	// ProductTier is the canonical tier this node reports: mysoc, siemcore, or
+	// swf. Optional; when set it is validated and sent on every heartbeat.
+	ProductTier string `yaml:"product_tier,omitempty"`
+	// ParentID is the instance id of this node's parent (a siemcore for an swf,
+	// a mysoc for a siemcore). Required for siemcore/swf, forbidden for mysoc.
+	ParentID string `yaml:"parent_id,omitempty"`
 }
 
 // HeartbeatConfig controls the simulator loop.
@@ -348,6 +377,22 @@ func (c *Config) Validate() error {
 		}
 	default:
 		return fmt.Errorf("invalid simulation executor %q (must be noop or filesystem)", c.Simulation.Executor)
+	}
+
+	if c.Instance.ProductTier != "" {
+		tier := strings.ToLower(strings.TrimSpace(c.Instance.ProductTier))
+		if !validTier(tier) {
+			return fmt.Errorf("invalid instance.product_tier %q (must be mysoc, siemcore, or swf)", c.Instance.ProductTier)
+		}
+		parent := strings.TrimSpace(c.Instance.ParentID)
+		if tierRequiresParent[tier] && parent == "" {
+			return fmt.Errorf("instance.product_tier %q requires instance.parent_id (the parent node's instance id)", tier)
+		}
+		if !tierRequiresParent[tier] && parent != "" {
+			return fmt.Errorf("instance.product_tier %q is a root and must not set instance.parent_id", tier)
+		}
+		c.Instance.ProductTier = tier
+		c.Instance.ParentID = parent
 	}
 
 	seen := make(map[string]struct{}, len(c.Products))

@@ -2,10 +2,14 @@
 // port). Defaults to "" so production stays same-origin/relative.
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
+export type ProductTier = "mysoc" | "siemcore" | "swf";
+
 export interface Instance {
   id: string;
   instance_id: string;
   instance_type: string;
+  product_tier?: string;
+  parent_instance_id?: string;
   hostname: string;
   display_name?: string;
   license_id?: string;
@@ -70,6 +74,34 @@ export interface InstancesPagedResponse {
   limit: number;
   offset: number;
   total: number;
+}
+
+// Fleet tree (mysoc > siemcore > swf), grouped per customer/license.
+export interface InstanceTreeNode {
+  id: string;
+  instance_id: string;
+  display_name?: string;
+  hostname?: string;
+  instance_type?: string;
+  product_tier?: string;
+  parent_instance_id?: string;
+  status: string;
+  last_heartbeat?: string;
+  orphan?: boolean;
+  children: InstanceTreeNode[];
+}
+
+export interface InstanceTreeCustomer {
+  license_id?: string;
+  license_key?: string;
+  customer_id?: string;
+  customer_name: string;
+  total_nodes: number;
+  roots: InstanceTreeNode[];
+}
+
+export interface InstanceTreeResponse {
+  customers: InstanceTreeCustomer[];
 }
 
 export interface HeartbeatData {
@@ -478,6 +510,10 @@ class ApiClient {
     return this.fetch<InstancesPagedResponse>(
       `/api/v1/instances/paged?limit=${limit}&offset=${offset}`
     );
+  }
+
+  async getInstanceTree(): Promise<InstanceTreeResponse> {
+    return this.fetch<InstanceTreeResponse>("/api/v1/instances/tree");
   }
 
   async getInstance(id: string): Promise<Instance> {

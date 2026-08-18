@@ -49,11 +49,12 @@ go run ./cmd/updater-simulator version
 
 ## Example Configurations
 
-- [SiemCore](../examples/updater-simulator/siemcore.yaml)
-- [SWF](../examples/updater-simulator/swf.yaml)
+- [MySoc](../examples/updater-simulator/mysoc.yaml) - root of the product hierarchy
+- [SiemCore](../examples/updater-simulator/siemcore.yaml) - middle tier (parent = a mysoc)
+- [SWF](../examples/updater-simulator/swf.yaml) - leaf tier (parent = a siemcore)
 - [Local filesystem install](../examples/updater-simulator/filesystem-local.yaml) - real install/update against a local server
 
-Both examples:
+The tier examples:
 
 - Use `https://updates.mysoc.ai`
 - Use synthetic simulator identities
@@ -70,6 +71,44 @@ export UPDATER_SIM_API_KEY='OPTIONAL-ENROLLED-INSTANCE-KEY'
 
 `UPDATER_SIM_LICENSE_KEY` and `UPDATER_SIM_API_KEY` override values in YAML.
 State and artifact paths are resolved relative to the configuration file.
+
+## Product Hierarchy
+
+The fleet is a three-tier tree owned by a single customer:
+
+```text
+mysoc  (root, no parent)
+  └── siemcore   (parent = a mysoc)
+        └── swf  (parent = a siemcore)
+```
+
+A customer owns **one license** that spans the whole tree. Every node — mysoc,
+siemcore, and swf — presents the **same** `license_key`. The server binds each
+node's `license_id` from that key and groups the fleet by customer, so set the
+same value (ideally via `UPDATER_SIM_LICENSE_KEY`) on all three configs.
+
+Each agent **self-reports** its place in the tree via two `instance` fields:
+
+| Field          | Meaning                                                        | mysoc        | siemcore            | swf                 |
+| -------------- | -------------------------------------------------------------- | ------------ | ------------------- | ------------------- |
+| `product_tier` | Canonical tier: `mysoc`, `siemcore`, or `swf`                  | `mysoc`      | `siemcore`          | `swf`               |
+| `parent_id`    | The **parent node's `instance.id`** (its `instance_id` on the wire) | *(omit)* | a mysoc instance id | a siemcore instance id |
+
+`instance.type` stays the OS/sub-type (e.g. `swf-windows`); `product_tier` is the
+canonical tier. Rules enforced on load:
+
+- `product_tier` must be one of `mysoc`, `siemcore`, `swf` (case-insensitive).
+- `mysoc` is the root and must **not** set `parent_id`.
+- `siemcore` and `swf` **must** set `parent_id`.
+
+The tier and parent are sent on every heartbeat and update-check as
+`product_tier` and `parent_instance_id`. A child may enroll before its parent;
+the server stores the link and surfaces it as an *orphan* in the tree until the
+parent appears (no error). If the declared parent already exists with a
+mismatched tier, the server rejects the report with `400`.
+
+View the assembled tree via `GET /api/v1/instances/tree` or the dashboard's
+Instances → Tree view.
 
 **Credential hygiene.** The server matches credentials **exactly**, so the
 simulator normalizes them on load: surrounding whitespace (including a trailing
@@ -235,6 +274,8 @@ instance:
   updater_version: updater-simulator/1.1.0.3
   os: linux
   arch: amd64
+  product_tier: siemcore          # optional: mysoc | siemcore | swf
+  parent_id: sim-mysoc-dev-01     # required for siemcore/swf; omit for mysoc
 
 heartbeat:
   interval: 60s

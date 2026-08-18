@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Document Version** | 1.2.0 |
-| **Last Updated** | August 11, 2026 |
+| **Document Version** | 1.3.0 |
+| **Last Updated** | August 18, 2026 |
 | **Status** | Draft |
 | **Audience** | Platform engineering, release engineering, and operations |
 | **Maintained By** | MySoc / SiemCore Platform Team |
@@ -191,6 +191,39 @@ silently reuse another device's identity.
 - API keys, license keys, bearer tokens, and grants MUST NOT appear in URLs,
   query strings, logs, or process arguments.
 - A device credential MUST NOT authorize release publication or administration.
+
+### 4.4 Product Hierarchy (mysoc > siemcore > swf)
+
+Products form a canonical three-tier tree owned by a single customer:
+
+| Tier       | Rank | Parent tier | Notes                                  |
+| ---------- | ---- | ----------- | -------------------------------------- |
+| `mysoc`    | 0    | *(none)*    | Root; one per customer                 |
+| `siemcore` | 1    | `mysoc`     | Many per mysoc                         |
+| `swf`      | 2    | `siemcore`  | Many per siemcore (Windows forwarder)  |
+
+Rules:
+
+- A customer owns **one license** that spans the whole tree. Every node presents
+  the **same** `X-License-Key`; the server binds each node's `license_id` from
+  that key and groups the fleet by customer/license.
+- Agents **self-report** their tier and their parent via `product_tier` and
+  `parent_instance_id` on every heartbeat and update-check. `instance_type`
+  remains the OS/sub-type; `product_tier` is the canonical tier.
+- The server MUST validate a supplied `product_tier` against the canonical set
+  and, when the declared parent already exists, MUST assert the parent's tier is
+  exactly one rank above. A child MAY enroll before its parent; the server stores
+  the link and treats the node as an *orphan* in the tree until the parent
+  appears (it MUST NOT reject purely because the parent is unknown).
+- Self-reported parentage is a topology convenience for grouping and display. It
+  is NOT an authorization boundary: company ownership is still derived from the
+  authenticated credential (§4.1), and a device credential still MUST NOT
+  authorize administration (§4.3).
+
+Operators view the assembled tree via `GET /api/v1/instances/tree` (grouped
+`license -> mysoc -> siemcore -> swf`, with orphan and unlicensed buckets) or the
+dashboard's Instances → Tree view. The canonical tier catalog is served at
+`GET /api/v1/products`.
 
 ---
 
