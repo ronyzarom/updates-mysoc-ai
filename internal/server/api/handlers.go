@@ -264,6 +264,12 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {
+	// Artifact download has no instance identity, so it is gated by the global
+	// allowlist entries only.
+	if !s.enforceIPAllowed(w, r, "") {
+		return
+	}
+
 	product := chi.URLParam(r, "product")
 	version := chi.URLParam(r, "version")
 
@@ -488,6 +494,12 @@ func (s *Server) handleDirectDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Direct download has no instance identity, so it is gated by the global
+	// allowlist entries only.
+	if !s.enforceIPAllowed(w, r, "") {
+		return
+	}
+
 	// Check if file exists in storage
 	if !s.storage.Exists(product, version, filename) {
 		writeError(w, http.StatusNotFound, "artifact not found")
@@ -529,6 +541,11 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	if heartbeat.InstanceID == "" {
 		writeError(w, http.StatusBadRequest, "instance_id is required")
+		return
+	}
+
+	// Enforce the allowlist-only IP control before touching any state.
+	if !s.enforceIPAllowed(w, r, heartbeat.InstanceID) {
 		return
 	}
 
@@ -598,6 +615,11 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 
 	if req.InstanceID == "" {
 		writeError(w, http.StatusBadRequest, "instance_id is required")
+		return
+	}
+
+	// Enforce the allowlist-only IP control before touching any state.
+	if !s.enforceIPAllowed(w, r, req.InstanceID) {
 		return
 	}
 
@@ -718,6 +740,11 @@ func (s *Server) handleUpdateReport(w http.ResponseWriter, r *http.Request) {
 	var req UpdateReportRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Enforce the allowlist-only IP control (report carries the instance_id).
+	if !s.enforceIPAllowed(w, r, req.InstanceID) {
 		return
 	}
 

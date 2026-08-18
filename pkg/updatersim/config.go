@@ -20,6 +20,16 @@ const (
 	defaultDrainTimeout     = 30 * time.Second
 	defaultMaxResponseBytes = int64(1 << 20)
 	defaultMaxDownloadBytes = int64(1 << 30)
+	defaultCommandTimeout   = 60 * time.Second
+)
+
+// Executor kinds selectable via simulation.executor.
+const (
+	// ExecutorNoop simulates lifecycle latency without changing the machine.
+	ExecutorNoop = "noop"
+	// ExecutorFilesystem performs a real versioned install with an atomic
+	// current-symlink swap and rollback.
+	ExecutorFilesystem = "filesystem"
 )
 
 var productNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
@@ -99,13 +109,30 @@ type HeartbeatConfig struct {
 
 // SimulationConfig controls safe simulator behavior.
 type SimulationConfig struct {
-	Mode             Mode     `yaml:"mode"`
-	ArtifactDir      string   `yaml:"artifact_dir"`
-	StateFile        string   `yaml:"state_file"`
-	ManifestFile     string   `yaml:"manifest_file,omitempty"`
-	MaxDownloadBytes int64    `yaml:"max_download_bytes"`
-	LegacyFallback   bool     `yaml:"legacy_fallback"`
-	DrainTimeout     Duration `yaml:"drain_timeout"`
+	Mode             Mode             `yaml:"mode"`
+	Executor         string           `yaml:"executor,omitempty"`
+	ArtifactDir      string           `yaml:"artifact_dir"`
+	StateFile        string           `yaml:"state_file"`
+	ManifestFile     string           `yaml:"manifest_file,omitempty"`
+	MaxDownloadBytes int64            `yaml:"max_download_bytes"`
+	LegacyFallback   bool             `yaml:"legacy_fallback"`
+	DrainTimeout     Duration         `yaml:"drain_timeout"`
+	Filesystem       FilesystemConfig `yaml:"filesystem,omitempty"`
+}
+
+// FilesystemConfig configures the real filesystem installer used when
+// simulation.executor is "filesystem".
+type FilesystemConfig struct {
+	// InstallRoot is the base directory that holds per-product install trees.
+	InstallRoot string `yaml:"install_root"`
+	// RestartCommand runs after the atomic symlink swap (and after rollback).
+	RestartCommand []string `yaml:"restart_command,omitempty"`
+	// HealthCommand runs during validation; a non-zero exit triggers rollback.
+	HealthCommand []string `yaml:"health_command,omitempty"`
+	// KeepReleases bounds retained version directories (0 = keep all).
+	KeepReleases int `yaml:"keep_releases,omitempty"`
+	// CommandTimeout bounds restart/health command execution.
+	CommandTimeout Duration `yaml:"command_timeout,omitempty"`
 }
 
 // ProductConfig identifies one simulated managed product.
@@ -154,6 +181,12 @@ func (c *Config) setDefaults() {
 	}
 	if c.Simulation.Mode == "" {
 		c.Simulation.Mode = ModeObserve
+	}
+	if c.Simulation.Executor == "" {
+		c.Simulation.Executor = ExecutorNoop
+	}
+	if c.Simulation.Filesystem.CommandTimeout.Duration == 0 {
+		c.Simulation.Filesystem.CommandTimeout.Duration = defaultCommandTimeout
 	}
 	if c.Simulation.ArtifactDir == "" {
 		c.Simulation.ArtifactDir = "simulator-artifacts"
@@ -208,6 +241,9 @@ func (c *Config) resolvePaths(configDir string) {
 	if c.Simulation.ManifestFile != "" && !filepath.IsAbs(c.Simulation.ManifestFile) {
 		c.Simulation.ManifestFile = filepath.Join(configDir, c.Simulation.ManifestFile)
 	}
+	if c.Simulation.Filesystem.InstallRoot != "" && !filepath.IsAbs(c.Simulation.Filesystem.InstallRoot) {
+		c.Simulation.Filesystem.InstallRoot = filepath.Join(configDir, c.Simulation.Filesystem.InstallRoot)
+	}
 }
 
 // Validate checks configuration that is common to all commands.
@@ -249,6 +285,22 @@ func (c *Config) Validate() error {
 	case ModeObserve, ModeDownload, ModeSimulate:
 	default:
 		return fmt.Errorf("invalid simulation mode %q", c.Simulation.Mode)
+	}
+
+	switch c.Simulation.Executor {
+	case ExecutorNoop:
+	case ExecutorFilesystem:
+		if c.Simulation.Filesystem.InstallRoot == "" {
+			return fmt.Errorf("simulation.filesystem.install_root is required for the filesystem executor")
+		}
+		if c.Simulation.Filesystem.KeepReleases < 0 {
+			return fmt.Errorf("simulation.filesystem.keep_releases cannot be negative")
+		}
+		if c.Simulation.Filesystem.CommandTimeout.Duration <= 0 {
+			return fmt.Errorf("simulation.filesystem.command_timeout must be positive")
+		}
+	default:
+		return fmt.Errorf("invalid simulation executor %q (must be noop or filesystem)", c.Simulation.Executor)
 	}
 
 	seen := make(map[string]struct{}, len(c.Products))

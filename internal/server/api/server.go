@@ -10,6 +10,7 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/auth"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/config"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/security"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/storage"
 )
 
@@ -21,6 +22,7 @@ type Server struct {
 	router      *chi.Mux
 	authService *auth.Service
 	authHandler *auth.Handlers
+	ipACL       *security.IPAllowlistRepository
 }
 
 // NewServer creates a new API server
@@ -36,6 +38,7 @@ func NewServer(cfg *config.Config, db *database.DB, store storage.Storage) *Serv
 		storage:     store,
 		authService: authService,
 		authHandler: authHandlers,
+		ipACL:       security.NewIPAllowlistRepository(db),
 	}
 
 	s.setupRoutes()
@@ -165,6 +168,12 @@ func (s *Server) setupRoutes() {
 			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Post("/licenses", s.handleCreateLicense)
 			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Put("/licenses/{id}", s.handleUpdateLicense)
 			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Delete("/licenses/{id}", s.handleDeleteLicense)
+
+			// IP allowlist management (updater channel firewall). Reads and
+			// writes require admin authorization (API key or admin JWT).
+			r.With(s.adminAuth).Get("/ip-allowlist", s.handleListIPAllowlist)
+			r.With(s.adminAuth).Post("/ip-allowlist", s.handleCreateIPAllowlist)
+			r.With(s.adminAuth).Delete("/ip-allowlist/{id}", s.handleDeleteIPAllowlist)
 
 			// User management - requires JWT admin
 			r.Group(func(r chi.Router) {

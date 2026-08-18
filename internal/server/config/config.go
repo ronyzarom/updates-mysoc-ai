@@ -21,10 +21,16 @@ type AuthConfig struct {
 
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Port     int
-	Host     string
-	APIKey   string // Admin API key for management endpoints
+	Port        int
+	Host        string
+	APIKey      string // Admin API key for management endpoints
 	CORSOrigins []string
+
+	// IPAllowlistEnforced gates the allowlist-only IP control on the updater
+	// data-plane channel (heartbeat, update check/report, artifact download).
+	// It defaults to false so existing deployments are unaffected until an
+	// operator provisions allowlist entries and turns enforcement on.
+	IPAllowlistEnforced bool
 }
 
 // DatabaseConfig holds database connection configuration
@@ -39,7 +45,7 @@ type DatabaseConfig struct {
 
 // StorageConfig holds artifact storage configuration
 type StorageConfig struct {
-	Type     string // "local" or "s3"
+	Type      string // "local" or "s3"
 	LocalPath string
 	// S3 configuration (for future use)
 	S3Bucket   string
@@ -51,10 +57,11 @@ type StorageConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:     getEnvInt("SERVER_PORT", 8080),
-			Host:     getEnv("SERVER_HOST", "0.0.0.0"),
-			APIKey:   getEnv("ADMIN_API_KEY", ""),
-			CORSOrigins: []string{"*"},
+			Port:                getEnvInt("SERVER_PORT", 8080),
+			Host:                getEnv("SERVER_HOST", "0.0.0.0"),
+			APIKey:              getEnv("ADMIN_API_KEY", ""),
+			CORSOrigins:         []string{"*"},
+			IPAllowlistEnforced: getEnvBool("IP_ALLOWLIST_ENFORCED", false),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -65,10 +72,10 @@ func Load() (*Config, error) {
 			SSLMode:  getEnv("DB_SSL_MODE", "disable"),
 		},
 		Storage: StorageConfig{
-			Type:      getEnv("STORAGE_TYPE", "local"),
-			LocalPath: getEnv("STORAGE_LOCAL_PATH", "./artifacts"),
-			S3Bucket:  getEnv("STORAGE_S3_BUCKET", ""),
-			S3Region:  getEnv("STORAGE_S3_REGION", ""),
+			Type:       getEnv("STORAGE_TYPE", "local"),
+			LocalPath:  getEnv("STORAGE_LOCAL_PATH", "./artifacts"),
+			S3Bucket:   getEnv("STORAGE_S3_BUCKET", ""),
+			S3Region:   getEnv("STORAGE_S3_REGION", ""),
 			S3Endpoint: getEnv("STORAGE_S3_ENDPOINT", ""),
 		},
 		Auth: AuthConfig{
@@ -96,3 +103,11 @@ func getEnvInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
+}

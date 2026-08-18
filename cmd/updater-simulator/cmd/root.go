@@ -362,11 +362,28 @@ func loadSimulator(opts *options) (*updatersim.Simulator, *updatersim.Config, er
 	if err != nil {
 		return nil, nil, err
 	}
-	simulator, err := updatersim.NewSimulator(cfg, updatersim.NoopExecutor{}, logger(opts))
+	executor := buildExecutor(cfg, logger(opts))
+	simulator, err := updatersim.NewSimulator(cfg, executor, logger(opts))
 	if err != nil {
 		return nil, nil, err
 	}
 	return simulator, cfg, nil
+}
+
+// buildExecutor selects the Executor implementation from configuration. The
+// default no-op executor never touches the machine; the filesystem executor
+// performs a real versioned install with an atomic activation and rollback.
+func buildExecutor(cfg *updatersim.Config, log *slog.Logger) updatersim.Executor {
+	switch cfg.Simulation.Executor {
+	case updatersim.ExecutorFilesystem:
+		log.Info(
+			"using filesystem executor",
+			"install_root", cfg.Simulation.Filesystem.InstallRoot,
+		)
+		return updatersim.NewFilesystemExecutor(cfg.Simulation.Filesystem, log)
+	default:
+		return updatersim.NoopExecutor{}
+	}
 }
 
 func logger(opts *options) *slog.Logger {
