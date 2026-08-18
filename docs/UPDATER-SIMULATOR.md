@@ -71,6 +71,16 @@ export UPDATER_SIM_API_KEY='OPTIONAL-ENROLLED-INSTANCE-KEY'
 `UPDATER_SIM_LICENSE_KEY` and `UPDATER_SIM_API_KEY` override values in YAML.
 State and artifact paths are resolved relative to the configuration file.
 
+**Credential hygiene.** The server matches credentials **exactly**, so the
+simulator normalizes them on load: surrounding whitespace (including a trailing
+newline from `$(cat key)`) is trimmed, and a value **wrapped in literal quotes**
+is rejected with a clear error rather than silently stripped — fix the source
+instead. Note that shell quotes in `export KEY='value'` are removed by the shell
+and never reach the value; the guard only trips when quote characters are part
+of the actual string (e.g. `license_key: "\"SIEM-…\""` in YAML). Remember the two
+credentials are different: `X-License-Key` (device license) does **not**
+authorize `POST /releases`, which requires an admin/`msk_` key in `X-API-Key`.
+
 ## Commands
 
 ### Enroll

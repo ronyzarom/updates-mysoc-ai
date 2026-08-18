@@ -156,6 +156,9 @@ func LoadConfig(path string) (*Config, error) {
 
 	cfg.setDefaults()
 	cfg.applyEnvironment()
+	if err := cfg.normalizeCredentials(); err != nil {
+		return nil, err
+	}
 	cfg.resolvePaths(filepath.Dir(path))
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -226,6 +229,50 @@ func (c *Config) applyEnvironment() {
 	if value := os.Getenv("UPDATER_SIM_API_KEY"); value != "" {
 		c.Server.APIKey = value
 	}
+}
+
+// normalizeCredentials cleans the credential fields sent to the server. The
+// server matches credentials exactly (by design — see the license and admin-key
+// contracts), so a quoted or padded value silently fails to authenticate. We
+// normalize on the client instead of the server:
+//   - surrounding whitespace (including a trailing newline from `$(cat key)`)
+//     is trimmed;
+//   - a value wrapped in literal quotes is rejected with a clear error rather
+//     than silently stripped, so the operator fixes the source of truth.
+func (c *Config) normalizeCredentials() error {
+	licenseKey, err := normalizeCredential("license_key", c.Server.LicenseKey)
+	if err != nil {
+		return err
+	}
+	c.Server.LicenseKey = licenseKey
+
+	apiKey, err := normalizeCredential("api_key", c.Server.APIKey)
+	if err != nil {
+		return err
+	}
+	c.Server.APIKey = apiKey
+	return nil
+}
+
+// normalizeCredential trims surrounding whitespace and rejects a value that is
+// wrapped in literal quote characters. Our credentials (license keys, msk_/admin
+// API keys) never contain quotes, so a leading or trailing quote is always a
+// copy/paste mistake.
+func normalizeCredential(field, value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", nil
+	}
+	if isQuoteByte(trimmed[0]) || isQuoteByte(trimmed[len(trimmed)-1]) {
+		return "", fmt.Errorf(
+			"%s must not be wrapped in quotes: remove the surrounding quote characters and provide the raw value",
+			field)
+	}
+	return trimmed, nil
+}
+
+func isQuoteByte(b byte) bool {
+	return b == '"' || b == '\'' || b == '`'
 }
 
 func (c *Config) resolvePaths(configDir string) {
