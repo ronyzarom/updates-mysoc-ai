@@ -44,6 +44,11 @@ func (e *APIError) Error() string {
 type HeartbeatResponse struct {
 	Status  string                      `json:"status"`
 	Updates []platformtypes.ReleaseInfo `json:"updates"`
+	// ReportedNodes echoes how many rollup nodes the server ingested.
+	ReportedNodes int `json:"reported_nodes,omitempty"`
+	// RelayToken is issued by a relay parent on first contact; the child
+	// presents it on every subsequent request to that relay.
+	RelayToken string `json:"relay_token,omitempty"`
 }
 
 // UpdateCheckRequest is the current group-aware update-check request. ProductTier
@@ -69,6 +74,7 @@ type UpdateCheckResponse struct {
 	DownloadURL     string `json:"download_url,omitempty"`
 	UpdateURL       string `json:"update_url,omitempty"`
 	SHA256          string `json:"sha256,omitempty"`
+	Signature       string `json:"signature,omitempty"` // base64 ed25519 release signature
 	ReleaseNotes    string `json:"release_notes,omitempty"`
 	Channel         string `json:"channel,omitempty"`
 	UpdateGroup     string `json:"update_group,omitempty"`
@@ -97,6 +103,7 @@ type UpdateOffer struct {
 	UpdateAvailable bool
 	DownloadURL     string
 	Checksum        string
+	Signature       string
 	ReleaseNotes    string
 	Channel         string
 	UpdateGroup     string
@@ -116,6 +123,7 @@ type Client struct {
 	httpClient             *http.Client
 	licenseKey             string
 	apiKey                 string
+	relayToken             string
 	maxResponseBytes       int64
 	allowExternalDownloads bool
 }
@@ -143,6 +151,7 @@ func NewClient(cfg ServerConfig) (*Client, error) {
 			if !sameOrigin(baseURL, req.URL) {
 				req.Header.Del("X-API-Key")
 				req.Header.Del("X-License-Key")
+				req.Header.Del("X-Relay-Token")
 				if !cfg.AllowExternalDownloads {
 					return ErrExternalDownload
 				}
@@ -156,6 +165,28 @@ func NewClient(cfg ServerConfig) (*Client, error) {
 // SetAPIKey updates the credential returned by enrollment.
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
+}
+
+// SetRelayToken sets the token a relay parent issued to this node.
+func (c *Client) SetRelayToken(token string) {
+	c.relayToken = token
+}
+
+// GetReleaseMeta fetches release metadata (checksum, signature, size) for one
+// version. Used by relays to verify artifacts before caching.
+func (c *Client) GetReleaseMeta(
+	ctx context.Context,
+	product, version string,
+) (*platformtypes.Release, error) {
+	if !productNamePattern.MatchString(product) {
+		return nil, fmt.Errorf("invalid product name %q", product)
+	}
+	path := "/api/v1/releases/" + url.PathEscape(product) + "/" + url.PathEscape(version)
+	var release platformtypes.Release
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &release); err != nil {
+		return nil, err
+	}
+	return &release, nil
 }
 
 // ActivateLicense enrolls a simulator instance. This mutates server state.
@@ -212,6 +243,7 @@ func (c *Client) CheckUpdate(
 		UpdateAvailable: response.UpdateAvailable,
 		DownloadURL:     downloadURL,
 		Checksum:        normalizeChecksum(response.SHA256),
+		Signature:       response.Signature,
 		ReleaseNotes:    response.ReleaseNotes,
 		Channel:         response.Channel,
 		UpdateGroup:     response.UpdateGroup,
@@ -244,6 +276,7 @@ func (c *Client) CheckLatest(
 		UpdateAvailable: response.UpdateAvailable,
 		DownloadURL:     response.DownloadURL,
 		Checksum:        normalizeChecksum(response.Checksum),
+		Signature:       response.Signature,
 		ReleaseNotes:    response.ReleaseNotes,
 		Channel:         response.Channel,
 		Source:          "legacy",
@@ -438,6 +471,9 @@ func (c *Client) addAuthHeaders(request *http.Request) {
 	}
 	if c.licenseKey != "" {
 		request.Header.Set("X-License-Key", c.licenseKey)
+	}
+	if c.relayToken != "" {
+		request.Header.Set("X-Relay-Token", c.relayToken)
 	}
 }
 

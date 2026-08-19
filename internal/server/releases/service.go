@@ -2,6 +2,7 @@ package releases
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/storage"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
 
@@ -64,8 +66,9 @@ func isNewerVersion(currentVersion, newVersion string) bool {
 
 // Service handles release business logic
 type Service struct {
-	repo    *Repository
-	storage storage.Storage
+	repo       *Repository
+	storage    storage.Storage
+	signingKey ed25519.PrivateKey // nil disables signing
 }
 
 // NewService creates a new release service
@@ -74,6 +77,19 @@ func NewService(db *database.DB, store storage.Storage) *Service {
 		repo:    NewRepository(db),
 		storage: store,
 	}
+}
+
+// SetSigningKey enables release signing at publish time.
+func (s *Service) SetSigningKey(key ed25519.PrivateKey) {
+	s.signingKey = key
+}
+
+// SigningPublicKeyHex returns the hex public key, or empty if signing is disabled.
+func (s *Service) SigningPublicKeyHex() string {
+	if s.signingKey == nil {
+		return ""
+	}
+	return signing.PublicKeyHex(s.signingKey)
 }
 
 // CreateReleaseRequest is the request to create a release
@@ -103,6 +119,11 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 
 	checksum := hex.EncodeToString(hasher.Sum(nil))
 
+	var signature string
+	if s.signingKey != nil {
+		signature = signing.Sign(s.signingKey, req.ProductName, req.Version, checksum)
+	}
+
 	// Create release record
 	release := &types.Release{
 		ProductName:       req.ProductName,
@@ -111,6 +132,7 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 		ArtifactPath:      artifactPath,
 		ArtifactSize:      req.FileSize,
 		Checksum:          checksum,
+		Signature:         signature,
 		ReleaseNotes:      req.ReleaseNotes,
 		MinUpdaterVersion: req.MinUpdaterVersion,
 		TargetGroups:      req.TargetGroups,
@@ -173,18 +195,7 @@ func (s *Service) GetLatestRelease(ctx context.Context, product, channel, curren
 	// Only mark as update available if the server version is actually higher
 	updateAvailable := isNewerVersion(currentVersion, release.Version)
 
-	return &types.ReleaseInfo{
-		Product:         release.ProductName,
-		CurrentVersion:  currentVersion,
-		LatestVersion:   release.Version,
-		UpdateAvailable: updateAvailable,
-		Channel:         release.Channel,
-		DownloadURL:     fmt.Sprintf("/api/v1/releases/%s/%s/download", release.ProductName, release.Version),
-		Checksum:        release.Checksum,
-		Size:            release.ArtifactSize,
-		ReleaseNotes:    release.ReleaseNotes,
-		ReleasedAt:      release.ReleasedAt,
-	}, nil
+	return releaseInfo(release, currentVersion, updateAvailable), nil
 }
 
 // GetLatestReleaseForGroup retrieves the highest version release for a product and target group
@@ -203,6 +214,10 @@ func (s *Service) GetLatestReleaseForGroup(ctx context.Context, product, channel
 	// Only mark as update available if the server version is actually higher
 	updateAvailable := isNewerVersion(currentVersion, release.Version)
 
+	return releaseInfo(release, currentVersion, updateAvailable), nil
+}
+
+func releaseInfo(release *types.Release, currentVersion string, updateAvailable bool) *types.ReleaseInfo {
 	return &types.ReleaseInfo{
 		Product:         release.ProductName,
 		CurrentVersion:  currentVersion,
@@ -211,10 +226,11 @@ func (s *Service) GetLatestReleaseForGroup(ctx context.Context, product, channel
 		Channel:         release.Channel,
 		DownloadURL:     fmt.Sprintf("/api/v1/releases/%s/%s/download", release.ProductName, release.Version),
 		Checksum:        release.Checksum,
+		Signature:       release.Signature,
 		Size:            release.ArtifactSize,
 		ReleaseNotes:    release.ReleaseNotes,
 		ReleasedAt:      release.ReleasedAt,
-	}, nil
+	}
 }
 
 // UpdateReleaseTargetGroups updates which groups can receive a release

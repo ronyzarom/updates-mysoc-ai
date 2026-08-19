@@ -49,9 +49,14 @@ export default function LicensesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Licenses</h1>
+          <h1 className="text-3xl font-bold text-white">Legacy Licenses</h1>
           <p className="text-slate-400 mt-1">
-            Manage customer licenses
+            Pre-1.8.0 per-customer keys. New operators get a single platform
+            key on the{" "}
+            <Link href="/operators" className="text-cyan-400 hover:underline">
+              Operators
+            </Link>{" "}
+            page; their fleet updates through the cascade instead.
           </p>
         </div>
         <div className="flex items-center gap-3">

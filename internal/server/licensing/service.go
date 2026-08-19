@@ -17,6 +17,7 @@ import (
 
 // Service handles license business logic
 type Service struct {
+	db           *database.DB
 	repo         *Repository
 	instanceRepo *InstanceRepository
 }
@@ -24,6 +25,7 @@ type Service struct {
 // NewService creates a new licensing service
 func NewService(db *database.DB) *Service {
 	return &Service{
+		db:           db,
 		repo:         NewRepository(db),
 		instanceRepo: NewInstanceRepository(db),
 	}

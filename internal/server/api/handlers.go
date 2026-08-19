@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -42,6 +43,47 @@ func getClientIP(r *http.Request) string {
 // Version is the running server build, injected from the main package at
 // startup (populated via -ldflags). It defaults to "dev" for local builds.
 var Version = "dev"
+
+// requireLicense enforces a valid, active, unexpired X-License-Key on the
+// agent data plane (heartbeat, update check/report, artifact download). On
+// failure it writes the 401 response and returns nil.
+func (s *Server) requireLicense(w http.ResponseWriter, r *http.Request) *types.License {
+	licenseKey := strings.TrimSpace(r.Header.Get("X-License-Key"))
+	if licenseKey == "" {
+		writeError(w, http.StatusUnauthorized, "a valid X-License-Key is required")
+		return nil
+	}
+	licenseSvc := licensing.NewService(s.db)
+	license, err := licenseSvc.ValidateLicense(r.Context(), licenseKey)
+	if err != nil || license == nil {
+		writeError(w, http.StatusUnauthorized, "invalid license key")
+		return nil
+	}
+	if !license.IsActive {
+		writeError(w, http.StatusUnauthorized, "license is deactivated")
+		return nil
+	}
+	if !license.ExpiresAt.IsZero() && license.ExpiresAt.Before(time.Now()) {
+		writeError(w, http.StatusUnauthorized, "license has expired")
+		return nil
+	}
+	return license
+}
+
+// licenseAuthorizesTier checks a claimed tier against the license. Only
+// new-style keys (license.Product set) constrain the claim; legacy keys keep
+// their pre-1.8.0 behavior.
+func licenseAuthorizesTier(license *types.License, tier string) bool {
+	if license == nil || license.Product == "" || tier == "" {
+		return true
+	}
+	for _, p := range license.Products {
+		if p == tier {
+			return true
+		}
+	}
+	return false
+}
 
 // Health check response
 type HealthResponse struct {
@@ -121,7 +163,7 @@ func (s *Server) handleLicenseValidate(w http.ResponseWriter, r *http.Request) {
 // Release handlers
 
 func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 	releaseList, err := svc.ListReleases(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -192,7 +234,7 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 	release, err := svc.CreateRelease(r.Context(), releases.CreateReleaseRequest{
 		ProductName:  productName,
 		Version:      version,
@@ -214,7 +256,7 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListProductReleases(w http.ResponseWriter, r *http.Request) {
 	product := chi.URLParam(r, "product")
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 	releaseList, err := svc.ListProductReleases(r.Context(), product)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -232,7 +274,7 @@ func (s *Server) handleGetLatestRelease(w http.ResponseWriter, r *http.Request) 
 	}
 	currentVersion := r.URL.Query().Get("current_version")
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 	releaseInfo, err := svc.GetLatestRelease(r.Context(), product, channel, currentVersion)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -250,7 +292,7 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 	product := chi.URLParam(r, "product")
 	version := chi.URLParam(r, "version")
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 	release, err := svc.GetRelease(r.Context(), product, version)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -271,10 +313,15 @@ func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Artifacts are not world-downloadable: a valid license is required (1.8.0).
+	if s.requireLicense(w, r) == nil {
+		return
+	}
+
 	product := chi.URLParam(r, "product")
 	version := chi.URLParam(r, "version")
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 	release, err := svc.GetRelease(r.Context(), product, version)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -299,6 +346,9 @@ func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(release.ArtifactSize, 10))
 	w.Header().Set("X-Checksum-SHA256", release.Checksum)
+	if release.Signature != "" {
+		w.Header().Set("X-Signature-Ed25519", release.Signature)
+	}
 
 	io.Copy(w, reader)
 }
@@ -365,7 +415,7 @@ func (s *Server) handleUpdateRelease(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 
 	// Get the release first
 	release, err := svc.GetRelease(r.Context(), product, version)
@@ -421,7 +471,7 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 		}
 	}
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 
 	// Get the release first
 	release, err := svc.GetRelease(r.Context(), product, version)
@@ -454,7 +504,7 @@ func (s *Server) handleDeleteRelease(w http.ResponseWriter, r *http.Request) {
 	product := chi.URLParam(r, "product")
 	version := chi.URLParam(r, "version")
 
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 
 	// Get the release first to find its ID
 	release, err := svc.GetRelease(r.Context(), product, version)
@@ -501,6 +551,11 @@ func (s *Server) handleDirectDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Artifacts are not world-downloadable: a valid license is required (1.8.0).
+	if s.requireLicense(w, r) == nil {
+		return
+	}
+
 	// Check if file exists in storage
 	if !s.storage.Exists(product, version, filename) {
 		writeError(w, http.StatusNotFound, "artifact not found")
@@ -516,7 +571,7 @@ func (s *Server) handleDirectDownload(w http.ResponseWriter, r *http.Request) {
 	defer reader.Close()
 
 	// Try to get release info for checksum
-	svc := releases.NewService(s.db, s.storage)
+	svc := s.releaseService()
 	release, _ := svc.GetRelease(r.Context(), product, version)
 
 	// Set headers for download
@@ -550,25 +605,28 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A valid license is mandatory on the agent plane (1.8.0).
+	license := s.requireLicense(w, r)
+	if license == nil {
+		return
+	}
+	licenseID := license.ID
+
 	// Normalize and validate the self-reported product hierarchy.
 	heartbeat.ProductTier = catalog.Normalize(heartbeat.ProductTier)
 	heartbeat.ParentInstanceID = strings.TrimSpace(heartbeat.ParentInstanceID)
+	heartbeat.CustomerID = strings.TrimSpace(heartbeat.CustomerID)
+	heartbeat.CustomerName = strings.TrimSpace(heartbeat.CustomerName)
+	if heartbeat.ProductTier == "" && license.Product != "" {
+		heartbeat.ProductTier = license.Product
+	}
+	if !licenseAuthorizesTier(license, heartbeat.ProductTier) {
+		writeError(w, http.StatusForbidden, fmt.Sprintf("license does not authorize product tier %q", heartbeat.ProductTier))
+		return
+	}
 	if msg, ok := s.validateHierarchy(r.Context(), heartbeat.ProductTier, heartbeat.ParentInstanceID); !ok {
 		writeError(w, http.StatusBadRequest, msg)
 		return
-	}
-
-	// Read license key from header (sent by siemcore-updater)
-	licenseKey := r.Header.Get("X-License-Key")
-
-	// Look up license ID if license key provided
-	var licenseID string
-	if licenseKey != "" {
-		licenseSvc := licensing.NewService(s.db)
-		license, err := licenseSvc.ValidateLicense(r.Context(), licenseKey)
-		if err == nil && license != nil && license.IsActive {
-			licenseID = license.ID
-		}
 	}
 
 	// Upsert instance (create if not exists, update if exists)
@@ -579,9 +637,20 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		// fmt.Printf("Warning: failed to upsert instance: %v\n", err)
 	}
 
+	// Ingest the cascaded fleet rollup (relays report their whole subtree).
+	reportedNodes := 0
+	if len(heartbeat.Children) > 0 {
+		n, err := instanceRepo.UpsertReportedChildren(r.Context(), heartbeat.InstanceID, licenseID, heartbeat.Children)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid fleet rollup: %v", err))
+			return
+		}
+		reportedNodes = n
+	}
+
 	// Check for available updates
 	var updates []types.ReleaseInfo
-	releaseSvc := releases.NewService(s.db, s.storage)
+	releaseSvc := s.releaseService()
 
 	for _, product := range heartbeat.Products {
 		info, err := releaseSvc.GetLatestRelease(r.Context(), product.Name, product.Channel, product.Version)
@@ -591,8 +660,9 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":  "ok",
-		"updates": updates,
+		"status":         "ok",
+		"updates":        updates,
+		"reported_nodes": reportedNodes,
 	})
 }
 
@@ -646,17 +716,15 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read license key from header
-	licenseKey := r.Header.Get("X-License-Key")
-
-	// Look up license ID if license key provided
-	var licenseID string
-	if licenseKey != "" {
-		licenseSvc := licensing.NewService(s.db)
-		license, err := licenseSvc.ValidateLicense(r.Context(), licenseKey)
-		if err == nil && license != nil && license.IsActive {
-			licenseID = license.ID
-		}
+	// A valid license is mandatory on the agent plane (1.8.0).
+	license := s.requireLicense(w, r)
+	if license == nil {
+		return
+	}
+	licenseID := license.ID
+	if !licenseAuthorizesTier(license, productTier) {
+		writeError(w, http.StatusForbidden, fmt.Sprintf("license does not authorize product tier %q", productTier))
+		return
 	}
 
 	// Convert to heartbeat format for upsert
@@ -676,10 +744,11 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// Upsert instance
+	// Record the check-in without impersonating a direct heartbeat: relays
+	// forward child checks upstream, so this must not clobber rollup state.
 	instanceRepo := licensing.NewInstanceRepository(s.db)
 	clientIP := getClientIP(r)
-	if err := instanceRepo.UpsertFromHeartbeat(r.Context(), req.InstanceID, heartbeat, licenseID, clientIP); err != nil {
+	if err := instanceRepo.TouchFromCheck(r.Context(), req.InstanceID, heartbeat, licenseID, clientIP); err != nil {
 		// Log but don't fail
 	}
 
@@ -707,7 +776,7 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		updateGroup = instance.UpdateGroup
 	}
 
-	releaseSvc := releases.NewService(s.db, s.storage)
+	releaseSvc := s.releaseService()
 	info, err := releaseSvc.GetLatestReleaseForGroup(r.Context(), product, channel, req.CurrentVersion, updateGroup)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to check for updates")
@@ -733,6 +802,7 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 			"download_url":     absoluteURL,
 			"update_url":       absoluteURL, // Alias for compatibility with siemcore-updater
 			"sha256":           info.Checksum,
+			"signature":        info.Signature,
 			"release_notes":    info.ReleaseNotes,
 			"channel":          info.Channel,
 			"update_group":     updateGroup,
@@ -770,6 +840,11 @@ func (s *Server) handleUpdateReport(w http.ResponseWriter, r *http.Request) {
 
 	// Enforce the allowlist-only IP control (report carries the instance_id).
 	if !s.enforceIPAllowed(w, r, req.InstanceID) {
+		return
+	}
+
+	// A valid license is mandatory on the agent plane (1.8.0).
+	if s.requireLicense(w, r) == nil {
 		return
 	}
 

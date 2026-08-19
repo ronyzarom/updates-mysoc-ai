@@ -71,8 +71,12 @@ type treeNode struct {
 	InstanceType     string      `json:"instance_type,omitempty"`
 	ProductTier      string      `json:"product_tier,omitempty"`
 	ParentInstanceID string      `json:"parent_instance_id,omitempty"`
+	CustomerID       string      `json:"customer_id,omitempty"`
+	Version          string      `json:"version,omitempty"` // primary product version from the latest report
 	Status           string      `json:"status"`
 	LastHeartbeat    *time.Time  `json:"last_heartbeat,omitempty"`
+	ReportedVia      string      `json:"reported_via,omitempty"` // relay that reported this node (empty = direct)
+	ReportedAt       *time.Time  `json:"reported_at,omitempty"`
 	Orphan           bool        `json:"orphan,omitempty"` // parent declared but not enrolled anywhere in the fleet
 	Children         []*treeNode `json:"children"`
 }
@@ -84,16 +88,18 @@ type treeCustomer struct {
 	CustomerName string      `json:"customer_name"`
 	ResellerID   string      `json:"reseller_id,omitempty"`   // sales channel; empty = direct
 	ResellerName string      `json:"reseller_name,omitempty"` // human-friendly reseller label
+	Legacy       bool        `json:"legacy,omitempty"`        // grouped by a pre-1.8.0 license instead of a cascade report
 	TotalNodes   int         `json:"total_nodes"`
 	Roots        []*treeNode `json:"roots"`
 }
 
 // treeOperator groups one SOC operator's whole estate: the mysoc platform
-// nodes it runs, plus every customer license sold under it (directly or via
-// a reseller).
+// nodes it runs, plus every customer reported through the cascade (or, for
+// legacy keys, every customer license sold under it).
 type treeOperator struct {
 	OperatorID    string          `json:"operator_id,omitempty"`
 	OperatorName  string          `json:"operator_name"`
+	IsActive      bool            `json:"is_active"`
 	TotalNodes    int             `json:"total_nodes"`
 	PlatformRoots []*treeNode     `json:"platform_roots"` // the operator's own mysoc instances
 	Customers     []*treeCustomer `json:"customers"`
@@ -124,9 +130,18 @@ func (s *Server) handleInstanceTree(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list licenses")
 		return
 	}
+	operatorEntities, err := licenseSvc.ListOperators(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list operators")
+		return
+	}
+	entities := make([]types.Operator, 0, len(operatorEntities))
+	for _, op := range operatorEntities {
+		entities = append(entities, op.Operator)
+	}
 
 	writeJSON(w, http.StatusOK, instanceTreeResponse{
-		Operators: groupOperators(instances, licenses),
+		Operators: groupOperators(instances, licenses, entities),
 	})
 }
 
@@ -150,9 +165,15 @@ func operatorKeyFor(l types.License) string {
 }
 
 // groupOperators builds the operator -> customer -> instance-tree structure.
-// Customer licenses appear even before their first instance enrolls, so a
-// freshly added customer is visible immediately.
-func groupOperators(instances []types.Instance, licenses []types.License) []*treeOperator {
+//
+// New-style (cascade) grouping: an instance whose license carries operator_ref
+// belongs to that operator; within the operator, nodes are bucketed by the
+// customer_id reported up the cascade. Nodes with no customer (the operator's
+// own mysoc platform, typically) become platform roots.
+//
+// Legacy grouping: instances on pre-1.8.0 licenses (no product column) keep
+// the license-based customer buckets, marked Legacy for the dashboard.
+func groupOperators(instances []types.Instance, licenses []types.License, entities []types.Operator) []*treeOperator {
 	licenseByID := make(map[string]types.License, len(licenses))
 	for _, l := range licenses {
 		licenseByID[l.ID] = l
@@ -164,16 +185,6 @@ func groupOperators(instances []types.Instance, licenses []types.License) []*tre
 		known[inst.InstanceID] = struct{}{}
 	}
 
-	// Bucket instances by their bound license ("" = unlicensed/unknown).
-	buckets := map[string][]types.Instance{}
-	for _, inst := range instances {
-		key := inst.LicenseID
-		if _, ok := licenseByID[key]; !ok {
-			key = ""
-		}
-		buckets[key] = append(buckets[key], inst)
-	}
-
 	operators := map[string]*treeOperator{}
 	order := []string{}
 	getOp := func(key string) *treeOperator {
@@ -183,6 +194,7 @@ func groupOperators(instances []types.Instance, licenses []types.License) []*tre
 		op := &treeOperator{
 			OperatorID:    key,
 			OperatorName:  key,
+			IsActive:      true,
 			PlatformRoots: []*treeNode{},
 			Customers:     []*treeCustomer{},
 		}
@@ -194,53 +206,115 @@ func groupOperators(instances []types.Instance, licenses []types.License) []*tre
 		return op
 	}
 
-	// Platform licenses define the operators (and their display names).
+	// Operator entities define the canonical buckets and display names.
+	for _, e := range entities {
+		op := getOp(e.ID)
+		op.OperatorName = e.Name
+		op.IsActive = e.IsActive
+	}
+	// Legacy platform licenses may name operators that predate the entity table.
 	for _, l := range licenses {
 		if !isPlatformLicense(l) {
 			continue
 		}
 		op := getOp(operatorKeyFor(l))
-		if l.CustomerName != "" {
+		if op.OperatorName == op.OperatorID && l.CustomerName != "" {
 			op.OperatorName = l.CustomerName
 		}
-		group := buckets[l.ID]
-		op.PlatformRoots = append(op.PlatformRoots, assembleTree(group, known)...)
-		op.TotalNodes += len(group)
 	}
 
-	// Customer licenses, grouped under their operator (or Unassigned).
-	for _, l := range licenses {
-		if isPlatformLicense(l) {
+	// Split instances: cascade-grouped vs legacy-license vs unlicensed.
+	cascade := map[string][]types.Instance{} // operator key -> instances
+	legacy := map[string][]types.Instance{}  // license id -> instances
+	var unlicensed []types.Instance
+	for _, inst := range instances {
+		l, ok := licenseByID[inst.LicenseID]
+		if !ok {
+			unlicensed = append(unlicensed, inst)
 			continue
 		}
-		group := buckets[l.ID]
-		cust := &treeCustomer{
-			LicenseID:    l.ID,
-			LicenseKey:   maskLicenseKey(l.LicenseKey),
-			CustomerID:   l.CustomerID,
-			CustomerName: l.CustomerName,
-			ResellerID:   l.ResellerID,
-			ResellerName: l.ResellerName,
-			TotalNodes:   len(group),
-			Roots:        assembleTree(group, known),
+		if l.OperatorRef != "" && l.Product != "" {
+			cascade[l.OperatorRef] = append(cascade[l.OperatorRef], inst)
+		} else {
+			legacy[l.ID] = append(legacy[l.ID], inst)
 		}
-		if cust.CustomerName == "" {
-			cust.CustomerName = "Unnamed customer"
+	}
+
+	// Cascade instances: bucket by reported customer inside each operator.
+	for opKey, group := range cascade {
+		op := getOp(opKey)
+		op.TotalNodes += len(group)
+
+		var platform []types.Instance
+		byCustomer := map[string][]types.Instance{}
+		customerName := map[string]string{}
+		for _, inst := range group {
+			if inst.CustomerID == "" {
+				platform = append(platform, inst)
+				continue
+			}
+			byCustomer[inst.CustomerID] = append(byCustomer[inst.CustomerID], inst)
+			if inst.CustomerName != "" {
+				customerName[inst.CustomerID] = inst.CustomerName
+			}
 		}
-		op := getOp(operatorKeyFor(l))
-		op.Customers = append(op.Customers, cust)
+		op.PlatformRoots = append(op.PlatformRoots, assembleTree(platform, known)...)
+		for customerID, customerGroup := range byCustomer {
+			name := customerName[customerID]
+			if name == "" {
+				name = customerID
+			}
+			op.Customers = append(op.Customers, &treeCustomer{
+				CustomerID:   customerID,
+				CustomerName: name,
+				TotalNodes:   len(customerGroup),
+				Roots:        assembleTree(customerGroup, known),
+			})
+		}
+	}
+
+	// Legacy licenses: platform licenses feed platform roots, customer
+	// licenses stay license-shaped buckets (marked Legacy).
+	for _, l := range licenses {
+		group := legacy[l.ID]
+		if isPlatformLicense(l) {
+			if len(group) == 0 {
+				continue
+			}
+			op := getOp(operatorKeyFor(l))
+			op.PlatformRoots = append(op.PlatformRoots, assembleTree(group, known)...)
+			op.TotalNodes += len(group)
+			continue
+		}
+		if len(group) == 0 && l.Product != "" {
+			// New-style non-platform licenses do not exist yet; skip quietly.
+			continue
+		}
+		if len(group) == 0 && l.OperatorRef == "" && l.OperatorID == "" {
+			// Empty legacy license with no operator affiliation: still show it
+			// under Unassigned so a freshly created license is visible.
+			op := getOp("")
+			op.Customers = append(op.Customers, legacyCustomer(l, nil, known))
+			continue
+		}
+		opKey := l.OperatorRef
+		if opKey == "" {
+			opKey = operatorKeyFor(l)
+		}
+		op := getOp(opKey)
+		op.Customers = append(op.Customers, legacyCustomer(l, group, known))
 		op.TotalNodes += len(group)
 	}
 
 	// Instances bound to no (known) license.
-	if group := buckets[""]; len(group) > 0 {
+	if len(unlicensed) > 0 {
 		op := getOp("")
 		op.Customers = append(op.Customers, &treeCustomer{
 			CustomerName: "Unlicensed / unbound",
-			TotalNodes:   len(group),
-			Roots:        assembleTree(group, known),
+			TotalNodes:   len(unlicensed),
+			Roots:        assembleTree(unlicensed, known),
 		})
-		op.TotalNodes += len(group)
+		op.TotalNodes += len(unlicensed)
 	}
 
 	out := make([]*treeOperator, 0, len(order))
@@ -248,8 +322,8 @@ func groupOperators(instances []types.Instance, licenses []types.License) []*tre
 		op := operators[key]
 		sort.SliceStable(op.Customers, func(i, j int) bool {
 			ci, cj := op.Customers[i], op.Customers[j]
-			if (ci.LicenseID == "") != (cj.LicenseID == "") {
-				return ci.LicenseID != "" // real customers before the unlicensed bucket
+			if (ci.CustomerID == "") != (cj.CustomerID == "") {
+				return ci.CustomerID != "" // real customers before the unlicensed bucket
 			}
 			return strings.ToLower(ci.CustomerName) < strings.ToLower(cj.CustomerName)
 		})
@@ -265,6 +339,26 @@ func groupOperators(instances []types.Instance, licenses []types.License) []*tre
 		return strings.ToLower(oi.OperatorName) < strings.ToLower(oj.OperatorName)
 	})
 	return out
+}
+
+// legacyCustomer builds the license-shaped customer bucket used for
+// pre-1.8.0 licenses.
+func legacyCustomer(l types.License, group []types.Instance, known map[string]struct{}) *treeCustomer {
+	cust := &treeCustomer{
+		LicenseID:    l.ID,
+		LicenseKey:   maskLicenseKey(l.LicenseKey),
+		CustomerID:   l.CustomerID,
+		CustomerName: l.CustomerName,
+		ResellerID:   l.ResellerID,
+		ResellerName: l.ResellerName,
+		Legacy:       true,
+		TotalNodes:   len(group),
+		Roots:        assembleTree(group, known),
+	}
+	if cust.CustomerName == "" {
+		cust.CustomerName = "Unnamed customer"
+	}
+	return cust
 }
 
 // assembleTree links one license bucket's instances into a tier tree. A node
@@ -285,8 +379,12 @@ func assembleTree(group []types.Instance, known map[string]struct{}) []*treeNode
 			InstanceType:     inst.InstanceType,
 			ProductTier:      inst.ProductTier,
 			ParentInstanceID: inst.ParentInstanceID,
+			CustomerID:       inst.CustomerID,
+			Version:          primaryVersion(inst.LastHeartbeatData),
 			Status:           inst.Status,
 			LastHeartbeat:    inst.LastHeartbeat,
+			ReportedVia:      inst.ReportedVia,
+			ReportedAt:       inst.ReportedAt,
 			Children:         []*treeNode{},
 		}
 		nodes = append(nodes, n)
@@ -333,6 +431,14 @@ func tierRank(tier string) int {
 		return t.Rank
 	}
 	return 99 // unknown/empty tiers sort last
+}
+
+// primaryVersion extracts the first product's version from a heartbeat snapshot.
+func primaryVersion(hb *types.Heartbeat) string {
+	if hb == nil || len(hb.Products) == 0 {
+		return ""
+	}
+	return hb.Products[0].Version
 }
 
 // maskLicenseKey reveals only the first and last segments of a license key so an

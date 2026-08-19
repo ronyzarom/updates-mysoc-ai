@@ -85,8 +85,14 @@ export interface InstanceTreeNode {
   instance_type?: string;
   product_tier?: string;
   parent_instance_id?: string;
+  customer_id?: string;
+  version?: string;
   status: string;
   last_heartbeat?: string;
+  // Cascade provenance: set when this node was reported by a relay instead of
+  // heartbeating here directly.
+  reported_via?: string;
+  reported_at?: string;
   orphan?: boolean;
   children: InstanceTreeNode[];
 }
@@ -98,6 +104,9 @@ export interface InstanceTreeCustomer {
   customer_name: string;
   reseller_id?: string;
   reseller_name?: string;
+  // True when this bucket comes from a pre-1.8.0 license instead of the
+  // cascade's customer reports.
+  legacy?: boolean;
   total_nodes: number;
   roots: InstanceTreeNode[];
 }
@@ -107,9 +116,43 @@ export interface InstanceTreeCustomer {
 export interface InstanceTreeOperator {
   operator_id?: string;
   operator_name: string;
+  is_active?: boolean;
   total_nodes: number;
   platform_roots: InstanceTreeNode[];
   customers: InstanceTreeCustomer[];
+}
+
+// Operators (the licensing surface of the cascade model)
+export interface Operator {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OperatorSummary extends Operator {
+  license_id?: string;
+  license_key?: string; // masked
+  key_issued_at?: string;
+  key_expires_at?: string;
+  key_active: boolean;
+  nodes_by_tier?: Record<string, number>;
+  total_nodes: number;
+  last_heartbeat?: string;
+}
+
+// Returned once, at creation/rotation. license_key is the full plaintext key.
+export interface CreatedOperator {
+  operator: Operator;
+  license_key: string;
+  expires_at: string;
+}
+
+export interface RotatedOperatorKey {
+  operator_id: string;
+  license_key: string;
+  expires_at: string;
 }
 
 export interface InstanceTreeResponse {
@@ -170,7 +213,9 @@ export interface License {
   customer_id: string;
   customer_name: string;
   type: LicenseType | string;
-  operator_id?: string; // SOC operator this license belongs to
+  product?: string; // tier this key authorizes (mysoc = platform key); empty on legacy keys
+  operator_ref?: string; // owning operator entity
+  operator_id?: string; // legacy free-text operator label
   reseller_id?: string; // sales channel; empty = direct
   reseller_name?: string;
   products: string[];
@@ -190,6 +235,7 @@ export interface Release {
   channel: string;
   artifact_size: number;
   checksum: string;
+  signature?: string; // base64 ed25519; empty = unsigned (pre-1.8.0)
   release_notes?: string;
   target_groups?: string[];
   released_at: string;
@@ -597,6 +643,57 @@ class ApiClient {
 
   async deleteLicense(id: string): Promise<void> {
     await this.fetch(`/api/v1/admin/licenses/${id}`, { method: "DELETE" }, true);
+  }
+
+  // Operators
+  async getOperators(): Promise<OperatorSummary[]> {
+    return this.fetch<OperatorSummary[]>("/api/v1/admin/operators");
+  }
+
+  async createOperator(data: {
+    id?: string;
+    name: string;
+    expires_at?: string;
+  }): Promise<CreatedOperator> {
+    return this.fetch<CreatedOperator>(
+      "/api/v1/admin/operators",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      true
+    );
+  }
+
+  async rotateOperatorKey(id: string): Promise<RotatedOperatorKey> {
+    return this.fetch<RotatedOperatorKey>(
+      `/api/v1/admin/operators/${id}/rotate-key`,
+      { method: "POST" },
+      true
+    );
+  }
+
+  async updateOperator(
+    id: string,
+    data: { name?: string; is_active?: boolean }
+  ): Promise<Operator> {
+    return this.fetch<Operator>(
+      `/api/v1/admin/operators/${id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+      true
+    );
+  }
+
+  // Release signing public key
+  async getSigningKey(): Promise<{
+    signing_enabled: boolean;
+    algorithm?: string;
+    public_key?: string;
+  }> {
+    return this.fetch("/api/v1/signing-key", {}, false);
   }
 
   // Releases

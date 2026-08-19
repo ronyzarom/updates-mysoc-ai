@@ -29,9 +29,10 @@ func (r *Repository) Create(ctx context.Context, license *types.License) error {
 	license.UpdatedAt = time.Now()
 
 	_, err := r.db.Pool.Exec(ctx, `
-		INSERT INTO licenses (id, license_key, customer_id, customer_name, license_type, products, features, limits, issued_at, expires_at, bound_to, is_active, operator_id, reseller_id, reseller_name, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+		INSERT INTO licenses (id, license_key, customer_id, customer_name, license_type, product, operator_ref, products, features, limits, issued_at, expires_at, bound_to, is_active, operator_id, reseller_id, reseller_name, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	`, license.ID, license.LicenseKey, license.CustomerID, license.CustomerName, license.Type,
+		nullIfEmpty(license.Product), nullIfEmpty(license.OperatorRef),
 		license.Products, license.Features, license.Limits, license.IssuedAt, license.ExpiresAt,
 		license.BoundTo, license.IsActive, nullIfEmpty(license.OperatorID), nullIfEmpty(license.ResellerID),
 		nullIfEmpty(license.ResellerName), license.CreatedAt, license.UpdatedAt)
@@ -50,10 +51,10 @@ func nullIfEmpty(s string) *string {
 // scanLicense reads one license row in selectLicenseCols order.
 func scanLicense(row pgx.Row) (*types.License, error) {
 	var license types.License
-	var boundTo, operatorID, resellerID, resellerName *string
+	var boundTo, operatorID, resellerID, resellerName, product, operatorRef *string
 	err := row.Scan(
 		&license.ID, &license.LicenseKey, &license.CustomerID, &license.CustomerName,
-		&license.Type, &license.Products, &license.Features, &license.Limits,
+		&license.Type, &product, &operatorRef, &license.Products, &license.Features, &license.Limits,
 		&license.IssuedAt, &license.ExpiresAt, &boundTo, &license.IsActive,
 		&operatorID, &resellerID, &resellerName,
 		&license.CreatedAt, &license.UpdatedAt)
@@ -62,6 +63,12 @@ func scanLicense(row pgx.Row) (*types.License, error) {
 	}
 	if boundTo != nil {
 		license.BoundTo = *boundTo
+	}
+	if product != nil {
+		license.Product = *product
+	}
+	if operatorRef != nil {
+		license.OperatorRef = *operatorRef
 	}
 	if operatorID != nil {
 		license.OperatorID = *operatorID
@@ -75,7 +82,7 @@ func scanLicense(row pgx.Row) (*types.License, error) {
 	return &license, nil
 }
 
-const selectLicenseCols = `id, license_key, customer_id, customer_name, license_type, products, features, limits, issued_at, expires_at, bound_to, is_active, operator_id, reseller_id, reseller_name, created_at, updated_at`
+const selectLicenseCols = `id, license_key, customer_id, customer_name, license_type, product, operator_ref, products, features, limits, issued_at, expires_at, bound_to, is_active, operator_id, reseller_id, reseller_name, created_at, updated_at`
 
 // GetByKey retrieves a license by its key
 func (r *Repository) GetByKey(ctx context.Context, licenseKey string) (*types.License, error) {
@@ -130,11 +137,12 @@ func (r *Repository) Update(ctx context.Context, license *types.License) error {
 
 	_, err := r.db.Pool.Exec(ctx, `
 		UPDATE licenses
-		SET customer_name = $2, products = $3, features = $4, limits = $5, expires_at = $6, bound_to = $7, is_active = $8, operator_id = $9, reseller_id = $10, reseller_name = $11, updated_at = $12
+		SET customer_name = $2, products = $3, features = $4, limits = $5, expires_at = $6, bound_to = $7, is_active = $8, operator_id = $9, reseller_id = $10, reseller_name = $11, product = $12, operator_ref = $13, updated_at = $14
 		WHERE id = $1
 	`, license.ID, license.CustomerName, license.Products, license.Features, license.Limits,
 		license.ExpiresAt, license.BoundTo, license.IsActive, nullIfEmpty(license.OperatorID),
-		nullIfEmpty(license.ResellerID), nullIfEmpty(license.ResellerName), license.UpdatedAt)
+		nullIfEmpty(license.ResellerID), nullIfEmpty(license.ResellerName),
+		nullIfEmpty(license.Product), nullIfEmpty(license.OperatorRef), license.UpdatedAt)
 
 	return err
 }

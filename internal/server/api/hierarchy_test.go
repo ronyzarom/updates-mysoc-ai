@@ -153,7 +153,7 @@ func TestGroupOperatorsSalesHierarchy(t *testing.T) {
 		inst("stray", "swf", ""), // no license at all
 	}
 
-	ops := groupOperators(instances, licenses)
+	ops := groupOperators(instances, licenses, nil)
 	if len(ops) != 2 {
 		t.Fatalf("expected 2 operators (cyfox + unassigned), got %d", len(ops))
 	}
@@ -204,6 +204,65 @@ func TestGroupOperatorsSalesHierarchy(t *testing.T) {
 	}
 	if len(unlicensed.Roots) != 1 || unlicensed.Roots[0].InstanceID != "stray" {
 		t.Fatalf("expected stray in unlicensed bucket, got %+v", unlicensed.Roots)
+	}
+}
+
+func TestGroupOperatorsCascadeModel(t *testing.T) {
+	// 1.8.0 model: one operator entity, one platform key (product=mysoc,
+	// operator_ref set); the fleet arrives via the cascade with customer_id
+	// stamped on each node.
+	platform := lic("op-key", "cyfox-soc", "Cyfox SOC", "mysoc-cloud", "", "")
+	platform.Product = "mysoc"
+	platform.OperatorRef = "cyfox-soc"
+	licenses := []types.License{platform}
+	entities := []types.Operator{{ID: "cyfox-soc", Name: "Cyfox SOC Ltd", IsActive: true}}
+
+	withCustomer := func(i types.Instance, customerID, customerName, reportedVia string) types.Instance {
+		i.CustomerID = customerID
+		i.CustomerName = customerName
+		i.ReportedVia = reportedVia
+		return i
+	}
+	instances := []types.Instance{
+		withLicense(inst("mysoc-op", "mysoc", ""), "op-key"),
+		withLicense(withCustomer(inst("siem-a1", "siemcore", "mysoc-op"), "acme", "Acme Corp", "mysoc-op"), "op-key"),
+		withLicense(withCustomer(inst("swf-a1", "swf", "siem-a1"), "acme", "Acme Corp", "mysoc-op"), "op-key"),
+		withLicense(withCustomer(inst("siem-b1", "siemcore", "mysoc-op"), "beta", "", "mysoc-op"), "op-key"),
+	}
+
+	ops := groupOperators(instances, licenses, entities)
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operator, got %d", len(ops))
+	}
+	op := ops[0]
+	if op.OperatorID != "cyfox-soc" || op.OperatorName != "Cyfox SOC Ltd" {
+		t.Fatalf("operator = %s/%s, want cyfox-soc/Cyfox SOC Ltd (entity name wins)", op.OperatorID, op.OperatorName)
+	}
+	if op.TotalNodes != 4 {
+		t.Fatalf("total nodes = %d, want 4", op.TotalNodes)
+	}
+	if len(op.PlatformRoots) != 1 || op.PlatformRoots[0].InstanceID != "mysoc-op" {
+		t.Fatalf("expected mysoc-op as the platform root, got %+v", op.PlatformRoots)
+	}
+	if len(op.Customers) != 2 {
+		t.Fatalf("expected 2 reported customers, got %d", len(op.Customers))
+	}
+	acme := op.Customers[0]
+	if acme.CustomerID != "acme" || acme.CustomerName != "Acme Corp" || acme.Legacy {
+		t.Fatalf("acme bucket wrong: %+v", acme)
+	}
+	if len(acme.Roots) != 1 || acme.Roots[0].InstanceID != "siem-a1" || acme.Roots[0].Orphan {
+		t.Fatalf("acme roots wrong: %+v", acme.Roots)
+	}
+	if acme.Roots[0].ReportedVia != "mysoc-op" {
+		t.Fatalf("expected siem-a1 reported via mysoc-op, got %q", acme.Roots[0].ReportedVia)
+	}
+	if len(acme.Roots[0].Children) != 1 || acme.Roots[0].Children[0].InstanceID != "swf-a1" {
+		t.Fatalf("expected swf-a1 nested under siem-a1, got %+v", acme.Roots[0].Children)
+	}
+	beta := op.Customers[1]
+	if beta.CustomerID != "beta" || beta.CustomerName != "beta" {
+		t.Fatalf("beta bucket must fall back to customer_id as name, got %+v", beta)
 	}
 }
 

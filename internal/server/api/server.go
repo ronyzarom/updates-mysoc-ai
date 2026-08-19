@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/ed25519"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,8 +12,10 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/auth"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/config"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/releases"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/security"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/storage"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 )
 
 // Server represents the API server
@@ -24,6 +28,7 @@ type Server struct {
 	authHandler *auth.Handlers
 	ipACL       *security.IPAllowlistRepository
 	apiKeys     *security.APIKeyRepository
+	signingKey  ed25519.PrivateKey // nil = release signing disabled
 }
 
 // NewServer creates a new API server
@@ -43,8 +48,28 @@ func NewServer(cfg *config.Config, db *database.DB, store storage.Storage) *Serv
 		apiKeys:     security.NewAPIKeyRepository(db),
 	}
 
+	if seed := cfg.Server.SigningKeySeed; seed != "" {
+		key, err := signing.ParseSeedHex(seed)
+		if err != nil {
+			log.Fatalf("invalid RELEASE_SIGNING_SEED: %v", err)
+		}
+		s.signingKey = key
+		log.Printf("release signing enabled (public key %s)", signing.PublicKeyHex(key))
+	} else {
+		log.Printf("WARNING: RELEASE_SIGNING_SEED not set - releases will publish unsigned")
+	}
+
 	s.setupRoutes()
 	return s
+}
+
+// releaseService builds the release service with the signing key attached.
+func (s *Server) releaseService() *releases.Service {
+	svc := releases.NewService(s.db, s.storage)
+	if s.signingKey != nil {
+		svc.SetSigningKey(s.signingKey)
+	}
+	return svc
 }
 
 // Router returns the HTTP router
@@ -119,6 +144,9 @@ func (s *Server) setupRoutes() {
 		// dashboard dropdowns and agent self-configuration. Static data.
 		r.Get("/products", s.handleListProducts)
 
+		// Release-signing public key so updaters can pin it at provisioning.
+		r.Get("/signing-key", s.handleSigningKey)
+
 		// =====================
 		// Release endpoints
 		// =====================
@@ -189,6 +217,13 @@ func (s *Server) setupRoutes() {
 			r.With(s.adminAuth).Get("/api-keys", s.handleListAPIKeys)
 			r.With(s.adminAuth).Post("/api-keys", s.handleCreateAPIKey)
 			r.With(s.adminAuth).Delete("/api-keys/{id}", s.handleRevokeAPIKey)
+
+			// Operators: the licensing surface of the cascade model. Issuing
+			// an operator mints its single platform key (returned once).
+			r.With(s.adminAuth).Get("/operators", s.handleListOperators)
+			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Post("/operators", s.handleCreateOperator)
+			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Post("/operators/{id}/rotate-key", s.handleRotateOperatorKey)
+			r.With(auth.JWTMiddleware(s.authService), auth.RequireRole("admin")).Put("/operators/{id}", s.handleUpdateOperator)
 
 			// User management - requires JWT admin
 			r.Group(func(r chi.Router) {
