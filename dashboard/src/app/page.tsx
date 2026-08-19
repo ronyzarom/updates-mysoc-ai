@@ -5,16 +5,21 @@ import { api } from "@/lib/api";
 import {
   Server,
   Package,
-  Key,
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Clock,
+  Building2,
+  Boxes,
+  MonitorSmartphone,
+  ChevronRight,
+  Key,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import { ErrorState } from "@/components/ui";
-import { sortInstancesByHeartbeat } from "@/lib/derive";
 
+// The dashboard mirrors the licensing hierarchy: operators (one platform
+// key each) at the top, their cascaded fleet (mysoc > siemcore > swf) below.
 export default function DashboardPage() {
   const {
     data: instances,
@@ -34,7 +39,7 @@ export default function DashboardPage() {
     retry: false,
   });
 
-  const { data: operators } = useQuery({
+  const { data: operators, isLoading: operatorsLoading } = useQuery({
     queryKey: ["operators"],
     queryFn: () => api.getOperators(),
     retry: false,
@@ -44,41 +49,16 @@ export default function DashboardPage() {
   const offlineCount = instances?.filter((i) => i.status === "offline").length || 0;
   const degradedCount = instances?.filter((i) => i.status === "degraded").length || 0;
 
+  const tierCount = (tier: string) =>
+    instances?.filter((i) => (i.product_tier || "").toLowerCase() === tier).length || 0;
+
   const activeOperators = operators?.filter((o) => o.is_active).length || 0;
 
-  // Most recently active instances first.
-  const recentInstances = sortInstancesByHeartbeat(instances).slice(0, 5);
-
-  const stats = [
-    {
-      name: "Fleet Nodes",
-      value: instances?.length || 0,
-      icon: Server,
-      color: "text-cyan-400",
-      bgColor: "bg-cyan-500/20",
-    },
-    {
-      name: "Total Releases",
-      value: releases?.length || 0,
-      icon: Package,
-      color: "text-violet-400",
-      bgColor: "bg-violet-500/20",
-    },
-    {
-      name: "Active Operators",
-      value: activeOperators,
-      icon: Key,
-      color: "text-amber-400",
-      bgColor: "bg-amber-500/20",
-    },
-    {
-      name: "Online Instances",
-      value: onlineCount,
-      icon: CheckCircle,
-      color: "text-emerald-400",
-      bgColor: "bg-emerald-500/20",
-    },
-  ];
+  const sortedOperators = [...(operators || [])].sort((a, b) => {
+    const ta = a.last_heartbeat ? new Date(a.last_heartbeat).getTime() : 0;
+    const tb = b.last_heartbeat ? new Date(b.last_heartbeat).getTime() : 0;
+    return tb - ta;
+  });
 
   return (
     <div className="space-y-8">
@@ -86,7 +66,8 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-3xl font-bold text-white">Dashboard</h1>
         <p className="text-slate-400 mt-1">
-          Cascade overview: operators, their fleets, and update health
+          One license per operator, one cascade per fleet: mysoc &rsaquo;
+          siemcore &rsaquo; swf
         </p>
       </div>
 
@@ -98,28 +79,64 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => (
-          <div key={stat.name} className="card">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-slate-400 text-sm">{stat.name}</p>
-                <p className="text-3xl font-bold text-white mt-2">{stat.value}</p>
-              </div>
-              <div className={`p-3 rounded-lg ${stat.bgColor}`}>
-                <stat.icon className={`w-6 h-6 ${stat.color}`} />
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* Hierarchy stats: operators first, then fleet by tier */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <StatCard
+          name="Operators"
+          value={activeOperators}
+          sub={
+            operators && operators.length !== activeOperators
+              ? `${operators.length - activeOperators} deactivated`
+              : "active licenses"
+          }
+          icon={Building2}
+          color="text-violet-400"
+          bgColor="bg-violet-500/20"
+          href="/operators"
+        />
+        <StatCard
+          name="MySoc Platforms"
+          value={tierCount("mysoc")}
+          sub="direct to this server"
+          icon={Server}
+          color="text-cyan-400"
+          bgColor="bg-cyan-500/20"
+          href="/instances"
+        />
+        <StatCard
+          name="SiemCore Servers"
+          value={tierCount("siemcore")}
+          sub="via mysoc relay"
+          icon={Boxes}
+          color="text-sky-400"
+          bgColor="bg-sky-500/20"
+          href="/instances"
+        />
+        <StatCard
+          name="SWF Agents"
+          value={tierCount("swf")}
+          sub="via siemcore relay"
+          icon={MonitorSmartphone}
+          color="text-emerald-400"
+          bgColor="bg-emerald-500/20"
+          href="/instances"
+        />
+        <StatCard
+          name="Releases"
+          value={releases?.length || 0}
+          sub="published artifacts"
+          icon={Package}
+          color="text-amber-400"
+          bgColor="bg-amber-500/20"
+          href="/releases"
+        />
       </div>
 
-      {/* Status Overview */}
+      {/* Status Overview + Operator cascades */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Instance Status */}
+        {/* Fleet health */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-white mb-4">Instance Status</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">Fleet Health</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10">
               <div className="flex items-center gap-3">
@@ -145,43 +162,62 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Activity */}
+        {/* Operator cascades */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-white mb-4">Recent Activity</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Operator Cascades</h2>
+            <Link href="/operators" className="text-sm text-cyan-400 hover:underline">
+              Manage licenses
+            </Link>
+          </div>
           <div className="space-y-3">
-            {instancesLoading ? (
+            {operatorsLoading || instancesLoading ? (
               <div className="text-slate-400 text-sm">Loading...</div>
-            ) : recentInstances.map((instance) => (
-              <div
-                key={instance.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50"
-              >
-                <div className="flex items-center gap-3">
-                  <Server className="w-4 h-4 text-slate-400" />
-                  <div>
-                    <p className="text-sm font-medium text-white">
-                      {instance.instance_id}
+            ) : sortedOperators.length === 0 ? (
+              <div className="text-center py-8">
+                <Key className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                <p className="text-slate-400 text-sm mb-3">
+                  No operators yet — issue the first platform license to bring a
+                  fleet online.
+                </p>
+                <Link href="/operators" className="btn btn-primary btn-sm">
+                  Create operator
+                </Link>
+              </div>
+            ) : (
+              sortedOperators.slice(0, 6).map((op) => (
+                <Link
+                  key={op.id}
+                  href={`/operators/${encodeURIComponent(op.id)}`}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors"
+                >
+                  <Building2 className="w-4 h-4 text-violet-400 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-white truncate">
+                      {op.name}
                     </p>
-                    <p className="text-xs text-slate-500">{instance.hostname}</p>
+                    <p className="text-xs text-slate-500">
+                      {op.last_heartbeat
+                        ? `reported ${formatDistanceToNow(new Date(op.last_heartbeat), { addSuffix: true })}`
+                        : "never reported"}
+                    </p>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={instance.status} />
-                  {instance.last_heartbeat && (
-                    <span className="text-xs text-slate-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {formatDistanceToNow(new Date(instance.last_heartbeat), {
-                        addSuffix: true,
-                      })}
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
+                    <span title="mysoc platforms">
+                      {op.nodes_by_tier?.["mysoc"] ?? 0}
                     </span>
+                    <ChevronRight className="w-3 h-3 text-slate-600" />
+                    <span title="siemcore servers">
+                      {op.nodes_by_tier?.["siemcore"] ?? 0}
+                    </span>
+                    <ChevronRight className="w-3 h-3 text-slate-600" />
+                    <span title="swf agents">{op.nodes_by_tier?.["swf"] ?? 0}</span>
+                  </div>
+                  {!op.is_active && (
+                    <span className="status-badge status-offline shrink-0">off</span>
                   )}
-                </div>
-              </div>
-            ))}
-            {(!instances || instances.length === 0) && !instancesLoading && (
-              <div className="text-slate-400 text-sm text-center py-8">
-                No instances registered yet
-              </div>
+                </Link>
+              ))
             )}
           </div>
         </div>
@@ -234,18 +270,35 @@ export default function DashboardPage() {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const styles = {
-    online: "status-badge status-online",
-    offline: "status-badge status-offline",
-    degraded: "status-badge status-degraded",
-    unknown: "status-badge bg-slate-500/20 text-slate-400",
-  };
-
+function StatCard({
+  name,
+  value,
+  sub,
+  icon: Icon,
+  color,
+  bgColor,
+  href,
+}: {
+  name: string;
+  value: number;
+  sub: string;
+  icon: typeof Server;
+  color: string;
+  bgColor: string;
+  href: string;
+}) {
   return (
-    <span className={styles[status as keyof typeof styles] || styles.unknown}>
-      {status}
-    </span>
+    <Link href={href} className="card card-hover">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-slate-400 text-sm">{name}</p>
+          <p className="text-3xl font-bold text-white mt-2">{value}</p>
+          <p className="text-xs text-slate-500 mt-1">{sub}</p>
+        </div>
+        <div className={`p-3 rounded-lg ${bgColor}`}>
+          <Icon className={`w-6 h-6 ${color}`} />
+        </div>
+      </div>
+    </Link>
   );
 }
-

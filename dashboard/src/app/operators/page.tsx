@@ -14,6 +14,10 @@ import {
   RotateCw,
   Power,
   AlertTriangle,
+  ChevronRight,
+  Server,
+  Boxes,
+  MonitorSmartphone,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import Link from "next/link";
@@ -21,10 +25,10 @@ import { useState } from "react";
 import { LoadingState, ErrorState, Modal } from "@/components/ui";
 import { RequireRole } from "@/lib/auth-context";
 
-// Operators are the licensing surface of the cascade model: each operator
-// holds exactly one platform key. Its mysoc platform connects to this server
-// with that key; siemcore and swf below it are served by the operator's own
-// update cascade and never get keys here.
+// Operators are the entire licensing surface of the cascade model: ONE
+// platform key per operator. The operator's mysoc connects here with that
+// key; every siemcore and swf below it is served by the operator's own
+// cascade and never gets a key from this server.
 export default function OperatorsPage() {
   const queryClient = useQueryClient();
   const { data: operators, isLoading, isError, error, refetch } = useQuery({
@@ -88,8 +92,8 @@ export default function OperatorsPage() {
         <div>
           <h1 className="text-3xl font-bold text-white">Operators</h1>
           <p className="text-slate-400 mt-1">
-            One platform key per SOC operator — everything below it updates
-            through the operator&apos;s own cascade
+            One license per operator. Everything beneath it — siemcore servers
+            and swf agents — updates through the operator&apos;s own cascade.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -106,6 +110,31 @@ export default function OperatorsPage() {
               New Operator
             </button>
           </RequireRole>
+        </div>
+      </div>
+
+      {/* How the hierarchy licenses */}
+      <div className="card bg-gradient-to-r from-slate-900 to-slate-900/40 border-violet-500/20">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+          <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/30">
+            <Key className="w-4 h-4" /> platform key
+          </span>
+          <ChevronRight className="w-4 h-4 text-slate-600" />
+          <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 border border-slate-700">
+            <Server className="w-4 h-4 text-violet-400" /> mysoc platform
+          </span>
+          <ChevronRight className="w-4 h-4 text-slate-600" />
+          <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 border border-slate-700">
+            <Boxes className="w-4 h-4 text-cyan-400" /> siemcore servers
+          </span>
+          <ChevronRight className="w-4 h-4 text-slate-600" />
+          <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 border border-slate-700">
+            <MonitorSmartphone className="w-4 h-4 text-emerald-400" /> swf agents
+          </span>
+          <span className="text-slate-500 ml-2">
+            The key is issued once, to mysoc. The rest of the fleet enrolls
+            with its parent updater — no per-customer keys on this server.
+          </span>
         </div>
       </div>
 
@@ -131,7 +160,7 @@ export default function OperatorsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-white">{activeCount}</p>
-              <p className="text-sm text-slate-400">Active</p>
+              <p className="text-sm text-slate-400">Active licenses</p>
             </div>
           </div>
         </div>
@@ -148,7 +177,7 @@ export default function OperatorsPage() {
         </div>
       </div>
 
-      {/* Operators table */}
+      {/* Operator cards */}
       {isLoading ? (
         <LoadingState label="Loading operators..." />
       ) : isError ? (
@@ -157,161 +186,36 @@ export default function OperatorsPage() {
           error={error}
           onRetry={() => refetch()}
         />
+      ) : !operators || operators.length === 0 ? (
+        <div className="card text-center py-16">
+          <Building2 className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-white mb-2">No operators yet</h3>
+          <p className="text-slate-400 mb-6">
+            Create an operator to issue its single platform license. Its mysoc
+            connects with that key and relays updates to the whole fleet.
+          </p>
+          <RequireRole roles={["admin"]}>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="btn btn-primary"
+            >
+              <Plus className="w-4 h-4" />
+              New Operator
+            </button>
+          </RequireRole>
+        </div>
       ) : (
-        <div className="card">
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Operator</th>
-                  <th>Platform Key</th>
-                  <th>Key Expires</th>
-                  <th>Fleet</th>
-                  <th>Last Report</th>
-                  <th>Status</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {operators?.map((op) => (
-                  <tr key={op.id}>
-                    <td>
-                      <p className="font-medium text-white">{op.name}</p>
-                      <p className="text-xs text-slate-500">{op.id}</p>
-                    </td>
-                    <td>
-                      {op.license_key ? (
-                        <div>
-                          <code className="text-cyan-400 font-mono text-sm">
-                            {op.license_key}
-                          </code>
-                          {!op.key_active && (
-                            <p className="text-xs text-red-400">key deactivated</p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-500">no key</span>
-                      )}
-                    </td>
-                    <td>
-                      {op.key_expires_at ? (
-                        <div className="text-slate-300">
-                          <p className="text-sm">
-                            {format(new Date(op.key_expires_at), "MMM d, yyyy")}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {formatDistanceToNow(new Date(op.key_expires_at), {
-                              addSuffix: true,
-                            })}
-                          </p>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-slate-500">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {op.total_nodes > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {(["mysoc", "siemcore", "swf"] as const).map((tier) =>
-                            op.nodes_by_tier?.[tier] ? (
-                              <span
-                                key={tier}
-                                className="px-2 py-0.5 rounded bg-slate-700 text-xs"
-                              >
-                                {tier}: {op.nodes_by_tier[tier]}
-                              </span>
-                            ) : null
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-500">
-                          nothing reported yet
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {op.last_heartbeat ? (
-                        <span className="text-sm text-slate-300">
-                          {formatDistanceToNow(new Date(op.last_heartbeat), {
-                            addSuffix: true,
-                          })}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-500">never</span>
-                      )}
-                    </td>
-                    <td>
-                      {op.is_active ? (
-                        <span className="status-badge status-online">Active</span>
-                      ) : (
-                        <span className="status-badge status-offline">
-                          Deactivated
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <RequireRole roles={["admin"]}>
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setRotateTarget(op)}
-                            className="btn btn-secondary btn-sm"
-                            title="Rotate platform key (old key stops working immediately)"
-                          >
-                            <RotateCw className="w-3.5 h-3.5" />
-                            Rotate key
-                          </button>
-                          <button
-                            onClick={() =>
-                              toggleMutation.mutate({
-                                id: op.id,
-                                active: !op.is_active,
-                              })
-                            }
-                            className={`btn btn-sm ${
-                              op.is_active ? "btn-danger" : "btn-secondary"
-                            }`}
-                            title={
-                              op.is_active
-                                ? "Deactivate: the operator's whole cascade loses update access"
-                                : "Reactivate operator"
-                            }
-                          >
-                            <Power className="w-3.5 h-3.5" />
-                            {op.is_active ? "Deactivate" : "Activate"}
-                          </button>
-                        </div>
-                      </RequireRole>
-                    </td>
-                  </tr>
-                ))}
-
-                {(!operators || operators.length === 0) && (
-                  <tr>
-                    <td colSpan={7} className="text-center py-16">
-                      <Building2 className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-white mb-2">
-                        No operators yet
-                      </h3>
-                      <p className="text-slate-400 mb-6">
-                        Create an operator to issue its platform key. The
-                        operator&apos;s mysoc connects with that key and relays
-                        updates to its siemcore and swf fleet.
-                      </p>
-                      <RequireRole roles={["admin"]}>
-                        <button
-                          onClick={() => setShowCreateModal(true)}
-                          className="btn btn-primary"
-                        >
-                          <Plus className="w-4 h-4" />
-                          New Operator
-                        </button>
-                      </RequireRole>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {operators.map((op) => (
+            <OperatorCard
+              key={op.id}
+              op={op}
+              onRotate={() => setRotateTarget(op)}
+              onToggle={() =>
+                toggleMutation.mutate({ id: op.id, active: !op.is_active })
+              }
+            />
+          ))}
         </div>
       )}
 
@@ -395,6 +299,133 @@ export default function OperatorsPage() {
   );
 }
 
+const TIER_META = [
+  { tier: "mysoc", label: "mysoc", icon: Server, color: "text-violet-400" },
+  { tier: "siemcore", label: "siemcore", icon: Boxes, color: "text-cyan-400" },
+  { tier: "swf", label: "swf", icon: MonitorSmartphone, color: "text-emerald-400" },
+] as const;
+
+function OperatorCard({
+  op,
+  onRotate,
+  onToggle,
+}: {
+  op: OperatorSummary;
+  onRotate: () => void;
+  onToggle: () => void;
+}) {
+  const keyExpired =
+    op.key_expires_at && new Date(op.key_expires_at).getTime() < Date.now();
+
+  return (
+    <div
+      className={`card flex flex-col gap-4 ${
+        op.is_active ? "" : "opacity-70 border-red-500/30"
+      }`}
+    >
+      {/* Identity row */}
+      <div className="flex items-start gap-3">
+        <div className="p-2.5 rounded-lg bg-violet-500/15 shrink-0">
+          <Building2 className="w-6 h-6 text-violet-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-white truncate">{op.name}</h3>
+            {op.is_active ? (
+              <span className="status-badge status-online">Active</span>
+            ) : (
+              <span className="status-badge status-offline">Deactivated</span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500">
+            {op.id}
+            {op.last_heartbeat
+              ? ` · last report ${formatDistanceToNow(new Date(op.last_heartbeat), { addSuffix: true })}`
+              : " · never reported"}
+          </p>
+        </div>
+        <Link
+          href={`/operators/${encodeURIComponent(op.id)}`}
+          className="btn btn-secondary btn-sm shrink-0"
+        >
+          Fleet
+          <ChevronRight className="w-4 h-4" />
+        </Link>
+      </div>
+
+      {/* The one license */}
+      <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+        <div className="flex items-center gap-2 mb-1.5">
+          <Key className="w-4 h-4 text-cyan-400" />
+          <span className="text-xs uppercase tracking-wide text-slate-500">
+            Platform license (the only key)
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {op.license_key ? (
+            <code className="text-cyan-400 font-mono text-sm">{op.license_key}</code>
+          ) : (
+            <span className="text-sm text-slate-500">no key issued</span>
+          )}
+          {!op.key_active && op.license_key && (
+            <span className="text-xs text-red-400">key deactivated</span>
+          )}
+          {op.key_expires_at && (
+            <span className={`text-xs ${keyExpired ? "text-red-400" : "text-slate-500"}`}>
+              {keyExpired ? "expired" : "expires"}{" "}
+              {format(new Date(op.key_expires_at), "MMM d, yyyy")}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Fleet breakdown */}
+      <div className="grid grid-cols-3 gap-2">
+        {TIER_META.map(({ tier, label, icon: Icon, color }) => (
+          <div
+            key={tier}
+            className="rounded-lg bg-slate-800/60 border border-slate-700/60 px-3 py-2 text-center"
+          >
+            <Icon className={`w-4 h-4 mx-auto mb-1 ${color}`} />
+            <p className="text-lg font-semibold text-white leading-none">
+              {op.nodes_by_tier?.[tier] ?? 0}
+            </p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 mt-1">
+              {label}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <RequireRole roles={["admin"]}>
+        <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
+          <button
+            onClick={onRotate}
+            className="btn btn-secondary btn-sm"
+            title="Rotate platform key (old key stops working immediately)"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+            Rotate key
+          </button>
+          <button
+            onClick={onToggle}
+            className={`btn btn-sm ${op.is_active ? "btn-danger" : "btn-secondary"}`}
+            title={
+              op.is_active
+                ? "Deactivate: the operator's whole cascade loses update access"
+                : "Reactivate operator"
+            }
+          >
+            <Power className="w-3.5 h-3.5" />
+            {op.is_active ? "Deactivate" : "Activate"}
+          </button>
+        </div>
+      </RequireRole>
+    </div>
+  );
+}
+
 function CreateOperatorModal({
   onClose,
   onSubmit,
@@ -432,10 +463,10 @@ function CreateOperatorModal({
     <Modal title="New Operator" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-sm text-slate-400">
-          Creating an operator issues its single platform license key. The
-          operator&apos;s mysoc platform uses that key against this server;
-          siemcore and swf below it authenticate to their own parent updater,
-          never here.
+          This issues the operator&apos;s <strong>single</strong> platform
+          license — the only key this server will ever hand out for the whole
+          fleet. Configure it in the mysoc updater; siemcore and swf enroll
+          with their parent updater, never here.
         </p>
 
         <div>

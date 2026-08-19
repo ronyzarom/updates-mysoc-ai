@@ -216,9 +216,14 @@ function customerVisible(
 export function InstanceTree({
   tierFilter = "all",
   search = "",
+  operatorFilter,
+  hideOperatorHeader = false,
 }: {
   tierFilter?: string;
   search?: string;
+  // Restrict the tree to one operator (used by the operator detail page).
+  operatorFilter?: string;
+  hideOperatorHeader?: boolean;
 }) {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instance-tree"],
@@ -252,13 +257,15 @@ export function InstanceTree({
   const filtering = tierFilter !== "all" || needle !== "";
   // When filtering, hide operators/customers with no match; otherwise show
   // everything, including customers with no instances yet.
-  const operators = (data?.operators || []).filter(
-    (op) =>
-      !filtering ||
-      op.platform_roots.some((r) => nodeVisible(r, tierFilter, needle)) ||
-      op.customers.some((c) => customerVisible(c, filtering, tierFilter, needle)) ||
-      (needle !== "" && op.operator_name.toLowerCase().includes(needle))
-  );
+  const operators = (data?.operators || [])
+    .filter((op) => !operatorFilter || op.operator_id === operatorFilter)
+    .filter(
+      (op) =>
+        !filtering ||
+        op.platform_roots.some((r) => nodeVisible(r, tierFilter, needle)) ||
+        op.customers.some((c) => customerVisible(c, filtering, tierFilter, needle)) ||
+        (needle !== "" && op.operator_name.toLowerCase().includes(needle))
+    );
 
   if (operators.length === 0) {
     return (
@@ -270,7 +277,7 @@ export function InstanceTree({
         <p className="text-slate-400">
           {filtering
             ? "Try clearing the search or tier filter."
-            : "The fleet appears here as operators' platforms heartbeat and roll up their cascade."}
+            : "The fleet appears here as the operator's mysoc platform heartbeats and rolls up its cascade."}
         </p>
       </div>
     );
@@ -280,21 +287,23 @@ export function InstanceTree({
     <div className="space-y-5">
       {operators.map((op, opIdx) => (
         <div key={op.operator_id || `unassigned-${opIdx}`} className="card">
-          <div className="flex items-center gap-3 mb-3 pb-3 border-b border-slate-700">
-            <div className="p-2 rounded-lg bg-slate-800">
-              <Network className="w-5 h-5 text-violet-400" />
+          {!hideOperatorHeader && (
+            <div className="flex items-center gap-3 mb-3 pb-3 border-b border-slate-700">
+              <div className="p-2 rounded-lg bg-slate-800">
+                <Network className="w-5 h-5 text-violet-400" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-white truncate">{op.operator_name}</h3>
+                <p className="text-xs text-slate-500">
+                  Operator{op.operator_id ? ` · ${op.operator_id}` : ""} ·{" "}
+                  {op.total_nodes} node{op.total_nodes === 1 ? "" : "s"}
+                </p>
+              </div>
+              {op.is_active === false && (
+                <span className="ml-auto status-badge status-offline">Deactivated</span>
+              )}
             </div>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-white truncate">{op.operator_name}</h3>
-              <p className="text-xs text-slate-500">
-                Operator{op.operator_id ? ` · ${op.operator_id}` : ""} ·{" "}
-                {op.total_nodes} node{op.total_nodes === 1 ? "" : "s"}
-              </p>
-            </div>
-            {op.is_active === false && (
-              <span className="ml-auto status-badge status-offline">Deactivated</span>
-            )}
-          </div>
+          )}
 
           {op.platform_roots.length > 0 && (
             <div className="space-y-0.5 mb-4">
