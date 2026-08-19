@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MySoc Updates — License Ownership Guide</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">MySoc Updates Platform</div>
+  <h1>License Ownership Guide</h1>
+  <div class="subtitle">Operators, resellers, and customers — creating licenses, assigning ownership, and reading the fleet tree</div>
+  <div class="pills">
+    <span class="pill">Guide v1.0</span>
+    <span class="pill">Applies to Updates Server 1.7.0+</span>
+    <span class="pill">August 2026</span>
+    <span class="pill">updates.mysoc.ai</span>
+  </div>
+</div>
+
+<h2>1 &nbsp;The Sales Flow, and How the Server Models It</h2>
+<p>The platform mirrors the commercial reality:</p>
+<ol>
+  <li><strong>MySoc</strong> sells the <strong>mysoc platform</strong> to a <strong>SOC operator</strong>.</li>
+  <li>The operator sells to end <strong>customers</strong> — directly or through a <strong>reseller</strong>. Resellers add customers in the mysoc platform; they deploy no software of their own.</li>
+  <li>Each customer is assigned one or more <strong>siemcore</strong> servers.</li>
+  <li>The customer can install <strong>SWF</strong> (SiemCore Windows Forwarder) on Windows servers to ship Sysmon and WMI logs into their siemcore.</li>
+</ol>
+
+<pre><code>SOC operator  (platform license — runs one mysoc serving all its customers)
+├── Customer A            — direct sale                    (customer license)
+│     └── siemcore-a1     — parent = operator's mysoc
+│           ├── swf-01    — Sysmon/WMI forwarder
+│           └── swf-02
+└── Customer B            — sold via reseller "acme-channel" (customer license)
+      └── siemcore-b1
+            └── swf-01</code></pre>
+
+<p>Two kinds of licenses express this:</p>
+<table>
+  <tr><th></th><th>Platform license</th><th>Customer license</th></tr>
+  <tr><td><strong>Held by</strong></td><td>The SOC operator</td><td>An end customer</td></tr>
+  <tr><td><strong>Covers</strong></td><td>The operator's mysoc node(s)</td><td>That customer's siemcore server(s) + swf forwarders</td></tr>
+  <tr><td><strong>Type</strong></td><td><code>mysoc-cloud</code></td><td><code>siemcore</code> or <code>siemcore-lite</code></td></tr>
+  <tr><td><strong>Key prefix</strong></td><td><code>MYSOC-…</code></td><td><code>SIEM-…</code></td></tr>
+  <tr><td><strong>Operator</strong></td><td>Itself</td><td>The operator it lives under</td></tr>
+  <tr><td><strong>Reseller</strong></td><td>—</td><td>Optional; empty means a direct sale</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="title">Security note</span>
+  Every node covered by one license presents that license's key in <code>X-License-Key</code>.
+  The key identifies the fleet; it <strong>never</strong> authorizes administration or release
+  uploads — those require a separate admin/API key issued from the dashboard.
+</div>
+
+<h2>2 &nbsp;Creating Licenses in the Dashboard</h2>
+<p>Only users with the <strong>admin</strong> role can create or edit licenses
+(<em>Dashboard → Licenses → Create License</em>).</p>
+
+<h3>2.1 &nbsp;Create the operator's platform license (once per operator)</h3>
+<ol>
+  <li>Choose scope <strong>SOC Operator (mysoc platform)</strong>.</li>
+  <li>Enter the <strong>Operator ID</strong> (e.g. <code>cyfox-soc</code>) and <strong>Operator Name</strong>.</li>
+  <li>Products default to <code>mysoc-api</code>, <code>mysoc-frontend</code>.</li>
+  <li>Set the expiry and create. The key is issued as <code>MYSOC-…</code>.</li>
+</ol>
+
+<h3>2.2 &nbsp;Create a customer license (one per customer)</h3>
+<ol>
+  <li>Choose scope <strong>Customer (siemcore + swf)</strong>.</li>
+  <li>Enter the <strong>Customer ID</strong> and <strong>Customer Name</strong>.</li>
+  <li>Pick the <strong>SOC Operator</strong> from the dropdown. “Unassigned (set later)” is allowed, but the customer will sit in the <em>Unassigned</em> group of the tree until fixed.</li>
+  <li>If the sale went through a channel, fill <strong>Reseller ID</strong> and <strong>Reseller Name</strong>; leave empty for a direct sale.</li>
+  <li>Products default to <code>siemcore-api</code>, <code>siemcore-collector</code>, <code>siemcore-frontend</code>, <code>swf</code>.</li>
+  <li>Set the expiry and create. The key is issued as <code>SIEM-…</code>.</li>
+</ol>
+
+<div class="callout info">
+  <span class="title">One key per customer</span>
+  Hand the customer exactly one <code>SIEM-…</code> key: their siemcore server(s) and every
+  swf agent all present the same key.
+</div>
+
+<h3>2.3 &nbsp;Assign ownership on existing licenses</h3>
+<p>Licenses created before release 1.7.0 have no operator. On the license detail page, the
+<strong>Ownership</strong> card shows <em>SOC Operator: Unassigned</em> — click <strong>Edit</strong>,
+set the Operator ID (and reseller, if applicable), and save. The fleet tree regroups immediately.</p>
+
+<div class="page-break"></div>
+
+<h2>3 &nbsp;Wiring the Agents</h2>
+<p>Each agent self-reports its tier and parent on every heartbeat and update check:</p>
+<table>
+  <tr><th>Node</th><th><code>product_tier</code></th><th><code>parent_id</code> (config)</th><th><code>license_key</code></th></tr>
+  <tr><td>mysoc</td><td><code>mysoc</code></td><td><em>omit — root</em></td><td>Operator's platform license</td></tr>
+  <tr><td>siemcore</td><td><code>siemcore</code></td><td>The <strong>operator's mysoc</strong> instance id</td><td>The customer's license</td></tr>
+  <tr><td>swf</td><td><code>swf</code></td><td>That customer's siemcore instance id</td><td>The <strong>same</strong> customer license</td></tr>
+</table>
+<p>A siemcore's parent legitimately lives under a <em>different</em> license (the operator's).
+The server resolves parent links across the whole fleet — this is a normal link, not an error.</p>
+
+<h2>4 &nbsp;Reading the Fleet Tree</h2>
+<p><em>Dashboard → Instances → Tree view</em>. The fleet is grouped as
+<strong>operator → customer → siemcore → swf</strong>:</p>
+<ul>
+  <li><strong>Platform (mysoc)</strong> — the operator's own nodes, listed at the operator level.</li>
+  <li><strong>Customer cards</strong> — one per customer license, with the masked key, node count, and a reseller badge when sold through a channel. A customer appears as soon as its license exists, even before any instance enrolls.</li>
+  <li><strong>orphan badge</strong> — the node declared a parent that is not enrolled anywhere. Typical causes: the parent has not enrolled yet, or a typo in the agent's <code>parent_id</code>.</li>
+  <li><strong>Unassigned</strong> — licenses without an operator, plus an <em>Unlicensed / unbound</em> bucket for instances that presented no valid license key. Cleanup work, not errors.</li>
+</ul>
+
+<h2>5 &nbsp;Frequently Asked Questions</h2>
+<p><strong>Does the SWF team need to change anything for 1.7.0?</strong><br>
+No. Config and protocol are unchanged. The wiring rule stands: swf's <code>parent_id</code> is the
+customer's siemcore; the siemcore's <code>parent_id</code> is the operator's mysoc instance id.</p>
+
+<p><strong>Can one customer run several siemcore servers?</strong><br>
+Yes. They all share the customer's license key, and each declares the operator's mysoc as parent.</p>
+
+<p><strong>Can a license key upload releases?</strong><br>
+No. Release uploads require an admin/API key issued from the dashboard; license keys only
+identify and validate the device fleet.</p>
+
+<p><strong>What happens if an operator is never assigned?</strong><br>
+Everything keeps working — validation, updates, heartbeats. The license and its instances simply
+render in the <em>Unassigned</em> group of the tree.</p>
+
+<div class="doc-footer">
+  <span>MySoc Updates Platform — License Ownership Guide v1.0</span>
+  <span>© 2026 Cyfox · Partner distribution</span>
+</div>
+
+</body>
+</html>

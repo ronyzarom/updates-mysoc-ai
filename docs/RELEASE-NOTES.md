@@ -7,7 +7,7 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ## 1.7.0 — Operator / Reseller / Customer license ownership
 
-**Build:** 1.7.0.2 · **Status:** candidate, pending deployment
+**Build:** 1.7.0.3 · **Status:** candidate, pending deployment
 
 Aligns the platform with the real sales flow: a **SOC operator** buys the
 mysoc platform and sells siemcore+swf to end **customers**, directly or via a

@@ -1,0 +1,89 @@
+/* MySoc Updates — partner document theme (print/PDF) */
+@page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #1e293b; font-size: 10.5pt; line-height: 1.55;
+}
+
+/* Cover band */
+.cover {
+  background: linear-gradient(135deg, #0891b2 0%, #6d28d9 100%);
+  color: #fff; border-radius: 14px; padding: 26px 30px; margin-bottom: 26px;
+}
+.cover .brand { font-size: 10pt; letter-spacing: 2.5px; text-transform: uppercase; opacity: .85; margin-bottom: 6px; }
+.cover h1 { margin: 0 0 10px; font-size: 23pt; line-height: 1.2; font-weight: 700; }
+.cover .subtitle { font-size: 11pt; opacity: .92; margin-bottom: 14px; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill {
+  background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35);
+  border-radius: 999px; padding: 3px 12px; font-size: 8.5pt; font-weight: 600;
+}
+
+/* Sections */
+h2 {
+  font-size: 14pt; color: #0e7490; margin: 26px 0 10px;
+  padding-left: 10px; border-left: 4px solid #06b6d4;
+  page-break-after: avoid;
+}
+h3 { font-size: 11.5pt; color: #334155; margin: 18px 0 6px; page-break-after: avoid; }
+p { margin: 6px 0; }
+ul, ol { margin: 6px 0 10px; padding-left: 20px; }
+li { margin: 3px 0; }
+strong { color: #0f172a; }
+
+/* Tables */
+table {
+  border-collapse: collapse; width: 100%; margin: 10px 0 14px;
+  font-size: 9.5pt; page-break-inside: avoid;
+}
+th {
+  background: #ecfeff; color: #155e75; text-align: left;
+  padding: 7px 10px; border: 1px solid #cbd5e1; font-weight: 700;
+}
+td { padding: 6px 10px; border: 1px solid #cbd5e1; vertical-align: top; }
+tr:nth-child(even) td { background: #f8fafc; }
+
+/* Code and diagram blocks */
+code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.8pt;
+  background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 5px;
+  color: #0e7490;
+}
+pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.6pt; line-height: 1.5;
+  background: #0f172a; color: #e2e8f0; border-radius: 10px;
+  padding: 14px 16px; overflow: hidden; page-break-inside: avoid; margin: 10px 0 14px;
+}
+pre code { background: none; border: none; color: inherit; padding: 0; font-size: inherit; }
+
+/* Callouts */
+.callout {
+  border-radius: 10px; padding: 10px 14px; margin: 12px 0; font-size: 9.8pt;
+  page-break-inside: avoid;
+}
+.callout.info { background: #ecfeff; border: 1px solid #67e8f9; }
+.callout.warn { background: #fffbeb; border: 1px solid #fcd34d; }
+.callout.ok   { background: #f0fdf4; border: 1px solid #86efac; }
+.callout .title { font-weight: 700; margin-bottom: 3px; display: block; }
+.callout.info .title { color: #155e75; }
+.callout.warn .title { color: #92400e; }
+.callout.ok   .title { color: #166534; }
+
+/* Badges */
+.badge {
+  display: inline-block; border-radius: 999px; padding: 1px 10px;
+  font-size: 8pt; font-weight: 700; vertical-align: 1px;
+}
+.badge.new      { background: #cffafe; color: #155e75; }
+.badge.breaking { background: #fee2e2; color: #991b1b; }
+.badge.none     { background: #dcfce7; color: #166534; }
+
+/* Footer */
+.doc-footer {
+  margin-top: 30px; padding-top: 10px; border-top: 1px solid #cbd5e1;
+  font-size: 8pt; color: #64748b; display: flex; justify-content: space-between;
+}
+.page-break { page-break-before: always; }

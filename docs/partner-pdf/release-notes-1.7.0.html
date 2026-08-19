@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MySoc Updates — Release Notes 1.7.0</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">MySoc Updates Platform</div>
+  <h1>Release Notes — 1.7.0</h1>
+  <div class="subtitle">Operator / Reseller / Customer license ownership</div>
+  <div class="pills">
+    <span class="pill">Version 1.7.0</span>
+    <span class="pill">August 2026</span>
+    <span class="pill">updates.mysoc.ai</span>
+  </div>
+</div>
+
+<h2>Overview</h2>
+<p>Release 1.7.0 aligns the Updates Platform with the real sales flow: a
+<strong>SOC operator</strong> buys the mysoc platform and sells siemcore + swf to end
+<strong>customers</strong> — directly or via a <strong>reseller</strong>. One mysoc installation
+serves all of an operator's customers, and the platform now models, validates, and
+visualizes exactly that.</p>
+
+<pre><code>SOC operator (platform license)
+├── mysoc platform node(s)
+├── Customer A — direct            └─ siemcore ─ swf, swf …
+└── Customer B — via reseller      └─ siemcore ─ swf …</code></pre>
+
+<h2>What's New <span class="badge new">NEW</span></h2>
+<ul>
+  <li><strong>License ownership.</strong> Licenses now carry an <strong>operator</strong> and an
+  optional <strong>reseller</strong>. A <em>platform license</em> (<code>mysoc-cloud</code>) defines an
+  operator; every other license is a <em>customer license</em> grouped under its operator.
+  Resellers are sales metadata — they deploy no software.</li>
+
+  <li><strong>Smarter fleet linking.</strong> A customer's siemcore that declares the operator's
+  mysoc as its parent now links correctly across licenses instead of being flagged as an
+  orphan. “Orphan” now strictly means the declared parent is not enrolled anywhere.</li>
+
+  <li><strong>Operator-grouped tree.</strong> The fleet tree (dashboard and API) is grouped
+  <strong>operator → customer → siemcore → swf</strong>, with the operator's mysoc nodes shown as
+  platform roots. Customers appear as soon as their license exists — even before the first
+  instance enrolls.</li>
+
+  <li><strong>Dashboard improvements.</strong>
+    <ul>
+      <li><em>Create License</em> is scope-aware: <strong>Customer (siemcore + swf)</strong> or
+      <strong>SOC Operator (mysoc platform)</strong>, with an operator dropdown, optional reseller
+      fields, and an <code>swf</code> product option.</li>
+      <li><em>Instances → Tree</em> renders the operator grouping with reseller badges.</li>
+      <li>License detail gains an admin-only <strong>Ownership</strong> panel to classify
+      existing licenses.</li>
+    </ul>
+  </li>
+
+  <li><strong>Documentation.</strong> New <em>License Ownership Guide</em>; API contract and
+  updater guidelines updated for the ownership model.</li>
+</ul>
+
+<h2>Breaking Change <span class="badge breaking">API</span></h2>
+<div class="callout warn">
+  <span class="title">Fleet-tree API response shape</span>
+  <code>GET /api/v1/instances/tree</code> now returns <code>{ "operators": [...] }</code> instead of
+  <code>{ "customers": [...] }</code>. The bundled dashboard ships in lockstep — only external
+  consumers of this endpoint need to adapt. Full schema in the API Contract, §5.8.
+</div>
+
+<h2>No Action Needed for Agents <span class="badge none">UNCHANGED</span></h2>
+<div class="callout ok">
+  <span class="title">SiemCore &amp; SWF teams</span>
+  The agent wire protocol is unchanged: heartbeats and update checks still send
+  <code>product_tier</code> and <code>parent_instance_id</code>, and existing configurations keep
+  working as-is. Reminder for production wiring: a customer siemcore's <code>parent_id</code>
+  is the <em>operator's</em> mysoc instance id; each swf points at its customer's siemcore.
+</div>
+
+<h2>Upgrade Notes (Server Operators)</h2>
+<ol>
+  <li>Apply database migration <code>011_license_ownership</code> (additive and idempotent).</li>
+  <li>Deploy the server and dashboard together.</li>
+  <li>Optionally: create the operator's platform license, then assign
+  <em>operator</em> (and reseller, where applicable) on existing customer licenses via the
+  new Ownership panel. Until then they render under <em>Unassigned</em> — functionally harmless.</li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2>Recent Release History</h2>
+<table>
+  <tr><th>Version</th><th>Shipped</th><th>Highlights</th></tr>
+  <tr>
+    <td><strong>1.7.0</strong></td><td>Pending</td>
+    <td>Operator/reseller/customer license ownership; cross-license fleet linking; operator-grouped tree; scope-aware license creation.</td>
+  </tr>
+  <tr>
+    <td><strong>1.6.0</strong></td><td>Aug 2026</td>
+    <td>Product hierarchy (mysoc &gt; siemcore &gt; swf): tier catalog, self-reported tier/parent on heartbeats, first fleet tree view, hierarchy support in the updater kit.</td>
+  </tr>
+  <tr>
+    <td><strong>1.5.0</strong></td><td>Aug 2026</td>
+    <td>Managed API keys: named, scoped (<code>releases</code>/<code>admin</code>), revocable, expiring; created in the dashboard with one-time reveal. Client-side credential hygiene in the updater kit.</td>
+  </tr>
+  <tr>
+    <td><strong>1.4.0</strong></td><td>Aug 2026</td>
+    <td>IP allowlist for the updater channel (observe/enforce); filesystem install executor with checksum verification and rollback in the updater simulator.</td>
+  </tr>
+  <tr>
+    <td><strong>1.3.0</strong></td><td>Jan 2026</td>
+    <td>Desired-state reconcile model: system-template manifest, ordered migrate → containers → config → self-update plan, health/security gates, rollback.</td>
+  </tr>
+  <tr>
+    <td><strong>1.2.0</strong></td><td>Jan 2026</td>
+    <td>Dashboard and API hardening: auth flows, error states, accessibility and responsive fixes.</td>
+  </tr>
+</table>
+
+<h2>Support</h2>
+<p>Server: <code>https://updates.mysoc.ai</code> &nbsp;·&nbsp; Full API reference: <em>API Contract</em> (available on request) &nbsp;·&nbsp; Licensing questions: see the <em>License Ownership Guide</em> accompanying these notes.</p>
+
+<div class="doc-footer">
+  <span>MySoc Updates Platform — Release Notes 1.7.0</span>
+  <span>© 2026 Cyfox · Partner distribution</span>
+</div>
+
+</body>
+</html>
