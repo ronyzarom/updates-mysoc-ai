@@ -446,7 +446,7 @@ ignored. Response `200`:
 | -------------------------------------- | ----------- | ----------------------------- |
 | `GET  /instances`                      | User (JWT)  | List all instances            |
 | `GET  /instances/paged`                | User (JWT)  | Paginated list                |
-| `GET  /instances/tree`                 | User (JWT)  | Fleet as a per-customer tier tree |
+| `GET  /instances/tree`                 | User (JWT)  | Fleet as an operator → customer tier tree |
 | `GET  /instances/{id}`                 | User (JWT)  | Instance detail               |
 | `PUT  /instances/{id}`                 | Admin       | Update display/auto-update/group |
 | `DELETE /instances/{id}`               | Admin       | Delete instance               |
@@ -461,23 +461,29 @@ ignored. Response `200`:
 - `PUT /instances/{id}/update-group` → `{ "group": "beta" }`
   (must be `alpha`/`beta`/`stable`/`production`).
 
-**`GET /instances/tree`** groups the fleet by customer/license and nests it as
-`mysoc -> siemcore -> swf` using each node's self-reported `product_tier` and
-`parent_instance_id`:
+**`GET /instances/tree`** mirrors the sales hierarchy. A SOC operator owns the
+mysoc platform; its customers (added directly or via a reseller) each hold a
+license covering their siemcore server(s) and swf forwarders. The response
+groups the fleet per operator, using each node's self-reported `product_tier`
+and `parent_instance_id`:
 
 ```json
 {
-  "customers": [
+  "operators": [
     {
-      "license_id": "…", "license_key": "SIEM…A9C9", "customer_name": "Acme",
-      "total_nodes": 3,
-      "roots": [
+      "operator_id": "cyfox-soc", "operator_name": "Cyfox SOC", "total_nodes": 3,
+      "platform_roots": [
+        { "instance_id": "mysoc-prod-01", "product_tier": "mysoc", "status": "online", "children": [] }
+      ],
+      "customers": [
         {
-          "instance_id": "sim-mysoc-dev-01", "product_tier": "mysoc", "status": "online",
-          "children": [
+          "license_id": "…", "license_key": "SIEM…A9C9", "customer_name": "Acme",
+          "reseller_id": "chan-1", "reseller_name": "Acme Channel Ltd",
+          "total_nodes": 2,
+          "roots": [
             {
               "instance_id": "sim-siemcore-dev-01", "product_tier": "siemcore",
-              "parent_instance_id": "sim-mysoc-dev-01", "status": "online",
+              "parent_instance_id": "mysoc-prod-01", "status": "online",
               "children": [
                 { "instance_id": "sim-swf-dev-01", "product_tier": "swf", "parent_instance_id": "sim-siemcore-dev-01", "status": "online", "children": [] }
               ]
@@ -490,9 +496,20 @@ ignored. Response `200`:
 }
 ```
 
-`license_key` is masked. A node whose declared parent is absent within the same
-customer appears as a root with `"orphan": true`. Instances with no bound license
-fall into an `"Unlicensed / unbound"` customer bucket.
+Semantics:
+
+- A license is a **platform license** (defines an operator) when its `type` is
+  `mysoc-cloud` or its `operator_id` equals its own `customer_id`; those
+  instances appear under `platform_roots`. All other licenses are customer
+  licenses, grouped under the operator named by their `operator_id`.
+- Parent links resolve **across licenses**: a customer's siemcore that declares
+  the operator's mysoc as parent is a normal customer root (not an orphan).
+  `"orphan": true` now means the declared parent is not enrolled anywhere.
+- Customer licenses appear even before any instance enrolls (empty `roots`).
+- `license_key` is masked. Licenses without an `operator_id` and instances with
+  no bound license fall under the `"Unassigned"` operator (the latter in an
+  `"Unlicensed / unbound"` bucket).
+- Reseller fields are sales metadata only; resellers deploy no software.
 
 **`GET /api/v1/products`** (public) returns the canonical tier catalog for
 dropdowns: `{ "tiers": [ { "name": "mysoc", "display_name": "MySoc", "rank": 0 }, { "name": "siemcore", …, "rank": 1, "parent_tier": "mysoc" }, { "name": "swf", …, "rank": 2, "parent_tier": "siemcore" } ] }`.
@@ -529,6 +546,9 @@ dropdowns: `{ "tiers": [ { "name": "mysoc", "display_name": "MySoc", "rank": 0 }
   "customer_id": "acme",
   "customer_name": "ACME Corp",
   "type": "siemcore",
+  "operator_id": "cyfox-soc",
+  "reseller_id": "chan-1",
+  "reseller_name": "Acme Channel Ltd",
   "products": ["siemcore"],
   "features": ["cluster"],
   "limits": { "max_events_per_day": 1000000, "max_users": 25, "max_data_sources": 50, "max_retention_days": 90 },
@@ -537,8 +557,13 @@ dropdowns: `{ "tiers": [ { "name": "mysoc", "display_name": "MySoc", "rank": 0 }
 ```
 
 `customer_id`, `customer_name`, and `type` are required. `prefix` defaults to
-`MYSOC` for `type = mysoc-cloud`, otherwise `SIEM`. Returns `201` with the
-created `License`.
+`MYSOC` for `type = mysoc-cloud`, otherwise `SIEM`. Ownership fields are
+optional: `operator_id` ties a customer license to its SOC operator (on a
+`mysoc-cloud` platform license it defaults to the license's own
+`customer_id`); `reseller_id`/`reseller_name` record the sales channel and stay
+empty for direct sales. `PUT /admin/licenses/{id}` accepts partial updates of
+`customer_name`, `is_active`, `operator_id`, `reseller_id`, `reseller_name`.
+Returns `201` with the created `License`.
 
 ---
 
@@ -687,7 +712,7 @@ Each `product` (`ProductStatus`): `{ name, version, channel, status, uptime, las
 
 ### 7.5 License
 
-`id, license_key, customer_id, customer_name, type, products[], features?, limits{max_events_per_day,max_users,max_data_sources,max_retention_days}, issued_at, expires_at, bound_to?, is_active, created_at, updated_at`.
+`id, license_key, customer_id, customer_name, type, operator_id?, reseller_id?, reseller_name?, products[], features?, limits{max_events_per_day,max_users,max_data_sources,max_retention_days}, issued_at, expires_at, bound_to?, is_active, created_at, updated_at`.
 
 ### 7.6 User
 

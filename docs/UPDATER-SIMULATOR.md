@@ -74,7 +74,7 @@ State and artifact paths are resolved relative to the configuration file.
 
 ## Product Hierarchy
 
-The fleet is a three-tier tree owned by a single customer:
+The fleet is a three-tier tree:
 
 ```text
 mysoc  (root, no parent)
@@ -82,10 +82,16 @@ mysoc  (root, no parent)
         └── swf  (parent = a siemcore)
 ```
 
-A customer owns **one license** that spans the whole tree. Every node — mysoc,
-siemcore, and swf — presents the **same** `license_key`. The server binds each
-node's `license_id` from that key and groups the fleet by customer, so set the
-same value (ideally via `UPDATER_SIM_LICENSE_KEY`) on all three configs.
+In production, the **mysoc platform belongs to the SOC operator** (its own
+platform license) while each end customer's license covers that customer's
+siemcore server(s) and swf forwarders — so a customer's siemcore declares the
+operator's mysoc `instance_id` as `parent_id`, and parent links legitimately
+cross licenses. The server resolves parents across the whole fleet and groups
+the tree as operator → customer.
+
+For a self-contained local test, it is fine to run all three example configs
+with the **same** `license_key` (ideally via `UPDATER_SIM_LICENSE_KEY`); the
+tree still assembles, just under one license.
 
 Each agent **self-reports** its place in the tree via two `instance` fields:
 

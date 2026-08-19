@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, LICENSE_TYPES } from "@/lib/api";
+import { api, License } from "@/lib/api";
 import { Key, Plus, RefreshCw, Calendar, CheckCircle, XCircle } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import Link from "next/link";
@@ -32,6 +32,9 @@ export default function LicensesPage() {
       customer_id: string;
       customer_name: string;
       type: string;
+      operator_id: string;
+      reseller_id: string;
+      reseller_name: string;
       products: string[];
       expires_at: string;
     }) => api.createLicense(data),
@@ -257,6 +260,7 @@ export default function LicensesPage() {
       {/* Create License Modal */}
       {showCreateModal && (
         <CreateLicenseModal
+          licenses={licenses || []}
           onClose={() => setShowCreateModal(false)}
           onSubmit={(data) => createMutation.mutate(data)}
           isLoading={createMutation.isPending}
@@ -267,38 +271,67 @@ export default function LicensesPage() {
   );
 }
 
+// A platform license marks a SOC operator (as opposed to a customer license).
+function isPlatformLicense(l: License): boolean {
+  return l.type === "mysoc-cloud" || (!!l.operator_id && l.operator_id === l.customer_id);
+}
+
+const CUSTOMER_PRODUCTS = ["siemcore-api", "siemcore-collector", "siemcore-frontend", "swf"];
+const PLATFORM_PRODUCTS = ["mysoc-api", "mysoc-frontend"];
+
 function CreateLicenseModal({
+  licenses,
   onClose,
   onSubmit,
   isLoading,
   error,
 }: {
+  licenses: License[];
   onClose: () => void;
   onSubmit: (data: {
     customer_id: string;
     customer_name: string;
     type: string;
+    operator_id: string;
+    reseller_id: string;
+    reseller_name: string;
     products: string[];
     expires_at: string;
   }) => void;
   isLoading: boolean;
   error?: string;
 }) {
+  // Known SOC operators, derived from existing platform licenses.
+  const operatorOptions = licenses
+    .filter(isPlatformLicense)
+    .map((l) => ({
+      id: l.operator_id || l.customer_id,
+      name: l.customer_name || l.customer_id,
+    }))
+    .filter((op, i, all) => all.findIndex((o) => o.id === op.id) === i);
+
+  const [scope, setScope] = useState<"customer" | "operator">("customer");
   const [formData, setFormData] = useState({
     customer_id: "",
     customer_name: "",
     type: "siemcore",
-    products: ["siemcore-api", "siemcore-collector", "siemcore-frontend"],
+    operator_id: operatorOptions[0]?.id || "",
+    reseller_id: "",
+    reseller_name: "",
+    products: ["siemcore-api", "siemcore-collector", "siemcore-frontend", "swf"],
     expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   });
 
-  const productOptions = [
-    "siemcore-api",
-    "siemcore-collector",
-    "siemcore-frontend",
-    "mysoc-api",
-    "mysoc-frontend",
-  ];
+  const productOptions = scope === "customer" ? CUSTOMER_PRODUCTS : PLATFORM_PRODUCTS;
+
+  const handleScopeChange = (next: "customer" | "operator") => {
+    setScope(next);
+    setFormData((prev) => ({
+      ...prev,
+      type: next === "customer" ? "siemcore" : "mysoc-cloud",
+      products: next === "customer" ? [...CUSTOMER_PRODUCTS] : [...PLATFORM_PRODUCTS],
+    }));
+  };
 
   const handleProductToggle = (product: string) => {
     setFormData((prev) => ({
@@ -313,6 +346,11 @@ function CreateLicenseModal({
     e.preventDefault();
     onSubmit({
       ...formData,
+      // An operator's platform license belongs to itself; the server also
+      // enforces this default.
+      operator_id: scope === "operator" ? formData.customer_id : formData.operator_id,
+      reseller_id: scope === "operator" ? "" : formData.reseller_id,
+      reseller_name: scope === "operator" ? "" : formData.reseller_name,
       expires_at: new Date(formData.expires_at).toISOString(),
     });
   };
@@ -321,8 +359,42 @@ function CreateLicenseModal({
     <Modal title="Create License" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
+          <span className="block text-sm font-medium text-slate-300 mb-1">
+            License Scope
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              aria-pressed={scope === "customer"}
+              onClick={() => handleScopeChange("customer")}
+              className={`px-3 py-2 rounded text-sm text-left transition-colors ${
+                scope === "customer"
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/50"
+                  : "bg-slate-700 text-slate-400 border border-slate-600"
+              }`}
+            >
+              <span className="font-medium block">Customer</span>
+              <span className="text-xs opacity-80">siemcore + swf</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={scope === "operator"}
+              onClick={() => handleScopeChange("operator")}
+              className={`px-3 py-2 rounded text-sm text-left transition-colors ${
+                scope === "operator"
+                  ? "bg-violet-500/20 text-violet-300 border border-violet-500/50"
+                  : "bg-slate-700 text-slate-400 border border-slate-600"
+              }`}
+            >
+              <span className="font-medium block">SOC Operator</span>
+              <span className="text-xs opacity-80">mysoc platform</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
           <label htmlFor="lic-customer-id" className="block text-sm font-medium text-slate-300 mb-1">
-            Customer ID
+            {scope === "customer" ? "Customer ID" : "Operator ID"}
           </label>
           <input
             id="lic-customer-id"
@@ -332,14 +404,14 @@ function CreateLicenseModal({
               setFormData((prev) => ({ ...prev, customer_id: e.target.value }))
             }
             className="input w-full"
-            placeholder="e.g., acme-corp"
+            placeholder={scope === "customer" ? "e.g., acme-corp" : "e.g., cyfox-soc"}
             required
           />
         </div>
 
         <div>
           <label htmlFor="lic-customer-name" className="block text-sm font-medium text-slate-300 mb-1">
-            Customer Name
+            {scope === "customer" ? "Customer Name" : "Operator Name"}
           </label>
           <input
             id="lic-customer-name"
@@ -349,30 +421,98 @@ function CreateLicenseModal({
               setFormData((prev) => ({ ...prev, customer_name: e.target.value }))
             }
             className="input w-full"
-            placeholder="e.g., Acme Corporation"
+            placeholder={scope === "customer" ? "e.g., Acme Corporation" : "e.g., Cyfox SOC"}
             required
           />
         </div>
 
-        <div>
-          <label htmlFor="lic-type" className="block text-sm font-medium text-slate-300 mb-1">
-            License Type
-          </label>
-          <select
-            id="lic-type"
-            value={formData.type}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, type: e.target.value }))
-            }
-            className="input w-full"
-          >
-            {LICENSE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </div>
+        {scope === "customer" && (
+          <>
+            <div>
+              <label htmlFor="lic-operator" className="block text-sm font-medium text-slate-300 mb-1">
+                SOC Operator
+              </label>
+              {operatorOptions.length > 0 ? (
+                <select
+                  id="lic-operator"
+                  value={formData.operator_id}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, operator_id: e.target.value }))
+                  }
+                  className="input w-full"
+                >
+                  {operatorOptions.map((op) => (
+                    <option key={op.id} value={op.id}>
+                      {op.name} ({op.id})
+                    </option>
+                  ))}
+                  <option value="">Unassigned (set later)</option>
+                </select>
+              ) : (
+                <input
+                  id="lic-operator"
+                  type="text"
+                  value={formData.operator_id}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, operator_id: e.target.value }))
+                  }
+                  className="input w-full"
+                  placeholder="Operator ID (no operator licenses yet)"
+                />
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="lic-reseller-id" className="block text-sm font-medium text-slate-300 mb-1">
+                  Reseller ID <span className="text-slate-500">(optional)</span>
+                </label>
+                <input
+                  id="lic-reseller-id"
+                  type="text"
+                  value={formData.reseller_id}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, reseller_id: e.target.value }))
+                  }
+                  className="input w-full"
+                  placeholder="direct sale if empty"
+                />
+              </div>
+              <div>
+                <label htmlFor="lic-reseller-name" className="block text-sm font-medium text-slate-300 mb-1">
+                  Reseller Name
+                </label>
+                <input
+                  id="lic-reseller-name"
+                  type="text"
+                  value={formData.reseller_name}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, reseller_name: e.target.value }))
+                  }
+                  className="input w-full"
+                  placeholder="e.g., Acme Channel Ltd"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="lic-type" className="block text-sm font-medium text-slate-300 mb-1">
+                License Type
+              </label>
+              <select
+                id="lic-type"
+                value={formData.type}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, type: e.target.value }))
+                }
+                className="input w-full"
+              >
+                <option value="siemcore">siemcore</option>
+                <option value="siemcore-lite">siemcore-lite</option>
+              </select>
+            </div>
+          </>
+        )}
 
         <div>
           <span className="block text-sm font-medium text-slate-300 mb-1">

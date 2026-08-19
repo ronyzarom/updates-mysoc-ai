@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api, License } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
@@ -13,8 +14,10 @@ import {
   Calendar,
   Package,
   Building2,
+  Network,
 } from "lucide-react";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui";
+import { RequireRole } from "@/lib/auth-context";
 
 export default function LicenseDetailPage() {
   const params = useParams();
@@ -158,6 +161,8 @@ export default function LicenseDetailPage() {
             </div>
           </div>
 
+          <OwnershipCard license={license} />
+
           <div className="card lg:col-span-3">
             <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Package className="w-5 h-5 text-cyan-400" />
@@ -209,6 +214,132 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-sm text-slate-400">{label}</p>
       <p className="text-white font-medium break-words">{value}</p>
+    </div>
+  );
+}
+
+// Ownership: which SOC operator this license belongs to and (for customer
+// licenses) which reseller sold it. Admins can edit; legacy licenses start
+// unassigned.
+function OwnershipCard({ license }: { license: License }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    operator_id: license.operator_id || "",
+    reseller_id: license.reseller_id || "",
+    reseller_name: license.reseller_name || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.updateLicense(license.id, form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["license", license.id] });
+      queryClient.invalidateQueries({ queryKey: ["licenses"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-tree"] });
+      setEditing(false);
+    },
+  });
+
+  return (
+    <div className="card lg:col-span-3">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <Network className="w-5 h-5 text-violet-400" />
+          Ownership
+        </h2>
+        <RequireRole roles={["admin"]}>
+          {!editing && (
+            <button onClick={() => setEditing(true)} className="btn btn-secondary">
+              Edit
+            </button>
+          )}
+        </RequireRole>
+      </div>
+
+      {!editing ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <Detail label="SOC Operator" value={license.operator_id || "Unassigned"} />
+          <Detail
+            label="Sold Via"
+            value={
+              license.reseller_id
+                ? `${license.reseller_name || license.reseller_id} (${license.reseller_id})`
+                : "Direct"
+            }
+          />
+        </div>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveMutation.mutate();
+          }}
+          className="space-y-4"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="own-operator" className="block text-sm font-medium text-slate-300 mb-1">
+                Operator ID
+              </label>
+              <input
+                id="own-operator"
+                type="text"
+                value={form.operator_id}
+                onChange={(e) => setForm((p) => ({ ...p, operator_id: e.target.value }))}
+                className="input w-full"
+                placeholder="e.g., cyfox-soc"
+              />
+            </div>
+            <div>
+              <label htmlFor="own-reseller-id" className="block text-sm font-medium text-slate-300 mb-1">
+                Reseller ID <span className="text-slate-500">(optional)</span>
+              </label>
+              <input
+                id="own-reseller-id"
+                type="text"
+                value={form.reseller_id}
+                onChange={(e) => setForm((p) => ({ ...p, reseller_id: e.target.value }))}
+                className="input w-full"
+                placeholder="direct sale if empty"
+              />
+            </div>
+            <div>
+              <label htmlFor="own-reseller-name" className="block text-sm font-medium text-slate-300 mb-1">
+                Reseller Name
+              </label>
+              <input
+                id="own-reseller-name"
+                type="text"
+                value={form.reseller_name}
+                onChange={(e) => setForm((p) => ({ ...p, reseller_name: e.target.value }))}
+                className="input w-full"
+                placeholder="e.g., Acme Channel Ltd"
+              />
+            </div>
+          </div>
+
+          {saveMutation.isError && (
+            <div className="p-3 rounded bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
+              {saveMutation.error instanceof Error
+                ? saveMutation.error.message
+                : "Failed to save ownership"}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="btn btn-secondary"
+            >
+              Cancel
+            </button>
+            <button type="submit" disabled={saveMutation.isPending} className="btn btn-primary">
+              {saveMutation.isPending ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

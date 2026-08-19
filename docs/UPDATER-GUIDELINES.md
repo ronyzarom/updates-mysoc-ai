@@ -194,35 +194,50 @@ silently reuse another device's identity.
 
 ### 4.4 Product Hierarchy (mysoc > siemcore > swf)
 
-Products form a canonical three-tier tree owned by a single customer:
+Products form a canonical three-tier tree:
 
 | Tier       | Rank | Parent tier | Notes                                  |
 | ---------- | ---- | ----------- | -------------------------------------- |
-| `mysoc`    | 0    | *(none)*    | Root; one per customer                 |
-| `siemcore` | 1    | `mysoc`     | Many per mysoc                         |
-| `swf`      | 2    | `siemcore`  | Many per siemcore (Windows forwarder)  |
+| `mysoc`    | 0    | *(none)*    | Root; the SOC operator's platform      |
+| `siemcore` | 1    | `mysoc`     | One or more per end customer           |
+| `swf`      | 2    | `siemcore`  | Many per siemcore (Windows forwarder, Sysmon/WMI logs) |
+
+**Ownership (sales) model.** MySoc sells the mysoc platform to a **SOC
+operator**. The operator sells siemcore+swf to end **customers**, directly or
+through a **reseller** (a sales channel only — resellers deploy no software).
+One mysoc installation serves all of the operator's customers, so tiers and
+licenses are related but not identical:
+
+- The operator holds a **platform license** (`type = mysoc-cloud`,
+  `operator_id` = its own `customer_id`) covering its mysoc nodes.
+- Each customer holds a **customer license** covering that customer's siemcore
+  server(s) and swf forwarders. It carries `operator_id` (which operator it
+  lives under) and optional `reseller_id`/`reseller_name`.
+- Every node of one license presents the **same** `X-License-Key`; the server
+  binds each node's `license_id` from that key.
 
 Rules:
 
-- A customer owns **one license** that spans the whole tree. Every node presents
-  the **same** `X-License-Key`; the server binds each node's `license_id` from
-  that key and groups the fleet by customer/license.
 - Agents **self-report** their tier and their parent via `product_tier` and
   `parent_instance_id` on every heartbeat and update-check. `instance_type`
-  remains the OS/sub-type; `product_tier` is the canonical tier.
+  remains the OS/sub-type; `product_tier` is the canonical tier. A customer's
+  siemcore declares the **operator's** mysoc `instance_id` as its parent —
+  parent links legitimately cross licenses.
 - The server MUST validate a supplied `product_tier` against the canonical set
   and, when the declared parent already exists, MUST assert the parent's tier is
   exactly one rank above. A child MAY enroll before its parent; the server stores
   the link and treats the node as an *orphan* in the tree until the parent
-  appears (it MUST NOT reject purely because the parent is unknown).
+  appears anywhere in the fleet (it MUST NOT reject purely because the parent is
+  unknown).
 - Self-reported parentage is a topology convenience for grouping and display. It
-  is NOT an authorization boundary: company ownership is still derived from the
+  is NOT an authorization boundary: ownership is still derived from the
   authenticated credential (§4.1), and a device credential still MUST NOT
   authorize administration (§4.3).
 
 Operators view the assembled tree via `GET /api/v1/instances/tree` (grouped
-`license -> mysoc -> siemcore -> swf`, with orphan and unlicensed buckets) or the
-dashboard's Instances → Tree view. The canonical tier catalog is served at
+`operator -> customer -> siemcore -> swf`, with the operator's mysoc nodes as
+platform roots, plus orphan and unlicensed buckets) or the dashboard's
+Instances → Tree view. The canonical tier catalog is served at
 `GET /api/v1/products`.
 
 ---

@@ -10,7 +10,10 @@ type License struct {
 	LicenseKey   string        `json:"license_key"`
 	CustomerID   string        `json:"customer_id"`
 	CustomerName string        `json:"customer_name"`
-	Type         string        `json:"type"` // mysoc-cloud, siemcore, siemcore-lite
+	Type         string        `json:"type"`                    // mysoc-cloud, siemcore, siemcore-lite
+	OperatorID   string        `json:"operator_id,omitempty"`   // SOC operator this license belongs to (equals customer_id on the operator's own platform license)
+	ResellerID   string        `json:"reseller_id,omitempty"`   // sales channel; empty for direct sales
+	ResellerName string        `json:"reseller_name,omitempty"` // human-friendly reseller label
 	Products     []string      `json:"products"`
 	Features     []string      `json:"features,omitempty"`
 	Limits       LicenseLimits `json:"limits"`

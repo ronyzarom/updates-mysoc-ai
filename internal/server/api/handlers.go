@@ -987,6 +987,15 @@ func (s *Server) handleCreateLicense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ownership metadata: platform (mysoc-cloud) licenses belong to the SOC
+	// operator itself; customer licenses point at their operator.
+	req.OperatorID = strings.TrimSpace(req.OperatorID)
+	req.ResellerID = strings.TrimSpace(req.ResellerID)
+	req.ResellerName = strings.TrimSpace(req.ResellerName)
+	if req.Type == "mysoc-cloud" && req.OperatorID == "" {
+		req.OperatorID = req.CustomerID
+	}
+
 	// Set prefix based on type
 	if req.Prefix == "" {
 		if req.Type == "mysoc-cloud" {
@@ -1050,6 +1059,15 @@ func (s *Server) handleUpdateLicense(w http.ResponseWriter, r *http.Request) {
 	}
 	if active, ok := updates["is_active"].(bool); ok {
 		license.IsActive = active
+	}
+	if op, ok := updates["operator_id"].(string); ok {
+		license.OperatorID = strings.TrimSpace(op)
+	}
+	if rid, ok := updates["reseller_id"].(string); ok {
+		license.ResellerID = strings.TrimSpace(rid)
+	}
+	if rname, ok := updates["reseller_name"].(string); ok {
+		license.ResellerName = strings.TrimSpace(rname)
 	}
 
 	if err := svc.UpdateLicense(r.Context(), license); err != nil {

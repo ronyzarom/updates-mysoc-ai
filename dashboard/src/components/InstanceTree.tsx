@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api, InstanceTreeNode } from "@/lib/api";
-import { ChevronDown, ChevronRight, Server, RefreshCw, Building2, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, Server, RefreshCw, Building2, AlertTriangle, Network, Tag } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { useState } from "react";
@@ -92,7 +92,7 @@ function TreeNodeRow({
           <span className="text-xs text-slate-500 truncate">· {node.display_name}</span>
         )}
         {node.orphan && (
-          <span className="flex items-center gap-1 text-[10px] text-amber-400" title="Declared parent not found in this customer">
+          <span className="flex items-center gap-1 text-[10px] text-amber-400" title="Declared parent is not enrolled anywhere in the fleet">
             <AlertTriangle className="w-3 h-3" />
             orphan
           </span>
@@ -144,11 +144,17 @@ export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
     );
   }
 
-  const customers = (data?.customers || []).filter((c) =>
-    c.roots.some((r) => matchesTier(r, tierFilter))
+  const filtering = tierFilter !== "all";
+  // When a tier filter is active, hide operators/customers with no match;
+  // otherwise show everything, including customers with no instances yet.
+  const operators = (data?.operators || []).filter(
+    (op) =>
+      !filtering ||
+      op.platform_roots.some((r) => matchesTier(r, tierFilter)) ||
+      op.customers.some((c) => c.roots.some((r) => matchesTier(r, tierFilter)))
   );
 
-  if (customers.length === 0) {
+  if (operators.length === 0) {
     return (
       <div className="card text-center py-16">
         <Server className="w-12 h-12 text-slate-600 mx-auto mb-4" />
@@ -162,25 +168,75 @@ export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
 
   return (
     <div className="space-y-5">
-      {customers.map((customer, idx) => (
-        <div key={customer.license_id || `unlicensed-${idx}`} className="card">
+      {operators.map((op, opIdx) => (
+        <div key={op.operator_id || `unassigned-${opIdx}`} className="card">
           <div className="flex items-center gap-3 mb-3 pb-3 border-b border-slate-700">
             <div className="p-2 rounded-lg bg-slate-800">
-              <Building2 className="w-5 h-5 text-cyan-400" />
+              <Network className="w-5 h-5 text-violet-400" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-semibold text-white truncate">{customer.customer_name}</h3>
+              <h3 className="font-semibold text-white truncate">{op.operator_name}</h3>
               <p className="text-xs text-slate-500">
-                {customer.total_nodes} node{customer.total_nodes === 1 ? "" : "s"}
-                {customer.license_key ? ` · license ${customer.license_key}` : " · no bound license"}
+                SOC operator{op.operator_id ? ` · ${op.operator_id}` : ""} ·{" "}
+                {op.total_nodes} node{op.total_nodes === 1 ? "" : "s"}
               </p>
             </div>
           </div>
-          <div className="space-y-0.5">
-            {customer.roots
-              .filter((r) => matchesTier(r, tierFilter))
-              .map((root) => (
-                <TreeNodeRow key={root.id} node={root} depth={0} tierFilter={tierFilter} />
+
+          {op.platform_roots.length > 0 && (
+            <div className="space-y-0.5 mb-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500 px-2 mb-1">
+                Platform (mysoc)
+              </p>
+              {op.platform_roots
+                .filter((r) => matchesTier(r, tierFilter))
+                .map((root) => (
+                  <TreeNodeRow key={root.id} node={root} depth={0} tierFilter={tierFilter} />
+                ))}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {op.customers
+              .filter((c) => !filtering || c.roots.some((r) => matchesTier(r, tierFilter)))
+              .map((customer, idx) => (
+                <div
+                  key={customer.license_id || `unlicensed-${idx}`}
+                  className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span className="font-medium text-white text-sm truncate">
+                      {customer.customer_name}
+                    </span>
+                    {customer.reseller_id && (
+                      <span
+                        className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30"
+                        title={`Sold via reseller ${customer.reseller_name || customer.reseller_id}`}
+                      >
+                        <Tag className="w-3 h-3" />
+                        {customer.reseller_name || customer.reseller_id}
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs text-slate-500 whitespace-nowrap">
+                      {customer.total_nodes} node{customer.total_nodes === 1 ? "" : "s"}
+                      {customer.license_key ? ` · ${customer.license_key}` : " · no bound license"}
+                    </span>
+                  </div>
+                  {customer.roots.length === 0 ? (
+                    <p className="text-xs text-slate-500 px-2 py-1">
+                      No instances enrolled yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {customer.roots
+                        .filter((r) => matchesTier(r, tierFilter))
+                        .map((root) => (
+                          <TreeNodeRow key={root.id} node={root} depth={0} tierFilter={tierFilter} />
+                        ))}
+                    </div>
+                  )}
+                </div>
               ))}
           </div>
         </div>

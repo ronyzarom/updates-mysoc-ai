@@ -73,7 +73,7 @@ type treeNode struct {
 	ParentInstanceID string      `json:"parent_instance_id,omitempty"`
 	Status           string      `json:"status"`
 	LastHeartbeat    *time.Time  `json:"last_heartbeat,omitempty"`
-	Orphan           bool        `json:"orphan,omitempty"` // parent declared but not found in this customer
+	Orphan           bool        `json:"orphan,omitempty"` // parent declared but not enrolled anywhere in the fleet
 	Children         []*treeNode `json:"children"`
 }
 
@@ -82,18 +82,34 @@ type treeCustomer struct {
 	LicenseKey   string      `json:"license_key,omitempty"` // masked
 	CustomerID   string      `json:"customer_id,omitempty"`
 	CustomerName string      `json:"customer_name"`
+	ResellerID   string      `json:"reseller_id,omitempty"`   // sales channel; empty = direct
+	ResellerName string      `json:"reseller_name,omitempty"` // human-friendly reseller label
 	TotalNodes   int         `json:"total_nodes"`
 	Roots        []*treeNode `json:"roots"`
 }
 
-type instanceTreeResponse struct {
-	Customers []*treeCustomer `json:"customers"`
+// treeOperator groups one SOC operator's whole estate: the mysoc platform
+// nodes it runs, plus every customer license sold under it (directly or via
+// a reseller).
+type treeOperator struct {
+	OperatorID    string          `json:"operator_id,omitempty"`
+	OperatorName  string          `json:"operator_name"`
+	TotalNodes    int             `json:"total_nodes"`
+	PlatformRoots []*treeNode     `json:"platform_roots"` // the operator's own mysoc instances
+	Customers     []*treeCustomer `json:"customers"`
 }
 
-// handleInstanceTree assembles the fleet into a per-customer tier tree:
-// license -> mysoc -> siemcore -> swf. Instances whose declared parent is not
-// present in the same customer are surfaced as orphan roots (flagged), and
-// instances with no bound license fall into an "Unlicensed / unbound" bucket.
+type instanceTreeResponse struct {
+	Operators []*treeOperator `json:"operators"`
+}
+
+// handleInstanceTree assembles the fleet into the sales hierarchy:
+// operator -> customer -> siemcore -> swf, with the operator's own mysoc
+// platform nodes at the operator level. Parent links resolve across licenses
+// (a customer's siemcore legitimately points at the operator's mysoc), so
+// orphan now means "parent not enrolled anywhere". Instances with no bound
+// license land in an "Unlicensed / unbound" bucket under the Unassigned
+// operator.
 func (s *Server) handleInstanceTree(w http.ResponseWriter, r *http.Request) {
 	instanceRepo := licensing.NewInstanceRepository(s.db)
 	instances, err := instanceRepo.List(r.Context())
@@ -108,62 +124,155 @@ func (s *Server) handleInstanceTree(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list licenses")
 		return
 	}
+
+	writeJSON(w, http.StatusOK, instanceTreeResponse{
+		Operators: groupOperators(instances, licenses),
+	})
+}
+
+// isPlatformLicense reports whether l is a SOC operator's own mysoc platform
+// license, as opposed to a customer's siemcore+swf license.
+func isPlatformLicense(l types.License) bool {
+	return l.Type == "mysoc-cloud" || (l.OperatorID != "" && l.OperatorID == l.CustomerID)
+}
+
+// operatorKeyFor returns the operator bucket a license belongs to ("" when
+// unassigned). A platform license without an explicit operator_id (legacy
+// row) falls back to its own customer_id.
+func operatorKeyFor(l types.License) string {
+	if l.OperatorID != "" {
+		return l.OperatorID
+	}
+	if isPlatformLicense(l) {
+		return l.CustomerID
+	}
+	return ""
+}
+
+// groupOperators builds the operator -> customer -> instance-tree structure.
+// Customer licenses appear even before their first instance enrolls, so a
+// freshly added customer is visible immediately.
+func groupOperators(instances []types.Instance, licenses []types.License) []*treeOperator {
 	licenseByID := make(map[string]types.License, len(licenses))
 	for _, l := range licenses {
 		licenseByID[l.ID] = l
 	}
 
-	const unlicensedKey = ""
+	// Every enrolled instance_id, for cross-license parent resolution.
+	known := make(map[string]struct{}, len(instances))
+	for _, inst := range instances {
+		known[inst.InstanceID] = struct{}{}
+	}
 
-	// Bucket instances by their bound license (or the unlicensed bucket).
-	bucketOrder := []string{}
+	// Bucket instances by their bound license ("" = unlicensed/unknown).
 	buckets := map[string][]types.Instance{}
 	for _, inst := range instances {
 		key := inst.LicenseID
-		if _, known := licenseByID[key]; !known {
-			key = unlicensedKey
-		}
-		if _, seen := buckets[key]; !seen {
-			bucketOrder = append(bucketOrder, key)
+		if _, ok := licenseByID[key]; !ok {
+			key = ""
 		}
 		buckets[key] = append(buckets[key], inst)
 	}
 
-	resp := instanceTreeResponse{Customers: []*treeCustomer{}}
-	for _, key := range bucketOrder {
-		group := buckets[key]
-		customer := &treeCustomer{TotalNodes: len(group)}
-		if lic, ok := licenseByID[key]; ok {
-			customer.LicenseID = lic.ID
-			customer.LicenseKey = maskLicenseKey(lic.LicenseKey)
-			customer.CustomerID = lic.CustomerID
-			customer.CustomerName = lic.CustomerName
-			if customer.CustomerName == "" {
-				customer.CustomerName = "Unnamed customer"
-			}
-		} else {
-			customer.CustomerName = "Unlicensed / unbound"
+	operators := map[string]*treeOperator{}
+	order := []string{}
+	getOp := func(key string) *treeOperator {
+		if op, ok := operators[key]; ok {
+			return op
 		}
-		customer.Roots = assembleTree(group)
-		resp.Customers = append(resp.Customers, customer)
+		op := &treeOperator{
+			OperatorID:    key,
+			OperatorName:  key,
+			PlatformRoots: []*treeNode{},
+			Customers:     []*treeCustomer{},
+		}
+		if key == "" {
+			op.OperatorName = "Unassigned"
+		}
+		operators[key] = op
+		order = append(order, key)
+		return op
 	}
 
-	// Stable customer ordering: named customers first (by name), unlicensed last.
-	sort.SliceStable(resp.Customers, func(i, j int) bool {
-		ci, cj := resp.Customers[i], resp.Customers[j]
-		if (ci.LicenseID == "") != (cj.LicenseID == "") {
-			return ci.LicenseID != "" // licensed groups before the unlicensed bucket
+	// Platform licenses define the operators (and their display names).
+	for _, l := range licenses {
+		if !isPlatformLicense(l) {
+			continue
 		}
-		return strings.ToLower(ci.CustomerName) < strings.ToLower(cj.CustomerName)
-	})
+		op := getOp(operatorKeyFor(l))
+		if l.CustomerName != "" {
+			op.OperatorName = l.CustomerName
+		}
+		group := buckets[l.ID]
+		op.PlatformRoots = append(op.PlatformRoots, assembleTree(group, known)...)
+		op.TotalNodes += len(group)
+	}
 
-	writeJSON(w, http.StatusOK, resp)
+	// Customer licenses, grouped under their operator (or Unassigned).
+	for _, l := range licenses {
+		if isPlatformLicense(l) {
+			continue
+		}
+		group := buckets[l.ID]
+		cust := &treeCustomer{
+			LicenseID:    l.ID,
+			LicenseKey:   maskLicenseKey(l.LicenseKey),
+			CustomerID:   l.CustomerID,
+			CustomerName: l.CustomerName,
+			ResellerID:   l.ResellerID,
+			ResellerName: l.ResellerName,
+			TotalNodes:   len(group),
+			Roots:        assembleTree(group, known),
+		}
+		if cust.CustomerName == "" {
+			cust.CustomerName = "Unnamed customer"
+		}
+		op := getOp(operatorKeyFor(l))
+		op.Customers = append(op.Customers, cust)
+		op.TotalNodes += len(group)
+	}
+
+	// Instances bound to no (known) license.
+	if group := buckets[""]; len(group) > 0 {
+		op := getOp("")
+		op.Customers = append(op.Customers, &treeCustomer{
+			CustomerName: "Unlicensed / unbound",
+			TotalNodes:   len(group),
+			Roots:        assembleTree(group, known),
+		})
+		op.TotalNodes += len(group)
+	}
+
+	out := make([]*treeOperator, 0, len(order))
+	for _, key := range order {
+		op := operators[key]
+		sort.SliceStable(op.Customers, func(i, j int) bool {
+			ci, cj := op.Customers[i], op.Customers[j]
+			if (ci.LicenseID == "") != (cj.LicenseID == "") {
+				return ci.LicenseID != "" // real customers before the unlicensed bucket
+			}
+			return strings.ToLower(ci.CustomerName) < strings.ToLower(cj.CustomerName)
+		})
+		out = append(out, op)
+	}
+
+	// Named operators first (by name); the Unassigned bucket last.
+	sort.SliceStable(out, func(i, j int) bool {
+		oi, oj := out[i], out[j]
+		if (oi.OperatorID == "") != (oj.OperatorID == "") {
+			return oi.OperatorID != ""
+		}
+		return strings.ToLower(oi.OperatorName) < strings.ToLower(oj.OperatorName)
+	})
+	return out
 }
 
-// assembleTree links a single customer's instances into a tier tree. A node is a
-// root when it declares no parent (a mysoc) or when its declared parent is not in
-// this customer's set (an orphan, flagged for the UI).
-func assembleTree(group []types.Instance) []*treeNode {
+// assembleTree links one license bucket's instances into a tier tree. A node
+// nests under its parent when the parent shares the license. A node whose
+// parent lives elsewhere in the fleet (e.g. a customer siemcore pointing at
+// the operator's mysoc) stays a root of this bucket without being flagged;
+// Orphan is set only when the declared parent is not enrolled anywhere.
+func assembleTree(group []types.Instance, known map[string]struct{}) []*treeNode {
 	nodeByInstanceID := make(map[string]*treeNode, len(group))
 	nodes := make([]*treeNode, 0, len(group))
 	for i := range group {
@@ -194,8 +303,10 @@ func assembleTree(group []types.Instance) []*treeNode {
 			parent.Children = append(parent.Children, n)
 			continue
 		}
-		// Declared a parent we can't resolve within this customer.
-		n.Orphan = true
+		if _, enrolled := known[n.ParentInstanceID]; !enrolled {
+			// Declared a parent that is not enrolled anywhere in the fleet.
+			n.Orphan = true
+		}
 		roots = append(roots, n)
 	}
 

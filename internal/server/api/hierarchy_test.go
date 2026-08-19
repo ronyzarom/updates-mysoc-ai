@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
@@ -16,6 +17,17 @@ func inst(instanceID, tier, parent string) types.Instance {
 	}
 }
 
+// knownSet builds the fleet-wide instance_id set from one or more buckets.
+func knownSet(groups ...[]types.Instance) map[string]struct{} {
+	known := map[string]struct{}{}
+	for _, group := range groups {
+		for _, i := range group {
+			known[i.InstanceID] = struct{}{}
+		}
+	}
+	return known
+}
+
 func TestAssembleTreeNestsByTier(t *testing.T) {
 	group := []types.Instance{
 		inst("swf-1", "swf", "siem-1"),
@@ -23,7 +35,7 @@ func TestAssembleTreeNestsByTier(t *testing.T) {
 		inst("siem-1", "siemcore", "mysoc-1"),
 	}
 
-	roots := assembleTree(group)
+	roots := assembleTree(group, knownSet(group))
 	if len(roots) != 1 {
 		t.Fatalf("expected 1 root, got %d", len(roots))
 	}
@@ -48,7 +60,7 @@ func TestAssembleTreeFlagsOrphans(t *testing.T) {
 		inst("swf-orphan", "swf", "siem-missing"),
 		inst("mysoc-1", "mysoc", ""),
 	}
-	roots := assembleTree(group)
+	roots := assembleTree(group, knownSet(group))
 	// mysoc-1 (rank 0) sorts before the orphan swf (rank 2).
 	if len(roots) != 2 {
 		t.Fatalf("expected 2 roots (mysoc + orphan), got %d", len(roots))
@@ -62,6 +74,27 @@ func TestAssembleTreeFlagsOrphans(t *testing.T) {
 	}
 }
 
+func TestAssembleTreeCrossLicenseParentIsNotOrphan(t *testing.T) {
+	// The operator's mysoc lives in another license bucket; the customer's
+	// siemcore pointing at it is a legitimate root, not an orphan.
+	operatorBucket := []types.Instance{inst("mysoc-op", "mysoc", "")}
+	customerBucket := []types.Instance{
+		inst("siem-1", "siemcore", "mysoc-op"),
+		inst("swf-1", "swf", "siem-1"),
+	}
+
+	roots := assembleTree(customerBucket, knownSet(operatorBucket, customerBucket))
+	if len(roots) != 1 {
+		t.Fatalf("expected 1 root, got %d", len(roots))
+	}
+	if roots[0].InstanceID != "siem-1" || roots[0].Orphan {
+		t.Fatalf("siem-1 must be an unflagged root, got %+v", roots[0])
+	}
+	if len(roots[0].Children) != 1 || roots[0].Children[0].InstanceID != "swf-1" {
+		t.Fatalf("expected swf-1 nested under siem-1, got %+v", roots[0].Children)
+	}
+}
+
 func TestAssembleTreeSortsSiblingsByRankThenID(t *testing.T) {
 	group := []types.Instance{
 		inst("mysoc-1", "mysoc", ""),
@@ -69,7 +102,7 @@ func TestAssembleTreeSortsSiblingsByRankThenID(t *testing.T) {
 		inst("siem-2", "siemcore", "mysoc-1"),
 		inst("siem-1", "siemcore", "mysoc-1"),
 	}
-	roots := assembleTree(group)
+	roots := assembleTree(group, knownSet(group))
 	if len(roots) != 1 {
 		t.Fatalf("expected 1 root, got %d", len(roots))
 	}
@@ -83,6 +116,94 @@ func TestAssembleTreeSortsSiblingsByRankThenID(t *testing.T) {
 		if children[i].InstanceID != want {
 			t.Fatalf("children[%d] = %q, want %q", i, children[i].InstanceID, want)
 		}
+	}
+}
+
+func lic(id, customerID, name, licType, operatorID, resellerID string) types.License {
+	return types.License{
+		ID:           id,
+		LicenseKey:   "SIEM-AAAA-BBBB-CCCC-DDDD",
+		CustomerID:   customerID,
+		CustomerName: name,
+		Type:         licType,
+		OperatorID:   operatorID,
+		ResellerID:   resellerID,
+		IssuedAt:     time.Now(),
+		ExpiresAt:    time.Now().Add(24 * time.Hour),
+		IsActive:     true,
+	}
+}
+
+func withLicense(i types.Instance, licenseID string) types.Instance {
+	i.LicenseID = licenseID
+	return i
+}
+
+func TestGroupOperatorsSalesHierarchy(t *testing.T) {
+	licenses := []types.License{
+		lic("op-lic", "cyfox-soc", "Cyfox SOC", "mysoc-cloud", "cyfox-soc", ""),
+		lic("cust-a", "acme", "Acme Corp", "siemcore", "cyfox-soc", ""),
+		lic("cust-b", "beta", "Beta Ltd", "siemcore", "cyfox-soc", "chan-1"),
+		lic("cust-x", "nobody", "No Operator Yet", "siemcore", "", ""),
+	}
+	instances := []types.Instance{
+		withLicense(inst("mysoc-op", "mysoc", ""), "op-lic"),
+		withLicense(inst("siem-a1", "siemcore", "mysoc-op"), "cust-a"),
+		withLicense(inst("swf-a1", "swf", "siem-a1"), "cust-a"),
+		inst("stray", "swf", ""), // no license at all
+	}
+
+	ops := groupOperators(instances, licenses)
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operators (cyfox + unassigned), got %d", len(ops))
+	}
+
+	cyfox := ops[0]
+	if cyfox.OperatorID != "cyfox-soc" || cyfox.OperatorName != "Cyfox SOC" {
+		t.Fatalf("first operator = %s/%s, want cyfox-soc/Cyfox SOC", cyfox.OperatorID, cyfox.OperatorName)
+	}
+	if len(cyfox.PlatformRoots) != 1 || cyfox.PlatformRoots[0].InstanceID != "mysoc-op" {
+		t.Fatalf("expected mysoc-op as platform root, got %+v", cyfox.PlatformRoots)
+	}
+	if cyfox.TotalNodes != 3 {
+		t.Fatalf("cyfox total nodes = %d, want 3", cyfox.TotalNodes)
+	}
+	// Customers sorted by name: Acme (with instances) then Beta (empty license).
+	if len(cyfox.Customers) != 2 {
+		t.Fatalf("expected 2 customers under cyfox, got %d", len(cyfox.Customers))
+	}
+	acme := cyfox.Customers[0]
+	if acme.CustomerID != "acme" || len(acme.Roots) != 1 || acme.Roots[0].InstanceID != "siem-a1" {
+		t.Fatalf("acme customer wrong: %+v", acme)
+	}
+	if acme.Roots[0].Orphan {
+		t.Fatal("siem-a1 links cross-license to mysoc-op and must not be orphan")
+	}
+	if len(acme.Roots[0].Children) != 1 || acme.Roots[0].Children[0].InstanceID != "swf-a1" {
+		t.Fatalf("expected swf-a1 under siem-a1, got %+v", acme.Roots[0].Children)
+	}
+	beta := cyfox.Customers[1]
+	if beta.CustomerID != "beta" || beta.ResellerID != "chan-1" || len(beta.Roots) != 0 {
+		t.Fatalf("beta customer wrong (must appear with empty tree + reseller): %+v", beta)
+	}
+
+	unassigned := ops[1]
+	if unassigned.OperatorID != "" || unassigned.OperatorName != "Unassigned" {
+		t.Fatalf("last operator must be Unassigned, got %s/%s", unassigned.OperatorID, unassigned.OperatorName)
+	}
+	// One customer license without operator + the unlicensed bucket (last).
+	if len(unassigned.Customers) != 2 {
+		t.Fatalf("expected 2 buckets under Unassigned, got %d", len(unassigned.Customers))
+	}
+	if unassigned.Customers[0].CustomerID != "nobody" {
+		t.Fatalf("expected operator-less license first, got %+v", unassigned.Customers[0])
+	}
+	unlicensed := unassigned.Customers[1]
+	if unlicensed.LicenseID != "" || unlicensed.CustomerName != "Unlicensed / unbound" {
+		t.Fatalf("expected unlicensed bucket last, got %+v", unlicensed)
+	}
+	if len(unlicensed.Roots) != 1 || unlicensed.Roots[0].InstanceID != "stray" {
+		t.Fatalf("expected stray in unlicensed bucket, got %+v", unlicensed.Roots)
 	}
 }
 

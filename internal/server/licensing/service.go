@@ -64,6 +64,9 @@ func (s *Service) CreateLicense(ctx context.Context, req CreateLicenseRequest) (
 		CustomerID:   req.CustomerID,
 		CustomerName: req.CustomerName,
 		Type:         req.Type,
+		OperatorID:   req.OperatorID,
+		ResellerID:   req.ResellerID,
+		ResellerName: req.ResellerName,
 		Products:     req.Products,
 		Features:     req.Features,
 		Limits:       req.Limits,
@@ -211,14 +214,17 @@ func (s *Service) DeleteLicense(ctx context.Context, id string) error {
 
 // CreateLicenseRequest is the request to create a license
 type CreateLicenseRequest struct {
-	Prefix       string            `json:"prefix"`       // MYSOC or SIEM
-	CustomerID   string            `json:"customer_id"`
-	CustomerName string            `json:"customer_name"`
-	Type         string            `json:"type"`         // mysoc-cloud, siemcore, siemcore-lite
-	Products     []string          `json:"products"`
-	Features     []string          `json:"features"`
+	Prefix       string              `json:"prefix"` // MYSOC or SIEM
+	CustomerID   string              `json:"customer_id"`
+	CustomerName string              `json:"customer_name"`
+	Type         string              `json:"type"`        // mysoc-cloud, siemcore, siemcore-lite
+	OperatorID   string              `json:"operator_id"` // SOC operator owning this license (self for platform licenses)
+	ResellerID   string              `json:"reseller_id"` // optional sales channel; empty = direct
+	ResellerName string              `json:"reseller_name"`
+	Products     []string            `json:"products"`
+	Features     []string            `json:"features"`
 	Limits       types.LicenseLimits `json:"limits"`
-	ExpiresAt    time.Time         `json:"expires_at"`
+	ExpiresAt    time.Time           `json:"expires_at"`
 }
 
 // Helper functions
@@ -293,4 +299,3 @@ func getConfigTemplate(licenseType string) string {
 		return "siemcore-standard"
 	}
 }
-

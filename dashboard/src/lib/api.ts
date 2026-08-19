@@ -96,12 +96,24 @@ export interface InstanceTreeCustomer {
   license_key?: string;
   customer_id?: string;
   customer_name: string;
+  reseller_id?: string;
+  reseller_name?: string;
   total_nodes: number;
   roots: InstanceTreeNode[];
 }
 
-export interface InstanceTreeResponse {
+// One SOC operator's estate: its own mysoc platform nodes plus the customers
+// (licenses) sold under it, directly or via a reseller.
+export interface InstanceTreeOperator {
+  operator_id?: string;
+  operator_name: string;
+  total_nodes: number;
+  platform_roots: InstanceTreeNode[];
   customers: InstanceTreeCustomer[];
+}
+
+export interface InstanceTreeResponse {
+  operators: InstanceTreeOperator[];
 }
 
 export interface HeartbeatData {
@@ -158,6 +170,9 @@ export interface License {
   customer_id: string;
   customer_name: string;
   type: LicenseType | string;
+  operator_id?: string; // SOC operator this license belongs to
+  reseller_id?: string; // sales channel; empty = direct
+  reseller_name?: string;
   products: string[];
   features?: string[];
   issued_at?: string;
