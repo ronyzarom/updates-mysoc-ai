@@ -144,6 +144,8 @@ mysoc-updater rollback [product]   # Rollback to previous version
 - [SiemCore Deployment Guide](docs/SIEMCORE_DEPLOYMENT_GUIDE.md) - Deployment and staged rollout operations
 - [SiemCore Cluster Update Server Spec](docs/SIEMCORE-CLUSTER-UPDATE-SERVER-SPEC.md) - Cluster registry and rollout policy contract
 - [MySoc Admin Guide](docs/MYSOC_ADMIN_GUIDE.md) - Dashboard and release administration
+- [License Ownership Guide](docs/LICENSE-OWNERSHIP-GUIDE.md) - Operator/reseller/customer model: creating licenses, assigning ownership, reading the fleet tree
+- [Release Notes](docs/RELEASE-NOTES.md) - What shipped in each version
 
 ## Project Structure
 
