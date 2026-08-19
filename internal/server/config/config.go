@@ -31,6 +31,11 @@ type ServerConfig struct {
 	// It defaults to false so existing deployments are unaffected until an
 	// operator provisions allowlist entries and turns enforcement on.
 	IPAllowlistEnforced bool
+
+	// SigningKeySeed is the hex-encoded 32-byte ed25519 seed used to sign
+	// releases at publish time. Empty disables signing (releases publish
+	// unsigned and verifying updaters will reject them).
+	SigningKeySeed string
 }
 
 // DatabaseConfig holds database connection configuration
@@ -62,6 +67,7 @@ func Load() (*Config, error) {
 			APIKey:              getEnv("ADMIN_API_KEY", ""),
 			CORSOrigins:         []string{"*"},
 			IPAllowlistEnforced: getEnvBool("IP_ALLOWLIST_ENFORCED", false),
+			SigningKeySeed:      getEnv("RELEASE_SIGNING_SEED", ""),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),

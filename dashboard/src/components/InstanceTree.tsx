@@ -1,8 +1,19 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api, InstanceTreeNode } from "@/lib/api";
-import { ChevronDown, ChevronRight, Server, RefreshCw, Building2, AlertTriangle, Network, Tag } from "lucide-react";
+import { api, InstanceTreeNode, InstanceTreeCustomer } from "@/lib/api";
+import {
+  ChevronDown,
+  ChevronRight,
+  Server,
+  RefreshCw,
+  Building2,
+  AlertTriangle,
+  Network,
+  Tag,
+  Radio,
+  KeyRound,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { useState } from "react";
@@ -42,24 +53,67 @@ function StatusDot({ status }: { status: string }) {
   return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={status} />;
 }
 
+// Freshness thresholds for the last-seen indicator (heartbeats run ~1m,
+// rollups ride on the parent's heartbeat).
+const FRESH_MS = 5 * 60 * 1000;
+const STALE_MS = 60 * 60 * 1000;
+
+function LastSeen({ node }: { node: InstanceTreeNode }) {
+  if (!node.last_heartbeat) {
+    return <span className="ml-auto text-xs text-slate-600 whitespace-nowrap">never seen</span>;
+  }
+  const age = Date.now() - new Date(node.last_heartbeat).getTime();
+  const color =
+    age < FRESH_MS ? "text-emerald-400/80" : age < STALE_MS ? "text-amber-400/80" : "text-red-400/80";
+  return (
+    <span className={`ml-auto text-xs whitespace-nowrap ${color}`}>
+      {formatDistanceToNow(new Date(node.last_heartbeat), { addSuffix: true })}
+    </span>
+  );
+}
+
 function matchesTier(node: InstanceTreeNode, tierFilter: string): boolean {
   if (tierFilter === "all") return true;
   if ((node.product_tier || "").toLowerCase() === tierFilter) return true;
   return node.children.some((c) => matchesTier(c, tierFilter));
 }
 
+function matchesSearch(node: InstanceTreeNode, needle: string): boolean {
+  if (!needle) return true;
+  const haystack = [
+    node.instance_id,
+    node.hostname,
+    node.display_name,
+    node.customer_id,
+    node.version,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (haystack.includes(needle)) return true;
+  return node.children.some((c) => matchesSearch(c, needle));
+}
+
+function nodeVisible(node: InstanceTreeNode, tierFilter: string, needle: string): boolean {
+  return matchesTier(node, tierFilter) && matchesSearch(node, needle);
+}
+
 function TreeNodeRow({
   node,
   depth,
   tierFilter,
+  search,
 }: {
   node: InstanceTreeNode;
   depth: number;
   tierFilter: string;
+  search: string;
 }) {
   const [open, setOpen] = useState(true);
   const hasChildren = node.children.length > 0;
   const highlighted = tierFilter !== "all" && (node.product_tier || "").toLowerCase() === tierFilter;
+  // A relay serves updates to the nodes nested under it.
+  const isRelay = hasChildren || (node.product_tier === "mysoc" || node.product_tier === "siemcore");
 
   return (
     <div>
@@ -91,24 +145,51 @@ function TreeNodeRow({
         {node.display_name && node.display_name !== node.instance_id && (
           <span className="text-xs text-slate-500 truncate">· {node.display_name}</span>
         )}
+        {node.version && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/70 text-slate-300 font-mono">
+            v{node.version}
+          </span>
+        )}
+        {isRelay && hasChildren && (
+          <span
+            className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
+            title={`Relay: serves updates to ${node.children.length} child node${node.children.length === 1 ? "" : "s"}`}
+          >
+            <Radio className="w-3 h-3" />
+            relay
+          </span>
+        )}
+        {node.reported_via && (
+          <span
+            className="text-[10px] text-slate-500"
+            title={`Reported through the cascade by ${node.reported_via}; this node never contacts the updates server directly`}
+          >
+            via {node.reported_via}
+          </span>
+        )}
         {node.orphan && (
-          <span className="flex items-center gap-1 text-[10px] text-amber-400" title="Declared parent is not enrolled anywhere in the fleet">
+          <span
+            className="flex items-center gap-1 text-[10px] text-amber-400"
+            title="Declared parent is not enrolled anywhere in the fleet"
+          >
             <AlertTriangle className="w-3 h-3" />
             orphan
           </span>
         )}
-        {node.last_heartbeat && (
-          <span className="ml-auto text-xs text-slate-500 whitespace-nowrap">
-            {formatDistanceToNow(new Date(node.last_heartbeat), { addSuffix: true })}
-          </span>
-        )}
+        <LastSeen node={node} />
       </div>
       {hasChildren && open && (
         <div>
           {node.children
-            .filter((c) => matchesTier(c, tierFilter))
+            .filter((c) => nodeVisible(c, tierFilter, search))
             .map((child) => (
-              <TreeNodeRow key={child.id} node={child} depth={depth + 1} tierFilter={tierFilter} />
+              <TreeNodeRow
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                tierFilter={tierFilter}
+                search={search}
+              />
             ))}
         </div>
       )}
@@ -116,11 +197,35 @@ function TreeNodeRow({
   );
 }
 
-export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
+function customerVisible(
+  customer: InstanceTreeCustomer,
+  filtering: boolean,
+  tierFilter: string,
+  search: string
+): boolean {
+  if (!filtering && !search) return true;
+  if (search) {
+    const label = `${customer.customer_name} ${customer.customer_id || ""}`.toLowerCase();
+    if (label.includes(search) && customer.roots.some((r) => matchesTier(r, tierFilter))) {
+      return true;
+    }
+  }
+  return customer.roots.some((r) => nodeVisible(r, tierFilter, search));
+}
+
+export function InstanceTree({
+  tierFilter = "all",
+  search = "",
+}: {
+  tierFilter?: string;
+  search?: string;
+}) {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instance-tree"],
     queryFn: () => api.getInstanceTree(),
   });
+
+  const needle = search.trim().toLowerCase();
 
   if (isLoading) {
     return <div className="text-slate-400">Loading fleet tree...</div>;
@@ -144,23 +249,28 @@ export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
     );
   }
 
-  const filtering = tierFilter !== "all";
-  // When a tier filter is active, hide operators/customers with no match;
-  // otherwise show everything, including customers with no instances yet.
+  const filtering = tierFilter !== "all" || needle !== "";
+  // When filtering, hide operators/customers with no match; otherwise show
+  // everything, including customers with no instances yet.
   const operators = (data?.operators || []).filter(
     (op) =>
       !filtering ||
-      op.platform_roots.some((r) => matchesTier(r, tierFilter)) ||
-      op.customers.some((c) => c.roots.some((r) => matchesTier(r, tierFilter)))
+      op.platform_roots.some((r) => nodeVisible(r, tierFilter, needle)) ||
+      op.customers.some((c) => customerVisible(c, filtering, tierFilter, needle)) ||
+      (needle !== "" && op.operator_name.toLowerCase().includes(needle))
   );
 
   if (operators.length === 0) {
     return (
       <div className="card text-center py-16">
         <Server className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-white mb-2">No instances to show</h3>
+        <h3 className="text-lg font-medium text-white mb-2">
+          {filtering ? "Nothing matches the current filters" : "No instances to show"}
+        </h3>
         <p className="text-slate-400">
-          Agents appear here once they send a heartbeat with a product tier.
+          {filtering
+            ? "Try clearing the search or tier filter."
+            : "The fleet appears here as operators' platforms heartbeat and roll up their cascade."}
         </p>
       </div>
     );
@@ -177,10 +287,13 @@ export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
             <div className="min-w-0">
               <h3 className="font-semibold text-white truncate">{op.operator_name}</h3>
               <p className="text-xs text-slate-500">
-                SOC operator{op.operator_id ? ` · ${op.operator_id}` : ""} ·{" "}
+                Operator{op.operator_id ? ` · ${op.operator_id}` : ""} ·{" "}
                 {op.total_nodes} node{op.total_nodes === 1 ? "" : "s"}
               </p>
             </div>
+            {op.is_active === false && (
+              <span className="ml-auto status-badge status-offline">Deactivated</span>
+            )}
           </div>
 
           {op.platform_roots.length > 0 && (
@@ -189,19 +302,25 @@ export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
                 Platform (mysoc)
               </p>
               {op.platform_roots
-                .filter((r) => matchesTier(r, tierFilter))
+                .filter((r) => nodeVisible(r, tierFilter, needle))
                 .map((root) => (
-                  <TreeNodeRow key={root.id} node={root} depth={0} tierFilter={tierFilter} />
+                  <TreeNodeRow
+                    key={root.id}
+                    node={root}
+                    depth={0}
+                    tierFilter={tierFilter}
+                    search={needle}
+                  />
                 ))}
             </div>
           )}
 
           <div className="space-y-3">
             {op.customers
-              .filter((c) => !filtering || c.roots.some((r) => matchesTier(r, tierFilter)))
+              .filter((c) => customerVisible(c, filtering, tierFilter, needle))
               .map((customer, idx) => (
                 <div
-                  key={customer.license_id || `unlicensed-${idx}`}
+                  key={customer.customer_id || customer.license_id || `unlicensed-${idx}`}
                   className="rounded-lg border border-slate-700/70 bg-slate-900/40 p-3"
                 >
                   <div className="flex items-center gap-2 mb-2">
@@ -209,6 +328,15 @@ export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
                     <span className="font-medium text-white text-sm truncate">
                       {customer.customer_name}
                     </span>
+                    {customer.legacy && (
+                      <span
+                        className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-600/30 text-slate-400 border border-slate-600/50"
+                        title="Grouped by a pre-1.8.0 license; these nodes contact the updates server directly instead of the operator's cascade"
+                      >
+                        <KeyRound className="w-3 h-3" />
+                        legacy key
+                      </span>
+                    )}
                     {customer.reseller_id && (
                       <span
                         className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30"
@@ -220,19 +348,25 @@ export function InstanceTree({ tierFilter = "all" }: { tierFilter?: string }) {
                     )}
                     <span className="ml-auto text-xs text-slate-500 whitespace-nowrap">
                       {customer.total_nodes} node{customer.total_nodes === 1 ? "" : "s"}
-                      {customer.license_key ? ` · ${customer.license_key}` : " · no bound license"}
+                      {customer.legacy && customer.license_key ? ` · ${customer.license_key}` : ""}
                     </span>
                   </div>
                   {customer.roots.length === 0 ? (
                     <p className="text-xs text-slate-500 px-2 py-1">
-                      No instances enrolled yet.
+                      No instances reported yet.
                     </p>
                   ) : (
                     <div className="space-y-0.5">
                       {customer.roots
-                        .filter((r) => matchesTier(r, tierFilter))
+                        .filter((r) => nodeVisible(r, tierFilter, needle))
                         .map((root) => (
-                          <TreeNodeRow key={root.id} node={root} depth={0} tierFilter={tierFilter} />
+                          <TreeNodeRow
+                            key={root.id}
+                            node={root}
+                            depth={0}
+                            tierFilter={tierFilter}
+                            search={needle}
+                          />
                         ))}
                     </div>
                   )}

@@ -8,7 +8,7 @@ import {
   LayoutDashboard,
   Server,
   Package,
-  Key,
+  Building2,
   Shield,
   Settings,
   Activity,
@@ -24,9 +24,9 @@ import { isActivePath } from "@/lib/derive";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Instances", href: "/instances", icon: Server },
+  { name: "Fleet", href: "/instances", icon: Server },
   { name: "Releases", href: "/releases", icon: Package },
-  { name: "Licenses", href: "/licenses", icon: Key },
+  { name: "Operators", href: "/operators", icon: Building2 },
   { name: "Security", href: "/security", icon: Shield },
 ];
 

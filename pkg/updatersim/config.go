@@ -99,7 +99,35 @@ type Config struct {
 	Instance   InstanceConfig   `yaml:"instance"`
 	Heartbeat  HeartbeatConfig  `yaml:"heartbeat"`
 	Simulation SimulationConfig `yaml:"simulation"`
+	Signing    SigningConfig    `yaml:"signing,omitempty"`
+	Relay      RelayConfig      `yaml:"relay,omitempty"`
 	Products   []ProductConfig  `yaml:"products"`
+}
+
+// SigningConfig pins the release-signing public key. When Require is true the
+// updater refuses any artifact whose release signature is missing or invalid.
+type SigningConfig struct {
+	// PublicKey is the hex-encoded ed25519 public key published by the updates
+	// server (GET /api/v1/signing-key). Pin it at provisioning time.
+	PublicKey string `yaml:"public_key,omitempty"`
+	Require   bool   `yaml:"require,omitempty"`
+}
+
+// RelayConfig turns the updater into a cascade relay: it keeps being a normal
+// updater toward its parent, and additionally serves the updater API subset
+// (heartbeat, update check, artifact download) to its own children.
+type RelayConfig struct {
+	Enabled bool `yaml:"enabled,omitempty"`
+	// Listen is the address the relay listener binds, e.g. ":8443" or
+	// "127.0.0.1:8090".
+	Listen string `yaml:"listen,omitempty"`
+	// CacheDir holds verified pull-through artifact copies.
+	CacheDir string `yaml:"cache_dir,omitempty"`
+	// MaxArtifactBytes bounds one cached artifact (default 2 GiB).
+	MaxArtifactBytes int64 `yaml:"max_artifact_bytes,omitempty"`
+	// ChildOfflineAfter marks a child offline in rollups when it has not
+	// heartbeated for this long (default 5m).
+	ChildOfflineAfter Duration `yaml:"child_offline_after,omitempty"`
 }
 
 // ServerConfig configures the Updates Server client.
@@ -128,6 +156,11 @@ type InstanceConfig struct {
 	// ParentID is the instance id of this node's parent (a siemcore for an swf,
 	// a mysoc for a siemcore). Required for siemcore/swf, forbidden for mysoc.
 	ParentID string `yaml:"parent_id,omitempty"`
+	// CustomerID identifies the end customer this node serves; it travels up
+	// the cascade so the updates server can group the fleet per customer.
+	CustomerID string `yaml:"customer_id,omitempty"`
+	// CustomerName is the human-friendly customer label.
+	CustomerName string `yaml:"customer_name,omitempty"`
 }
 
 // HeartbeatConfig controls the simulator loop.
@@ -241,6 +274,17 @@ func (c *Config) setDefaults() {
 	if c.Instance.Type == "" {
 		c.Instance.Type = "simulator"
 	}
+	if c.Relay.Enabled {
+		if c.Relay.CacheDir == "" {
+			c.Relay.CacheDir = "relay-cache"
+		}
+		if c.Relay.MaxArtifactBytes == 0 {
+			c.Relay.MaxArtifactBytes = 2 << 30 // 2 GiB
+		}
+		if c.Relay.ChildOfflineAfter.Duration == 0 {
+			c.Relay.ChildOfflineAfter.Duration = 5 * time.Minute
+		}
+	}
 	for i := range c.Products {
 		if c.Products[i].CurrentVersion == "" {
 			c.Products[i].CurrentVersion = "0.0.0"
@@ -320,6 +364,9 @@ func (c *Config) resolvePaths(configDir string) {
 	if c.Simulation.Filesystem.InstallRoot != "" && !filepath.IsAbs(c.Simulation.Filesystem.InstallRoot) {
 		c.Simulation.Filesystem.InstallRoot = filepath.Join(configDir, c.Simulation.Filesystem.InstallRoot)
 	}
+	if c.Relay.CacheDir != "" && !filepath.IsAbs(c.Relay.CacheDir) {
+		c.Relay.CacheDir = filepath.Join(configDir, c.Relay.CacheDir)
+	}
 }
 
 // Validate checks configuration that is common to all commands.
@@ -393,6 +440,18 @@ func (c *Config) Validate() error {
 		}
 		c.Instance.ProductTier = tier
 		c.Instance.ParentID = parent
+	}
+
+	if c.Relay.Enabled {
+		if strings.TrimSpace(c.Relay.Listen) == "" {
+			return fmt.Errorf("relay.listen is required when relay.enabled is true")
+		}
+		if c.Relay.MaxArtifactBytes <= 0 {
+			return fmt.Errorf("relay.max_artifact_bytes must be positive")
+		}
+	}
+	if c.Signing.Require && strings.TrimSpace(c.Signing.PublicKey) == "" {
+		return fmt.Errorf("signing.require is true but signing.public_key is not set")
 	}
 
 	seen := make(map[string]struct{}, len(c.Products))

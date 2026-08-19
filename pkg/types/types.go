@@ -4,6 +4,17 @@ import (
 	"time"
 )
 
+// Operator is a SOC operator: the entity a platform license is issued to.
+// Everything below an operator (customers, siemcore, swf) is reported by the
+// operator's platform through the update cascade, never managed here.
+type Operator struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // License represents a customer license
 type License struct {
 	ID           string        `json:"id"`
@@ -11,7 +22,9 @@ type License struct {
 	CustomerID   string        `json:"customer_id"`
 	CustomerName string        `json:"customer_name"`
 	Type         string        `json:"type"`                    // mysoc-cloud, siemcore, siemcore-lite
-	OperatorID   string        `json:"operator_id,omitempty"`   // SOC operator this license belongs to (equals customer_id on the operator's own platform license)
+	Product      string        `json:"product,omitempty"`       // tier this key authorizes (mysoc for platform keys); empty on legacy keys
+	OperatorRef  string        `json:"operator_ref,omitempty"`  // owning operator entity (operators.id)
+	OperatorID   string        `json:"operator_id,omitempty"`   // legacy free-text operator label (pre-1.8.0)
 	ResellerID   string        `json:"reseller_id,omitempty"`   // sales channel; empty for direct sales
 	ResellerName string        `json:"reseller_name,omitempty"` // human-friendly reseller label
 	Products     []string      `json:"products"`
@@ -40,6 +53,10 @@ type Instance struct {
 	InstanceType      string     `json:"instance_type"`                // OS/sub-type, e.g. swf-windows, siemcore-linux
 	ProductTier       string     `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
 	ParentInstanceID  string     `json:"parent_instance_id,omitempty"` // instance_id of the parent node (siemcore for swf, mysoc for siemcore)
+	CustomerID        string     `json:"customer_id,omitempty"`        // end customer this node serves, as reported up the cascade
+	CustomerName      string     `json:"customer_name,omitempty"`      // human-friendly customer label from the rollup
+	ReportedVia       string     `json:"reported_via,omitempty"`       // instance_id of the relay that reported this node (empty = direct heartbeat)
+	ReportedAt        *time.Time `json:"reported_at,omitempty"`        // when the covering rollup was received
 	Hostname          string     `json:"hostname"`
 	DisplayName       string     `json:"display_name,omitempty"` // Friendly name / domain (e.g., cloud.siemcore.ai)
 	LicenseID         string     `json:"license_id,omitempty"`
@@ -128,6 +145,8 @@ type Heartbeat struct {
 	InstanceType     string          `json:"instance_type"`
 	ProductTier      string          `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
 	ParentInstanceID string          `json:"parent_instance_id,omitempty"` // parent node's instance_id (self-reported)
+	CustomerID       string          `json:"customer_id,omitempty"`        // end customer this node serves
+	CustomerName     string          `json:"customer_name,omitempty"`      // human-friendly customer label
 	Hostname         string          `json:"hostname"`
 	UpdaterVersion   string          `json:"updater_version"`
 	ConfigHash       string          `json:"config_hash"`
@@ -139,6 +158,27 @@ type Heartbeat struct {
 
 	// Last update attempt (included in next heartbeat after install)
 	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
+
+	// Children carries the cascaded fleet rollup: every node that heartbeats
+	// to this updater (recursively). Only relays populate it.
+	Children []ChildReport `json:"children,omitempty"`
+}
+
+// ChildReport is one node in a relay's fleet rollup. Parentage is implied by
+// nesting: each entry's parent is the node whose Children list contains it.
+type ChildReport struct {
+	InstanceID        string          `json:"instance_id"`
+	InstanceType      string          `json:"instance_type,omitempty"`
+	ProductTier       string          `json:"product_tier,omitempty"`
+	CustomerID        string          `json:"customer_id,omitempty"`
+	CustomerName      string          `json:"customer_name,omitempty"`
+	Hostname          string          `json:"hostname,omitempty"`
+	UpdaterVersion    string          `json:"updater_version,omitempty"`
+	Products          []ProductStatus `json:"products,omitempty"`
+	Status            string          `json:"status,omitempty"` // online, offline (relay's view)
+	LastSeen          time.Time       `json:"last_seen"`
+	LastUpdateAttempt *UpdateAttempt  `json:"last_update_attempt,omitempty"`
+	Children          []ChildReport   `json:"children,omitempty"`
 }
 
 // LicenseStatus reports license state
@@ -254,6 +294,7 @@ type ReleaseInfo struct {
 	Channel         string    `json:"channel"`
 	DownloadURL     string    `json:"download_url"`
 	Checksum        string    `json:"checksum"`
+	Signature       string    `json:"signature,omitempty"` // base64 ed25519 signature over the release signing message
 	Size            int64     `json:"size"`
 	ReleaseNotes    string    `json:"release_notes,omitempty"`
 	ReleasedAt      time.Time `json:"released_at"`

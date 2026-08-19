@@ -2,6 +2,7 @@ package updatersim
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -9,9 +10,11 @@ import (
 	"log/slog"
 	"math/rand"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
 
@@ -19,14 +22,23 @@ var ErrCycleInProgress = errors.New("simulator cycle already in progress")
 
 // Simulator runs safe updater protocol cycles.
 type Simulator struct {
-	config   *Config
-	client   *Client
-	executor Executor
-	logger   *slog.Logger
-	state    *State
-	started  time.Time
-	cycleMu  sync.Mutex
-	random   *rand.Rand
+	config    *Config
+	client    *Client
+	executor  Executor
+	logger    *slog.Logger
+	state     *State
+	started   time.Time
+	cycleMu   sync.Mutex
+	random    *rand.Rand
+	publicKey ed25519.PublicKey // release-signing key; nil disables verification
+
+	// childrenFn supplies the cascade rollup for relay-mode heartbeats.
+	childrenFn func() []platformtypes.ChildReport
+}
+
+// SetChildrenProvider wires the relay's rollup into this node's heartbeats.
+func (s *Simulator) SetChildrenProvider(provider func() []platformtypes.ChildReport) {
+	s.childrenFn = provider
 }
 
 // NewSimulator loads durable state and constructs a simulator.
@@ -58,14 +70,27 @@ func NewSimulator(
 	if err != nil {
 		return nil, err
 	}
+	if state.RelayToken != "" {
+		client.SetRelayToken(state.RelayToken)
+	}
+
+	var publicKey ed25519.PublicKey
+	if pubHex := strings.TrimSpace(cfg.Signing.PublicKey); pubHex != "" {
+		publicKey, err = signing.ParsePublicKeyHex(pubHex)
+		if err != nil {
+			return nil, fmt.Errorf("signing.public_key: %w", err)
+		}
+	}
+
 	return &Simulator{
-		config:   cfg,
-		client:   client,
-		executor: executor,
-		logger:   logger,
-		state:    state,
-		started:  time.Now(),
-		random:   rand.New(rand.NewSource(time.Now().UnixNano())),
+		config:    cfg,
+		client:    client,
+		executor:  executor,
+		logger:    logger,
+		state:     state,
+		started:   time.Now(),
+		random:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		publicKey: publicKey,
 	}, nil
 }
 
@@ -74,6 +99,15 @@ func (s *Simulator) SendHeartbeat(ctx context.Context) (*HeartbeatResponse, erro
 	response, err := s.client.SendHeartbeat(ctx, s.buildHeartbeat())
 	if err != nil {
 		return nil, fmt.Errorf("send heartbeat: %w", err)
+	}
+	if response.RelayToken != "" && response.RelayToken != s.state.RelayToken {
+		// A relay parent issued (or rotated) this node's token; persist it so
+		// restarts keep the same identity binding.
+		s.state.RelayToken = response.RelayToken
+		s.client.SetRelayToken(response.RelayToken)
+		if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
+			s.logger.Warn("failed to persist relay token", "error", err)
+		}
 	}
 	s.logger.Info(
 		"heartbeat accepted",
@@ -233,6 +267,17 @@ func (s *Simulator) processOffer(
 		return fmt.Errorf("update %s %s has no download URL", offer.Product, offer.LatestVersion)
 	}
 
+	// Verify the origin release signature before touching the artifact. In the
+	// cascade this is what prevents any intermediate hop from substituting a
+	// payload: the signature is minted only by the updates server.
+	if s.publicKey != nil {
+		if err := signing.Verify(s.publicKey, offer.Product, offer.LatestVersion, offer.Checksum, offer.Signature); err != nil {
+			return fmt.Errorf("release signature for %s %s: %w", offer.Product, offer.LatestVersion, err)
+		}
+	} else if s.config.Signing.Require {
+		return fmt.Errorf("signing.require is set but signing.public_key is not configured")
+	}
+
 	result, err := s.client.DownloadArtifact(
 		ctx,
 		offer.DownloadURL,
@@ -353,11 +398,18 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 		})
 	}
 
+	var children []platformtypes.ChildReport
+	if s.childrenFn != nil {
+		children = s.childrenFn()
+	}
+
 	return platformtypes.Heartbeat{
 		InstanceID:       s.config.Instance.ID,
 		InstanceType:     s.config.Instance.Type,
 		ProductTier:      s.config.Instance.ProductTier,
 		ParentInstanceID: s.config.Instance.ParentID,
+		CustomerID:       s.config.Instance.CustomerID,
+		CustomerName:     s.config.Instance.CustomerName,
 		Hostname:         s.config.Instance.Hostname,
 		UpdaterVersion:   s.config.Instance.UpdaterVersion,
 		ConfigHash:       s.configHash(),
@@ -373,6 +425,7 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 		},
 		Timestamp:         time.Now().UTC(),
 		LastUpdateAttempt: s.state.LastUpdateAttempt,
+		Children:          children,
 	}
 }
 

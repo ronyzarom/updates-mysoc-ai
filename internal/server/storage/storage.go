@@ -28,6 +28,16 @@ type LocalStorage struct {
 	basePath string
 }
 
+// sanitizeSegment confines a caller-supplied path segment to a single
+// directory level, preventing traversal out of the artifact root.
+func sanitizeSegment(segment string) string {
+	segment = filepath.Base(filepath.Clean(segment))
+	if segment == "." || segment == ".." || segment == string(filepath.Separator) {
+		return "_"
+	}
+	return segment
+}
+
 // New creates a new storage instance based on configuration
 func New(cfg config.StorageConfig) (Storage, error) {
 	switch cfg.Type {
@@ -52,6 +62,7 @@ func NewLocalStorage(basePath string) (*LocalStorage, error) {
 
 // Save stores an artifact
 func (s *LocalStorage) Save(product, version, filename string, reader io.Reader) (string, error) {
+	product, version, filename = sanitizeSegment(product), sanitizeSegment(version), sanitizeSegment(filename)
 	dir := filepath.Join(s.basePath, product, version)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
@@ -96,6 +107,5 @@ func (s *LocalStorage) Exists(product, version, filename string) bool {
 
 // GetPath returns the full path to an artifact
 func (s *LocalStorage) GetPath(product, version, filename string) string {
-	return filepath.Join(s.basePath, product, version, filename)
+	return filepath.Join(s.basePath, sanitizeSegment(product), sanitizeSegment(version), sanitizeSegment(filename))
 }
-

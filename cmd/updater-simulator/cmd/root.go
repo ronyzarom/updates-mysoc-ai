@@ -56,6 +56,7 @@ func newRootCommand(opts *options) *cobra.Command {
 	root.AddCommand(newOnceCommand(opts))
 	root.AddCommand(newReconcileCommand(opts))
 	root.AddCommand(newRunCommand(opts))
+	root.AddCommand(newRelayCommand(opts))
 	return root
 }
 
@@ -322,6 +323,83 @@ func newRunCommand(opts *options) *cobra.Command {
 					log.Warn("drain timeout exceeded; forcing shutdown", "drain_timeout", drain.String())
 					return nil
 				}
+			}
+		},
+	}
+	addModeFlags(command, &download, &simulate)
+	return command
+}
+
+func newRelayCommand(opts *options) *cobra.Command {
+	var download bool
+	var simulate bool
+	command := &cobra.Command{
+		Use:   "relay",
+		Short: "Run as a cascade relay: normal updater plus a child-facing listener",
+		Long: `Relay mode keeps this node a normal updater toward its parent (heartbeats,
+update checks, installs) and additionally serves the updater API subset to its
+own children: their heartbeats are aggregated into this node's upward rollup,
+their update checks are forwarded with this node's credential, and artifacts
+are served from a signature-verified pull-through cache. Requires
+relay.enabled: true (and relay.listen) in the configuration.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			simulator, cfg, err := loadSimulator(opts)
+			if err != nil {
+				return err
+			}
+			if !cfg.Relay.Enabled {
+				return fmt.Errorf("relay.enabled must be true in %s", opts.configPath)
+			}
+			mode, err := selectedMode(cfg.Simulation.Mode, download, simulate)
+			if err != nil {
+				return err
+			}
+
+			upstream, err := updatersim.NewClient(cfg.Server)
+			if err != nil {
+				return err
+			}
+			relay, err := updatersim.NewRelay(cfg, upstream, logger(opts))
+			if err != nil {
+				return err
+			}
+			simulator.SetChildrenProvider(relay.ChildrenReport)
+
+			ctx, stop := signal.NotifyContext(
+				context.Background(),
+				os.Interrupt,
+				syscall.SIGTERM,
+			)
+			defer stop()
+			log := logger(opts)
+			log.Info(
+				"relay updater started",
+				"instance_id", cfg.Instance.ID,
+				"tier", cfg.Instance.ProductTier,
+				"listen", cfg.Relay.Listen,
+				"parent", cfg.Server.URL,
+				"mode", mode,
+			)
+
+			serveErr := make(chan error, 1)
+			go func() { serveErr <- relay.Serve(ctx) }()
+			runErr := make(chan error, 1)
+			go func() { runErr <- simulator.Run(ctx, mode) }()
+
+			select {
+			case err := <-serveErr:
+				stop()
+				<-runErr
+				return err
+			case err := <-runErr:
+				stop()
+				<-serveErr
+				return err
+			case <-ctx.Done():
+				<-serveErr
+				<-runErr
+				return nil
 			}
 		},
 	}

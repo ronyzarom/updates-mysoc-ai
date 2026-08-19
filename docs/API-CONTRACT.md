@@ -14,6 +14,7 @@ implemented, that is called out explicitly in
 | Version | Date       | Notes                                                        |
 | ------- | ---------- | ------------------------------------------------------------ |
 | 1.0.0   | 2026-08-12 | First authoritative contract, generated from server 1.3.0.1. |
+| 1.8.0   | 2026-08-19 | Cascade distribution: mandatory `X-License-Key` on agent endpoints, ed25519 release signing + `GET /api/v1/signing-key`, operator admin API, heartbeat children rollup, relay protocol. See Section 9. |
 
 ---
 
@@ -733,11 +734,11 @@ the SWF team's request.
 | Artifact download                       | Implemented   | Public; `X-Checksum-SHA256` header + `sha256` in check response.                               |
 | SHA-256 integrity                       | Implemented   | Checksum published and verifiable; updaters MUST verify before applying.                       |
 | Success/failure/rollback reporting      | Partial       | `updates/{product}/report` **acknowledges** but does not yet persist reports for analytics.    |
-| Device auth on heartbeat/check          | Partial       | `X-License-Key` is a **soft** association; endpoints are not rejected when it is absent/invalid.|
+| Device auth on heartbeat/check          | Implemented (1.8.0) | `X-License-Key` is **required** and validated (active + unexpired) on heartbeat, update check/report, and downloads. Product-scoped keys also constrain the claimed tier. |
 | Source IP allowlist (channel firewall)  | Implemented   | Allowlist-only, admin-managed per-instance/global IP/CIDR entries; env-gated by `IP_ALLOWLIST_ENFORCED` (default off). Rejects unlisted sources with `403`. See 5.10. |
 | Instance API key validation             | Target        | `instanceAuth` currently only checks the key is non-empty (no DB validation).                  |
-| Cryptographic release signatures        | Target        | `Release.signature` and `manifest` exist; server does **not** verify signatures. Integrity is checksum-only. |
-| Signing keys + key rotation             | Target        | No trusted-key set or rotation mechanism yet.                                                   |
+| Cryptographic release signatures        | Implemented (1.8.0) | Releases are ed25519-signed at publish when `RELEASE_SIGNING_SEED` is set; signature is returned in check responses and the `X-Signature-Ed25519` download header. Updaters with `signing.public_key` configured verify before install. |
+| Signing keys + key rotation             | Partial (1.8.0) | Single active key published at `GET /api/v1/signing-key`. Rotation = new seed + re-publish; no multi-key trust set yet. |
 | Grant claiming / lease / idempotency    | Target        | No explicit grant object; the offer is stateless per check. Idempotency is by `instance_id` + version. |
 | Download resume (range requests)        | Target        | Full-body download only; no `Range`/`Content-Range` support.                                    |
 | Maintenance windows / approval gates    | Partial       | Rollout via channel + `target_groups` + per-instance `auto_update_enabled`/`update_group`; no time-window fields. |
@@ -746,9 +747,107 @@ the SWF team's request.
 
 ---
 
-## 9. Related Documents
+## 9. Cascade Distribution (added in 1.8.0)
+
+Starting with 1.8.0 the fleet is served through a **cascade of updaters**
+instead of every node talking to `updates.mysoc.ai` directly:
+
+```
+updates.mysoc.ai  ←  mysoc updater (relay)  ←  siemcore updater (relay)  ←  swf updater (leaf)
+```
+
+Only mysoc-tier updaters connect to the updates server. Each relay exposes
+the same four data-plane endpoints to its children, so a child updater does
+not know or care whether its parent is the central server or another relay.
+
+### 9.1 Agent authentication (breaking change)
+
+All agent data-plane endpoints now **require** a valid `X-License-Key`:
+
+- `POST /api/v1/heartbeat`
+- `POST /api/v1/updates/{product}/check`
+- `POST /api/v1/updates/{product}/report`
+- `GET  /api/v1/releases/{product}/{version}/download` and the root direct
+  download route
+
+Missing, unknown, deactivated, or expired keys are rejected with `401`.
+New-style keys carry a `product` scope; a key scoped to `mysoc` covers the
+whole cascade beneath it (siemcore, swf). Heartbeats claiming a tier the key
+does not authorize are rejected with `403`.
+
+### 9.2 Operators and platform keys — `/api/v1/admin/operators`
+
+An **operator** is a SOC operator running a mysoc platform. Each operator
+gets exactly one platform license key; that single key is the credential the
+operator's mysoc updater uses against `updates.mysoc.ai`.
+
+| Method | Path                                  | Auth        | Purpose |
+| ------ | ------------------------------------- | ----------- | ------- |
+| GET    | `/api/v1/admin/operators`             | admin       | List operators with key metadata and fleet counts. |
+| POST   | `/api/v1/admin/operators`             | admin (JWT) | Create operator; issues the platform key (returned **once**). |
+| POST   | `/api/v1/admin/operators/{id}/rotate-key` | admin (JWT) | Revoke the current key and issue a new one (returned once). |
+| PUT    | `/api/v1/admin/operators/{id}`        | admin (JWT) | Rename or activate/deactivate. Deactivating cuts off the operator's whole cascade. |
+
+### 9.3 Release signing — `GET /api/v1/signing-key`
+
+- When `RELEASE_SIGNING_SEED` (hex ed25519 seed) is configured, every
+  published release is signed over `"mysoc-release-v1\n{product}\n{version}\n{sha256}"`.
+- `GET /api/v1/signing-key` (public) returns `{ "algorithm": "ed25519", "public_key": "<hex>" }`.
+- The signature travels in `ReleaseInfo.signature` (base64) in check
+  responses and in the `X-Signature-Ed25519` response header on downloads.
+- Updaters configured with `signing.public_key` MUST verify the signature
+  (and the SHA-256 checksum) before applying an update, at **every** hop.
+
+### 9.4 Heartbeat rollup (`children`)
+
+A relay's own heartbeat MAY include a `children` array of `ChildReport`
+objects — the telemetry of every node it serves, nested recursively:
+
+```json
+{
+  "instance_id": "mysoc-op1",
+  "product_tier": "mysoc",
+  "children": [
+    {
+      "instance_id": "siemcore-a", "product_tier": "siemcore",
+      "customer_id": "acme", "customer_name": "Acme Corp",
+      "status": "online", "last_seen": "2026-08-19T12:00:00Z",
+      "children": [
+        { "instance_id": "swf-pc7", "product_tier": "swf", "customer_id": "acme",
+          "status": "online", "last_seen": "2026-08-19T11:59:30Z" }
+      ]
+    }
+  ]
+}
+```
+
+The server upserts each reported node into `instances` with
+`reported_via` = the relay's instance id and `reported_at` = rollup receipt
+time. A direct heartbeat from a node always wins over an older rollup entry.
+Rollups are capped at 2000 nodes per heartbeat.
+
+### 9.5 Relay child protocol
+
+A relay (updater in relay mode) serves its children on:
+
+| Method | Path | Notes |
+| ------ | ---- | ----- |
+| GET    | `/health` | Liveness. |
+| POST   | `/api/v1/heartbeat` | Enrolls/refreshes a child. First contact returns a `relay_token`; the child MUST persist it and send it as `X-Relay-Token` on subsequent requests. |
+| POST   | `/api/v1/updates/{product}/check` | Forwarded upstream; download URLs are rewritten to the relay; `signature` passes through unchanged. |
+| POST   | `/api/v1/updates/{product}/report` | Recorded into the relay's rollup. |
+| GET    | `/api/v1/releases/{product}/{version}/download` | Served from the relay's pull-through cache; artifacts are checksum- and signature-verified before being cached. |
+
+Children authenticate to a relay with their credential in `X-License-Key`
+(siemcore: instance id-based credential; swf: customer credential) plus the
+issued `X-Relay-Token`.
+
+---
+
+## 10. Related Documents
 
 - `docs/UPDATER-GUIDELINES.md` — operating model, safety requirements, reconcile pipeline.
+- `docs/RELAY-DEPLOYMENT.md` — deploying updaters in relay mode (mysoc/siemcore tiers).
 - `docs/UPDATER-SIMULATOR.md` — reference updater skeleton and E2E harness.
 - `docs/MYSOC_ADMIN_GUIDE.md` — server operations and admin runbooks.
 - `docs/SIEMCORE_DEPLOYMENT_GUIDE.md` — SiemCore-specific deployment and rollout.

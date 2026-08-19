@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Server, RefreshCw, Clock, Cpu, HardDrive, LayoutGrid, ListTree } from "lucide-react";
+import { Server, RefreshCw, Clock, Cpu, HardDrive, LayoutGrid, ListTree, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { InstanceTree, TierBadge } from "@/components/InstanceTree";
@@ -18,14 +18,19 @@ const TIER_FILTERS = [
 export default function InstancesPage() {
   const [view, setView] = useState<"tree" | "cards">("tree");
   const [tierFilter, setTierFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
   const { data: instances, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.getInstances(),
   });
 
+  const needle = search.trim().toLowerCase();
   const visibleInstances = (instances || []).filter(
-    (i) => tierFilter === "all" || (i.product_tier || "").toLowerCase() === tierFilter
+    (i) =>
+      (tierFilter === "all" || (i.product_tier || "").toLowerCase() === tierFilter) &&
+      (needle === "" ||
+        `${i.instance_id} ${i.hostname} ${i.display_name || ""}`.toLowerCase().includes(needle))
   );
 
   const formatBytes = (bytes: number) => {
@@ -41,12 +46,23 @@ export default function InstancesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Instances</h1>
+          <h1 className="text-3xl font-bold text-white">Fleet</h1>
           <p className="text-slate-400 mt-1">
-            Fleet hierarchy: MySoc &rsaquo; SiemCore &rsaquo; SWF
+            The update cascade per operator: MySoc relays &rsaquo; SiemCore relays &rsaquo; SWF agents
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search instance, host, customer…"
+              className="input py-2 pl-9 w-64"
+              aria-label="Search fleet"
+            />
+          </div>
           <select
             value={tierFilter}
             onChange={(e) => setTierFilter(e.target.value)}
@@ -89,7 +105,7 @@ export default function InstancesPage() {
       </div>
 
       {view === "tree" ? (
-        <InstanceTree tierFilter={tierFilter} />
+        <InstanceTree tierFilter={tierFilter} search={search} />
       ) : isLoading ? (
         <div className="text-slate-400">Loading instances...</div>
       ) : isError ? (

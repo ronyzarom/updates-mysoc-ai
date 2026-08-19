@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle, Search } from "lucide-react";
+import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle, Search, ShieldCheck, ShieldAlert } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useRef } from "react";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui";
@@ -16,6 +16,16 @@ interface UploadFormData {
   target_groups: string[];
   artifact: File | null;
 }
+
+// Canonical cascade products. Every release flows updates server -> mysoc
+// relay -> siemcore relay -> swf; picking the right product places it at the
+// right level of the cascade.
+const CASCADE_PRODUCTS = ["mysoc", "siemcore", "swf"] as const;
+const CUSTOM_PRODUCT = "__custom__";
+
+// Safe rollout default: new releases start in alpha; promote to further
+// groups explicitly after validation.
+const DEFAULT_TARGET_GROUPS = ["alpha"];
 
 export default function ReleasesPage() {
   const queryClient = useQueryClient();
@@ -34,9 +44,10 @@ export default function ReleasesPage() {
     version: "",
     channel: "stable",
     release_notes: "",
-    target_groups: ["alpha", "beta", "stable", "production"],
+    target_groups: [...DEFAULT_TARGET_GROUPS],
     artifact: null,
   });
+  const [productChoice, setProductChoice] = useState<string>("");
   const [uploadError, setUploadError] = useState("");
 
   const uploadMutation = useMutation({
@@ -59,9 +70,10 @@ export default function ReleasesPage() {
         version: "",
         channel: "stable",
         release_notes: "",
-        target_groups: ["alpha", "beta", "stable", "production"],
+        target_groups: [...DEFAULT_TARGET_GROUPS],
         artifact: null,
       });
+      setProductChoice("");
       setUploadError("");
     },
     onError: (error: Error) => {
@@ -196,7 +208,8 @@ export default function ReleasesPage() {
         <div>
           <h1 className="text-3xl font-bold text-white">Releases</h1>
           <p className="text-slate-400 mt-1">
-            Manage product releases and versions
+            Dev uploads land here, get signed, and cascade out: mysoc relays
+            pull for their fleet, siemcore relays serve swf
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -258,6 +271,7 @@ export default function ReleasesPage() {
                         <th>Version</th>
                         <th>Channel</th>
                         <th>Target Groups</th>
+                        <th>Integrity</th>
                         <th>Size</th>
                         <th>Released</th>
                         <th>Notes</th>
@@ -306,6 +320,25 @@ export default function ReleasesPage() {
                                 </span>
                               ))}
                             </div>
+                          </td>
+                          <td>
+                            {release.signature ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400"
+                                title="ed25519-signed at publish; every cascade hop verifies before install"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                signed
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400"
+                                title="Published before signing was enabled; updaters with signing.require will reject it"
+                              >
+                                <ShieldAlert className="w-3.5 h-3.5" />
+                                unsigned
+                              </span>
+                            )}
                           </td>
                           <td className="text-slate-300">
                             {formatBytes(release.artifact_size)}
@@ -421,15 +454,43 @@ export default function ReleasesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Product Name *
+                  Product *
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g., siemcore, mysoc"
-                  value={uploadForm.product}
-                  onChange={(e) => setUploadForm({ ...uploadForm, product: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
+                <select
+                  value={productChoice}
+                  onChange={(e) => {
+                    const choice = e.target.value;
+                    setProductChoice(choice);
+                    setUploadForm({
+                      ...uploadForm,
+                      product: choice === CUSTOM_PRODUCT ? "" : choice,
+                    });
+                  }}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  <option value="" disabled>
+                    Select a product…
+                  </option>
+                  {CASCADE_PRODUCTS.map((product) => (
+                    <option key={product} value={product}>
+                      {product}
+                    </option>
+                  ))}
+                  <option value={CUSTOM_PRODUCT}>Other (custom name)</option>
+                </select>
+                {productChoice === CUSTOM_PRODUCT && (
+                  <input
+                    type="text"
+                    placeholder="custom product name, e.g. siemcore-collector"
+                    value={uploadForm.product}
+                    onChange={(e) => setUploadForm({ ...uploadForm, product: e.target.value })}
+                    className="mt-2 w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                )}
+                <p className="text-xs text-slate-500 mt-1">
+                  mysoc updates the platform relays, siemcore and swf cascade
+                  down through them
+                </p>
               </div>
 
               <div>
@@ -492,7 +553,8 @@ export default function ReleasesPage() {
                   ))}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Select which instance groups will receive this release
+                  Safe rollout: releases start in alpha; promote to beta,
+                  stable, and production after validation
                 </p>
               </div>
 

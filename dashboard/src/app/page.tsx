@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ErrorState } from "@/components/ui";
-import { isLicenseActive, sortInstancesByHeartbeat } from "@/lib/derive";
+import { sortInstancesByHeartbeat } from "@/lib/derive";
 
 export default function DashboardPage() {
   const {
@@ -34,9 +34,9 @@ export default function DashboardPage() {
     retry: false,
   });
 
-  const { data: licenses } = useQuery({
-    queryKey: ["licenses"],
-    queryFn: () => api.getLicenses(),
+  const { data: operators } = useQuery({
+    queryKey: ["operators"],
+    queryFn: () => api.getOperators(),
     retry: false,
   });
 
@@ -44,15 +44,14 @@ export default function DashboardPage() {
   const offlineCount = instances?.filter((i) => i.status === "offline").length || 0;
   const degradedCount = instances?.filter((i) => i.status === "degraded").length || 0;
 
-  const activeLicenses =
-    licenses?.filter((l) => isLicenseActive(l.expires_at, l.is_active)).length || 0;
+  const activeOperators = operators?.filter((o) => o.is_active).length || 0;
 
   // Most recently active instances first.
   const recentInstances = sortInstancesByHeartbeat(instances).slice(0, 5);
 
   const stats = [
     {
-      name: "Total Instances",
+      name: "Fleet Nodes",
       value: instances?.length || 0,
       icon: Server,
       color: "text-cyan-400",
@@ -66,8 +65,8 @@ export default function DashboardPage() {
       bgColor: "bg-violet-500/20",
     },
     {
-      name: "Active Licenses",
-      value: activeLicenses,
+      name: "Active Operators",
+      value: activeOperators,
       icon: Key,
       color: "text-amber-400",
       bgColor: "bg-amber-500/20",
@@ -87,7 +86,7 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-3xl font-bold text-white">Dashboard</h1>
         <p className="text-slate-400 mt-1">
-          Fleet overview and system status
+          Cascade overview: operators, their fleets, and update health
         </p>
       </div>
 

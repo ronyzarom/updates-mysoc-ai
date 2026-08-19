@@ -934,7 +934,49 @@ Deleting a release is not a rollback mechanism.
 
 ---
 
-## 14. Current Implementation Status
+## 14. Cascaded Distribution (1.8.0)
+
+As of 1.8.0 the distribution and monitoring path is a **cascade of
+updaters**. Product code in mysoc, siemcore, and swf does not change; only
+the updaters participate.
+
+```
+updates.mysoc.ai
+   ↑ heartbeat (platform key)          — mysoc updater, RELAY mode
+        ↑ heartbeat (instance cred)    — siemcore updater, RELAY mode
+             ↑ heartbeat (customer cred) — swf updater, LEAF mode
+```
+
+Rules:
+
+1. **Only mysoc-tier updaters** talk to `updates.mysoc.ai`, authenticated by
+   the operator's single platform key. siemcore updaters heartbeat to their
+   mysoc relay; swf updaters heartbeat to their siemcore relay.
+2. A relay is the same updater binary with `relay` enabled. It exposes the
+   same four data-plane endpoints it consumes (heartbeat, check, report,
+   download), so client logic is identical at every level.
+3. Relays keep a **pull-through artifact cache**. Before serving an artifact
+   to a child, the relay MUST have verified its SHA-256 checksum and (when
+   signing is enabled) its ed25519 signature against the published public
+   key. Verification happens at every hop; a compromised relay cannot forge
+   a release.
+4. On first contact a relay issues the child a `relay_token`. The child MUST
+   persist it and present it as `X-Relay-Token` thereafter. Tokens are
+   per-child, revocable by the relay operator.
+5. Each relay includes a `children` rollup in its own upward heartbeat, so
+   the updates server sees the whole fleet without any node below mysoc
+   connecting directly. Direct heartbeats always take precedence over stale
+   rollup entries.
+6. Offers cascade downward: the relay checks upstream on behalf of a child,
+   rewrites download URLs to itself, and passes the signature through
+   untouched.
+
+See `docs/RELAY-DEPLOYMENT.md` for how to run a relay and
+`docs/API-CONTRACT.md` Section 9 for the wire format.
+
+---
+
+## 15. Current Implementation Status
 
 The repository currently provides:
 
@@ -955,10 +997,16 @@ telemetry. All stages delegate to a `ReconcilingExecutor` seam that defaults to 
 no-op so nothing on the host is changed. Product teams (SiemCore, SWF) implement
 that seam to make the model real.
 
+As of 1.8.0 the repository additionally provides: mandatory license-key
+enforcement on all agent data-plane endpoints, ed25519 release signing with a
+published public key, an operators registry with single-platform-key
+issue/rotate/deactivate, heartbeat children rollups, and a relay mode in the
+updater simulator (child listener, verified pull-through cache, relay
+tokens).
+
 The following target requirements are not complete:
 
 - Company-scoped tenant authorization throughout the API
-- Enforcement of per-device credentials on heartbeat and update delivery
 - Heartbeat response consumption by the bundled updater
 - Idempotent device grants and cluster leases
 - Agent-side checksum and signature enforcement in the bundled Linux updater
@@ -984,9 +1032,10 @@ not as evidence of cluster or cross-platform workstation support.
 
 ---
 
-## 15. Related Documents
+## 16. Related Documents
 
 - [Project README](../README.md)
+- [Relay Deployment Guide](RELAY-DEPLOYMENT.md)
 - [Updater Simulator](UPDATER-SIMULATOR.md)
 - [SiemCore Deployment Guide](SIEMCORE_DEPLOYMENT_GUIDE.md)
 - [MySoc Admin Guide](MYSOC_ADMIN_GUIDE.md)

@@ -41,12 +41,14 @@ const (
 		api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, 
 		update_group, last_ip_address, last_ip_seen_at, last_update_from_version, 
 		last_update_target_version, last_update_success, last_update_error, last_update_at,
-		product_tier, parent_instance_id, created_at, updated_at`
+		product_tier, parent_instance_id, customer_id, customer_name, reported_via, reported_at,
+		created_at, updated_at`
 
 	// selectInstanceListCols excludes last_heartbeat_data and update details for lighter list queries
 	selectInstanceListCols = `id, instance_id, instance_type, hostname, display_name, license_id, 
 		api_key_hash, last_heartbeat, status, auto_update_enabled, update_group, 
-		last_ip_address, product_tier, parent_instance_id, created_at, updated_at`
+		last_ip_address, product_tier, parent_instance_id, customer_id, customer_name,
+		reported_via, reported_at, created_at, updated_at`
 )
 
 // InstanceRepository handles instance database operations
@@ -68,6 +70,7 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 	var lastIPAddress, lastUpdateFromVersion, lastUpdateTargetVersion, lastUpdateError *string
 	var lastUpdateSuccess *bool
 	var productTier, parentInstanceID *string
+	var customerID, customerName, reportedVia *string
 
 	err := row.Scan(
 		&instance.ID, &instance.InstanceID, &instance.InstanceType, &instance.Hostname, &displayName,
@@ -75,7 +78,8 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 		&instance.Status, &autoUpdateEnabled, &updateGroup,
 		&lastIPAddress, &instance.LastIPSeenAt, &lastUpdateFromVersion,
 		&lastUpdateTargetVersion, &lastUpdateSuccess, &lastUpdateError, &instance.LastUpdateAt,
-		&productTier, &parentInstanceID, &instance.CreatedAt, &instance.UpdatedAt,
+		&productTier, &parentInstanceID, &customerID, &customerName, &reportedVia, &instance.ReportedAt,
+		&instance.CreatedAt, &instance.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -93,6 +97,15 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 	}
 	if parentInstanceID != nil {
 		instance.ParentInstanceID = *parentInstanceID
+	}
+	if customerID != nil {
+		instance.CustomerID = *customerID
+	}
+	if customerName != nil {
+		instance.CustomerName = *customerName
+	}
+	if reportedVia != nil {
+		instance.ReportedVia = *reportedVia
 	}
 	if lastIPAddress != nil {
 		instance.LastIPAddress = *lastIPAddress
@@ -138,12 +151,14 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 	var licenseID, displayName, updateGroup, lastIPAddress *string
 	var autoUpdateEnabled *bool
 	var productTier, parentInstanceID *string
+	var customerID, customerName, reportedVia *string
 
 	err := row.Scan(
 		&instance.ID, &instance.InstanceID, &instance.InstanceType, &instance.Hostname, &displayName,
 		&licenseID, &instance.APIKeyHash, &instance.LastHeartbeat,
 		&instance.Status, &autoUpdateEnabled, &updateGroup,
-		&lastIPAddress, &productTier, &parentInstanceID, &instance.CreatedAt, &instance.UpdatedAt,
+		&lastIPAddress, &productTier, &parentInstanceID, &customerID, &customerName,
+		&reportedVia, &instance.ReportedAt, &instance.CreatedAt, &instance.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -161,6 +176,15 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 	}
 	if parentInstanceID != nil {
 		instance.ParentInstanceID = *parentInstanceID
+	}
+	if customerID != nil {
+		instance.CustomerID = *customerID
+	}
+	if customerName != nil {
+		instance.CustomerName = *customerName
+	}
+	if reportedVia != nil {
+		instance.ReportedVia = *reportedVia
 	}
 	if lastIPAddress != nil {
 		instance.LastIPAddress = *lastIPAddress
@@ -252,7 +276,7 @@ func (r *InstanceRepository) GetByAPIKeyHash(ctx context.Context, apiKeyHash str
 // List retrieves all instances
 func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error) {
 	rows, err := r.db.Pool.Query(ctx, `
-		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, update_group, product_tier, parent_instance_id, created_at, updated_at
+		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, update_group, product_tier, parent_instance_id, customer_id, customer_name, reported_via, reported_at, created_at, updated_at
 		FROM instances
 		ORDER BY created_at DESC
 	`)
@@ -270,11 +294,13 @@ func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error)
 		var autoUpdateEnabled *bool
 		var updateGroup *string
 		var productTier, parentInstanceID *string
+		var customerID, customerName, reportedVia *string
 
 		err := rows.Scan(
 			&instance.ID, &instance.InstanceID, &instance.InstanceType, &instance.Hostname, &displayName,
 			&licenseID, &instance.APIKeyHash, &instance.LastHeartbeat, &lastHeartbeatData,
 			&instance.Status, &autoUpdateEnabled, &updateGroup, &productTier, &parentInstanceID,
+			&customerID, &customerName, &reportedVia, &instance.ReportedAt,
 			&instance.CreatedAt, &instance.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan instance: %w", err)
@@ -291,6 +317,15 @@ func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error)
 		}
 		if parentInstanceID != nil {
 			instance.ParentInstanceID = *parentInstanceID
+		}
+		if customerID != nil {
+			instance.CustomerID = *customerID
+		}
+		if customerName != nil {
+			instance.CustomerName = *customerName
+		}
+		if reportedVia != nil {
+			instance.ReportedVia = *reportedVia
 		}
 		if autoUpdateEnabled != nil {
 			instance.AutoUpdateEnabled = *autoUpdateEnabled
@@ -457,20 +492,26 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 
 	// Self-reported hierarchy: store NULL when the agent omits a value so an
 	// existing tier/parent is preserved across heartbeats (COALESCE below).
-	var productTierPtr, parentInstanceIDPtr *string
+	var productTierPtr, parentInstanceIDPtr, customerIDPtr, customerNamePtr *string
 	if tier := heartbeat.ProductTier; tier != "" {
 		productTierPtr = &tier
 	}
 	if parent := heartbeat.ParentInstanceID; parent != "" {
 		parentInstanceIDPtr = &parent
 	}
+	if customer := heartbeat.CustomerID; customer != "" {
+		customerIDPtr = &customer
+	}
+	if customerName := heartbeat.CustomerName; customerName != "" {
+		customerNamePtr = &customerName
+	}
 
 	// Base UPSERT query with IP tracking
 	query := `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash, 
 		                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at, 
-		                       product_tier, parent_instance_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $9, $9)
+		                       product_tier, parent_instance_id, customer_id, customer_name, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $9, $9)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			hostname = EXCLUDED.hostname,
 			license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
@@ -481,9 +522,13 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			last_ip_seen_at = EXCLUDED.last_ip_seen_at,
 			product_tier = COALESCE(EXCLUDED.product_tier, instances.product_tier),
 			parent_instance_id = COALESCE(EXCLUDED.parent_instance_id, instances.parent_instance_id),
+			customer_id = COALESCE(EXCLUDED.customer_id, instances.customer_id),
+			customer_name = COALESCE(EXCLUDED.customer_name, instances.customer_name),
+			reported_via = NULL,
+			reported_at = NULL,
 			updated_at = EXCLUDED.updated_at
 	`
-	args := []interface{}{id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr}
+	args := []interface{}{id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr, customerIDPtr, customerNamePtr}
 
 	// If heartbeat contains update attempt, include those columns
 	if heartbeat.LastUpdateAttempt != nil {
@@ -492,8 +537,9 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash, 
 			                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at,
 			                       last_update_from_version, last_update_target_version, last_update_success,
-			                       last_update_error, last_update_at, product_tier, parent_instance_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $14, $15, $16, $9, $9)
+			                       last_update_error, last_update_at, product_tier, parent_instance_id,
+			                       customer_id, customer_name, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $9, $9)
 			ON CONFLICT (instance_id) DO UPDATE SET
 				hostname = EXCLUDED.hostname,
 				license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
@@ -509,12 +555,16 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 				last_update_at = EXCLUDED.last_update_at,
 				product_tier = COALESCE(EXCLUDED.product_tier, instances.product_tier),
 				parent_instance_id = COALESCE(EXCLUDED.parent_instance_id, instances.parent_instance_id),
+				customer_id = COALESCE(EXCLUDED.customer_id, instances.customer_id),
+				customer_name = COALESCE(EXCLUDED.customer_name, instances.customer_name),
+				reported_via = NULL,
+				reported_at = NULL,
 				updated_at = EXCLUDED.updated_at
 		`
 		args = []interface{}{
 			id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now,
 			attempt.FromVersion, attempt.TargetVersion, attempt.Success, attempt.Error, attempt.Timestamp,
-			productTierPtr, parentInstanceIDPtr,
+			productTierPtr, parentInstanceIDPtr, customerIDPtr, customerNamePtr,
 		}
 	}
 
@@ -613,4 +663,175 @@ func (r *InstanceRepository) UpdateInstance(ctx context.Context, id string, disp
 	}
 
 	return instance, nil
+}
+
+// maxRollupNodes caps how many nodes one heartbeat rollup may carry.
+const maxRollupNodes = 10000
+
+// TouchFromCheck records an update-check sighting of an instance. Unlike
+// UpsertFromHeartbeat it must NOT masquerade as a direct heartbeat: checks are
+// routinely forwarded upstream by cascade relays on behalf of their children,
+// so bumping last_heartbeat here would permanently starve the rollup
+// freshness guard, and clearing reported_via would erase cascade provenance
+// every cycle. A check therefore only creates a skeleton row on first sight
+// and refreshes the IP sighting plus identity COALESCEs; liveness comes
+// exclusively from heartbeats (direct or rolled up through a relay).
+func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID string, heartbeat *types.Heartbeat, licenseID, clientIP string) error {
+	heartbeatData, err := json.Marshal(heartbeat)
+	if err != nil {
+		return fmt.Errorf("failed to marshal heartbeat: %w", err)
+	}
+
+	now := time.Now()
+	instanceType := heartbeat.InstanceType
+	if instanceType == "" {
+		instanceType = "siemcore"
+	}
+	var licenseIDPtr *string
+	if licenseID != "" {
+		licenseIDPtr = &licenseID
+	}
+	var productTierPtr, parentInstanceIDPtr *string
+	if tier := heartbeat.ProductTier; tier != "" {
+		productTierPtr = &tier
+	}
+	if parent := heartbeat.ParentInstanceID; parent != "" {
+		parentInstanceIDPtr = &parent
+	}
+
+	_, err = r.db.Pool.Exec(ctx, `
+		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
+		                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at,
+		                       product_tier, parent_instance_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $9, $9)
+		ON CONFLICT (instance_id) DO UPDATE SET
+			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),
+			last_ip_address = EXCLUDED.last_ip_address,
+			last_ip_seen_at = EXCLUDED.last_ip_seen_at,
+			product_tier = COALESCE(instances.product_tier, EXCLUDED.product_tier),
+			parent_instance_id = COALESCE(instances.parent_instance_id, EXCLUDED.parent_instance_id),
+			hostname = COALESCE(NULLIF(instances.hostname, ''), EXCLUDED.hostname),
+			updated_at = EXCLUDED.updated_at
+	`, uuid.New().String(), instanceID, instanceType, heartbeat.Hostname, licenseIDPtr,
+		now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr)
+	return err
+}
+
+// UpsertReportedChildren flattens a relay's rollup tree and upserts every node.
+// reporterInstanceID is the relay that sent the covering heartbeat; licenseID
+// is that relay's license (inherited by all reported nodes). Nodes that also
+// heartbeat directly are not overwritten with staler rollup data.
+func (r *InstanceRepository) UpsertReportedChildren(ctx context.Context, reporterInstanceID, licenseID string, children []types.ChildReport) (int, error) {
+	now := time.Now()
+	count := 0
+
+	var walk func(parentID string, nodes []types.ChildReport) error
+	walk = func(parentID string, nodes []types.ChildReport) error {
+		for i := range nodes {
+			child := &nodes[i]
+			childID := strings.TrimSpace(child.InstanceID)
+			if childID == "" || childID == reporterInstanceID {
+				continue
+			}
+			if count >= maxRollupNodes {
+				return fmt.Errorf("rollup exceeds %d nodes", maxRollupNodes)
+			}
+			count++
+
+			if err := r.upsertReportedNode(ctx, reporterInstanceID, parentID, licenseID, child, now); err != nil {
+				return fmt.Errorf("upsert reported node %s: %w", childID, err)
+			}
+			if err := walk(childID, child.Children); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if err := walk(reporterInstanceID, children); err != nil {
+		return count, err
+	}
+	return count, nil
+}
+
+func (r *InstanceRepository) upsertReportedNode(ctx context.Context, reporterID, parentID, licenseID string, child *types.ChildReport, now time.Time) error {
+	instanceType := child.InstanceType
+	if instanceType == "" {
+		instanceType = child.ProductTier
+	}
+	status := child.Status
+	if status != "online" && status != "offline" && status != "degraded" {
+		status = "online"
+	}
+	lastSeen := child.LastSeen
+	if lastSeen.IsZero() {
+		lastSeen = now
+	}
+
+	// Synthesize a heartbeat snapshot so existing dashboard views (versions,
+	// products) render reported nodes exactly like direct ones.
+	snapshot := types.Heartbeat{
+		InstanceID:        child.InstanceID,
+		InstanceType:      instanceType,
+		ProductTier:       child.ProductTier,
+		ParentInstanceID:  parentID,
+		CustomerID:        child.CustomerID,
+		CustomerName:      child.CustomerName,
+		Hostname:          child.Hostname,
+		UpdaterVersion:    child.UpdaterVersion,
+		Products:          child.Products,
+		Timestamp:         lastSeen,
+		LastUpdateAttempt: child.LastUpdateAttempt,
+	}
+	heartbeatData, err := json.Marshal(snapshot)
+	if err != nil {
+		return fmt.Errorf("marshal reported heartbeat: %w", err)
+	}
+
+	var licenseIDPtr *string
+	if licenseID != "" {
+		licenseIDPtr = &licenseID
+	}
+	var attemptFrom, attemptTarget, attemptError *string
+	var attemptSuccess *bool
+	var attemptAt *time.Time
+	if a := child.LastUpdateAttempt; a != nil {
+		attemptFrom, attemptTarget, attemptError = &a.FromVersion, &a.TargetVersion, &a.Error
+		attemptSuccess = &a.Success
+		attemptAt = &a.Timestamp
+	}
+
+	// The freshness guard keeps a direct heartbeat (or a fresher rollup) from
+	// being clobbered by an older report.
+	_, err = r.db.Pool.Exec(ctx, `
+		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
+		                       last_heartbeat, last_heartbeat_data, status, product_tier, parent_instance_id,
+		                       customer_id, customer_name, reported_via, reported_at,
+		                       last_update_from_version, last_update_target_version, last_update_success,
+		                       last_update_error, last_update_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $14, $14)
+		ON CONFLICT (instance_id) DO UPDATE SET
+			hostname = COALESCE(NULLIF(EXCLUDED.hostname, ''), instances.hostname),
+			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),
+			last_heartbeat = EXCLUDED.last_heartbeat,
+			last_heartbeat_data = EXCLUDED.last_heartbeat_data,
+			status = EXCLUDED.status,
+			product_tier = COALESCE(NULLIF(EXCLUDED.product_tier, ''), instances.product_tier),
+			parent_instance_id = COALESCE(NULLIF(EXCLUDED.parent_instance_id, ''), instances.parent_instance_id),
+			customer_id = COALESCE(NULLIF(EXCLUDED.customer_id, ''), instances.customer_id),
+			customer_name = COALESCE(NULLIF(EXCLUDED.customer_name, ''), instances.customer_name),
+			reported_via = EXCLUDED.reported_via,
+			reported_at = EXCLUDED.reported_at,
+			last_update_from_version = COALESCE(EXCLUDED.last_update_from_version, instances.last_update_from_version),
+			last_update_target_version = COALESCE(EXCLUDED.last_update_target_version, instances.last_update_target_version),
+			last_update_success = COALESCE(EXCLUDED.last_update_success, instances.last_update_success),
+			last_update_error = COALESCE(EXCLUDED.last_update_error, instances.last_update_error),
+			last_update_at = COALESCE(EXCLUDED.last_update_at, instances.last_update_at),
+			updated_at = EXCLUDED.updated_at
+		WHERE instances.last_heartbeat IS NULL OR instances.last_heartbeat <= EXCLUDED.last_heartbeat
+	`, uuid.New().String(), child.InstanceID, instanceType, child.Hostname, licenseIDPtr,
+		lastSeen, heartbeatData, status, child.ProductTier, parentID,
+		child.CustomerID, child.CustomerName, reporterID, now,
+		attemptFrom, attemptTarget, attemptSuccess, attemptError, attemptAt)
+	return err
 }
