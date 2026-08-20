@@ -154,29 +154,27 @@ repeat `X-Checksum-SHA256` and `X-Signature-Ed25519`.
 Optional for a leaf — the check response (3.2) already carries checksum and
 signature — but useful for re-verifying a previously downloaded artifact.
 
-The relay proxies the server's **full release object**. The fields that
-matter (note the exact key names — `product_name` and `artifact_size`, not
-`product`/`size`):
+Guaranteed flat keys (relay ≥ 1.8.7 and the server itself):
 
 ```json
 {
-  "id": "fabc1735-…",
-  "product_name": "swf",
+  "product": "swf",
   "version": "2.2.0.29",
-  "channel": "stable",
   "checksum": "<lowercase hex sha-256>",
   "signature": "<base64 ed25519>",
-  "artifact_size": 9945272,
-  "release_notes": "…",
-  "target_groups": ["alpha"],
-  "manifest": { "product": "swf", "version": "2.2.0.29", "…": "…" }
+  "size": 9945272
 }
 ```
 
-Additional fields are present and may be added over time — parse leniently
-and ignore unknown keys. (Guide revisions before 2026-08-20 documented a
-compact `{"product","size"}` shape that was never what the relay emits; if
-you implemented against that, rename those two lookups.)
+The payload is a **superset**: alongside the keys above, the upstream release
+object's fields are also present (`product_name`, `artifact_size`, `channel`,
+`release_notes`, `target_groups`, `manifest`, …) and more may be added over
+time — parse leniently and ignore unknown keys.
+
+History: relays running 1.8.4.x emitted only the upstream field names
+(`product_name`/`artifact_size`, no flat `product`/`size`), which broke
+agents built against this guide; 1.8.7 added the guaranteed flat keys at
+every hop.
 
 ### 3.5 Install report — `POST /api/v1/updates/swf/report`
 

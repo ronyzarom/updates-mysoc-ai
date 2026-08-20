@@ -303,7 +303,18 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, release)
+	// Serve a superset of the release object: the child-facing guide contract
+	// guarantees flat "product" and "size" keys at every hop of the cascade
+	// (relays add the same aliases), while the original field names remain for
+	// consumers that parse the Release struct.
+	body := map[string]interface{}{}
+	if raw, err := json.Marshal(release); err == nil {
+		_ = json.Unmarshal(raw, &body)
+	}
+	body["product"] = release.ProductName
+	body["size"] = release.ArtifactSize
+
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {

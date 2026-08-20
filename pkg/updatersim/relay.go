@@ -381,7 +381,22 @@ func (r *Relay) handleChildReleaseMeta(w http.ResponseWriter, req *http.Request)
 		relayError(w, http.StatusBadGateway, "upstream metadata fetch failed: "+err.Error())
 		return
 	}
-	relayJSON(w, http.StatusOK, meta)
+	relayJSON(w, http.StatusOK, releaseMetaBody(meta))
+}
+
+// releaseMetaBody renders release metadata for children as a superset of the
+// upstream object: the guide's canonical flat keys (product, size) are
+// guaranteed for leaf agents, while the upstream field names (product_name,
+// artifact_size, checksum, signature, ...) remain for downstream relays that
+// parse the Release struct. Both consumers stay satisfied by one payload.
+func releaseMetaBody(meta *platformtypes.Release) map[string]interface{} {
+	body := map[string]interface{}{}
+	if raw, err := json.Marshal(meta); err == nil {
+		_ = json.Unmarshal(raw, &body)
+	}
+	body["product"] = meta.ProductName
+	body["size"] = meta.ArtifactSize
+	return body
 }
 
 // ensureCached returns release metadata and the local path of the verified
