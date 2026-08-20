@@ -80,5 +80,24 @@ for tier in "${TIERS[@]}"; do
     echo "    built $OUT"
 done
 
+# Self-update release artifacts: the same binary under the per-platform
+# product names the fleet watches ("updater-<os>-<arch>"). Upload each file as
+# a release for its product on the updates server and every node running the
+# self-updatable kit layout upgrades itself on the next heartbeat cycle.
+ART="dist/updater-kits/updater-artifacts-${VERSION}"
+if [[ -e "$ART" ]]; then
+    echo "ERROR: $ART already exists — never rebuild under an existing version; bump VERSION." >&2
+    exit 1
+fi
+echo "==> self-update artifacts"
+mkdir -p "$ART"
+for arch in amd64 arm64; do
+    GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build \
+        -ldflags "-s -w -X main.Version=${VERSION} -X main.GitCommit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
+        -o "$ART/updater-linux-${arch}" ./cmd/updater-simulator
+done
+(cd "$ART" && SHA updater-linux-* > SHA256SUMS)
+echo "    built $ART (upload as products updater-linux-amd64 / updater-linux-arm64, version ${VERSION})"
+
 echo
 echo "DONE — kits ${VERSION} (commit ${COMMIT})"

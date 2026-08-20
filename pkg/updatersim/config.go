@@ -101,7 +101,23 @@ type Config struct {
 	Simulation SimulationConfig `yaml:"simulation"`
 	Signing    SigningConfig    `yaml:"signing,omitempty"`
 	Relay      RelayConfig      `yaml:"relay,omitempty"`
+	SelfUpdate SelfUpdateConfig `yaml:"self_update,omitempty"`
 	Products   []ProductConfig  `yaml:"products"`
+}
+
+// SelfUpdateConfig controls how the updater updates its own binary. It is on
+// by default: every cycle the updater also checks its parent for the platform
+// product "updater-<os>-<arch>" using the running binary's stamped version,
+// and applies offers via a staged, validated, atomic symlink swap followed by
+// a service-manager restart. It only takes effect when the binary is launched
+// through the managed <dir>/current symlink (the kit installs this layout).
+type SelfUpdateConfig struct {
+	// Disabled turns self-update checks off entirely.
+	Disabled bool `yaml:"disabled,omitempty"`
+	// Channel selects the release channel to follow (default "stable").
+	Channel string `yaml:"channel,omitempty"`
+	// Dir is the managed layout root. Default: <state_file dir>/self-update.
+	Dir string `yaml:"dir,omitempty"`
 }
 
 // SigningConfig pins the release-signing public key. When Require is true the
@@ -366,6 +382,16 @@ func (c *Config) resolvePaths(configDir string) {
 	}
 	if c.Relay.CacheDir != "" && !filepath.IsAbs(c.Relay.CacheDir) {
 		c.Relay.CacheDir = filepath.Join(configDir, c.Relay.CacheDir)
+	}
+	if c.SelfUpdate.Dir == "" {
+		// Default beside the state file so the layout lives in the service's
+		// writable data directory (e.g. /var/lib/<name>/self-update).
+		c.SelfUpdate.Dir = filepath.Join(filepath.Dir(c.Simulation.StateFile), "self-update")
+	} else if !filepath.IsAbs(c.SelfUpdate.Dir) {
+		c.SelfUpdate.Dir = filepath.Join(configDir, c.SelfUpdate.Dir)
+	}
+	if c.SelfUpdate.Channel == "" {
+		c.SelfUpdate.Channel = "stable"
 	}
 }
 

@@ -52,6 +52,34 @@ Tailoring means pre-filling a rendered kit's `config.yaml` (instance id,
 | mysoc | `mysoc-updater` | |
 | siemcore | `siemcore-cascade-updater` | Renamed in 1.8.1.1; `siemcore-updater` is the retired v2 daemon and is flagged by v3 posture audits. Never mask either unit to silence an audit. |
 
+## Publishing an updater self-update
+
+Since 1.8.3 the updater updates itself through the normal release channel.
+`build-kits.sh` emits `dist/updater-kits/updater-artifacts-<VERSION>/` with
+per-platform binaries. To roll the fleet:
+
+1. Upload each file as a (signed) release on the updates server:
+   product `updater-linux-amd64` (and `updater-linux-arm64`), version =
+   the build's `VERSION`, artifact = the corresponding file.
+2. Done. Every cycle each updater also checks its parent for its own platform
+   product using the running binary's stamped version; offers cascade through
+   relays with the same signature verification as any release. The updater
+   stages the binary, validates that the candidate executes and reports the
+   offered version, atomically retargets its `current` symlink, and exits for
+   systemd to relaunch it. The new binary finalizes the persisted marker; if
+   the wrong version comes up instead, the watchdog restores the previous
+   binary and reports the failure upstream.
+
+Requirements and scope:
+
+- Only installs using the kit layout from 1.8.3+ (`install.sh` versioned
+  layout under `/var/lib/<unit>/self-update/`) can apply self-updates; older
+  installs log a warning and continue — reinstall the kit once to re-arm.
+- Self-update is independent of `simulation.mode` and of product installs;
+  disable per node with `self_update: { disabled: true }`.
+- Roll out gradually with update groups if desired: the check carries the
+  node's group like any product check.
+
 ## Known issue: binaries labeled 1.8.0.1 may not roll up children
 
 The first tailored kits (testing.mysoc.ai pilot) shipped binaries built
