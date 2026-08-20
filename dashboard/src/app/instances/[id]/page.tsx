@@ -176,6 +176,16 @@ export default function InstanceDetailPage() {
 
   const heartbeat = instance.last_heartbeat_data;
 
+  // Agents serialize Go's zero time ("0001-01-01T00:00:00Z") when no license
+  // expiry is set; treat anything implausibly old as "no expiry" instead of
+  // rendering "January 1, 1".
+  const licenseExpiry = (() => {
+    const raw = heartbeat?.license?.expires_at;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) || d.getFullYear() <= 1970 ? null : d;
+  })();
+
   // The group currently persisted on the instance, and the group the user has
   // chosen. Never allow submitting an empty group value.
   const currentGroup = instance.update_group || "stable";
@@ -508,20 +518,28 @@ export default function InstanceDetailPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-400">Status</span>
-              <span className={heartbeat?.license?.valid ? "text-emerald-400" : "text-red-400"}>
+              <span
+                className={
+                  heartbeat?.license?.valid
+                    ? "text-emerald-400"
+                    : heartbeat?.license?.valid === false
+                    ? "text-red-400"
+                    : "text-slate-400"
+                }
+              >
                 {heartbeat?.license?.valid === undefined
-                  ? "Unknown"
+                  ? instance.license_id
+                    ? "Unknown"
+                    : "No license"
                   : heartbeat.license.valid
                   ? "Valid"
                   : "Invalid"}
               </span>
             </div>
-            {heartbeat?.license?.expires_at && (
+            {licenseExpiry && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">Expires</span>
-                <span className="text-white">
-                  {format(new Date(heartbeat.license.expires_at), "PPP")}
-                </span>
+                <span className="text-white">{format(licenseExpiry, "PPP")}</span>
               </div>
             )}
             {instance.license_id && (
