@@ -136,6 +136,7 @@ func (r *Relay) ChildrenReport() []platformtypes.ChildReport {
 		if attempt == nil {
 			attempt = child.LastReport
 		}
+		system := hb.System
 		reports = append(reports, platformtypes.ChildReport{
 			InstanceID:        hb.InstanceID,
 			InstanceType:      hb.InstanceType,
@@ -145,6 +146,7 @@ func (r *Relay) ChildrenReport() []platformtypes.ChildReport {
 			Hostname:          hb.Hostname,
 			UpdaterVersion:    hb.UpdaterVersion,
 			Products:          hb.Products,
+			System:            &system,
 			Status:            status,
 			LastSeen:          child.LastSeen,
 			LastUpdateAttempt: attempt,

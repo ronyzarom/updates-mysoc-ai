@@ -167,18 +167,21 @@ type Heartbeat struct {
 // ChildReport is one node in a relay's fleet rollup. Parentage is implied by
 // nesting: each entry's parent is the node whose Children list contains it.
 type ChildReport struct {
-	InstanceID        string          `json:"instance_id"`
-	InstanceType      string          `json:"instance_type,omitempty"`
-	ProductTier       string          `json:"product_tier,omitempty"`
-	CustomerID        string          `json:"customer_id,omitempty"`
-	CustomerName      string          `json:"customer_name,omitempty"`
-	Hostname          string          `json:"hostname,omitempty"`
-	UpdaterVersion    string          `json:"updater_version,omitempty"`
-	Products          []ProductStatus `json:"products,omitempty"`
-	Status            string          `json:"status,omitempty"` // online, offline (relay's view)
-	LastSeen          time.Time       `json:"last_seen"`
-	LastUpdateAttempt *UpdateAttempt  `json:"last_update_attempt,omitempty"`
-	Children          []ChildReport   `json:"children,omitempty"`
+	InstanceID     string          `json:"instance_id"`
+	InstanceType   string          `json:"instance_type,omitempty"`
+	ProductTier    string          `json:"product_tier,omitempty"`
+	CustomerID     string          `json:"customer_id,omitempty"`
+	CustomerName   string          `json:"customer_name,omitempty"`
+	Hostname       string          `json:"hostname,omitempty"`
+	UpdaterVersion string          `json:"updater_version,omitempty"`
+	Products       []ProductStatus `json:"products,omitempty"`
+	// System carries the child's host identity and measurements so cascaded
+	// nodes render OS/arch/uptime/metrics on the dashboard like direct ones.
+	System            *SystemMetrics `json:"system,omitempty"`
+	Status            string         `json:"status,omitempty"` // online, offline (relay's view)
+	LastSeen          time.Time      `json:"last_seen"`
+	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
+	Children          []ChildReport  `json:"children,omitempty"`
 }
 
 // LicenseStatus reports license state

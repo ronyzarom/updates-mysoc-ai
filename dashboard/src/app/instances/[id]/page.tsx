@@ -191,12 +191,22 @@ export default function InstanceDetailPage() {
   // heartbeats carry an empty license block, which must not read as "Invalid".
   const viaRelay = Boolean(instance.reported_via || instance.parent_instance_id);
 
-  // The updater reports identity and product versions but may not collect host
-  // telemetry (simulate mode, or the collector is off). A real host always has
-  // memory_total > 0 when telemetry is collected, so all-zero system data means
-  // "not reported" — render it as such instead of as failing measurements.
+  // The updater always reports identity (OS/arch) but only collects host
+  // measurements on supported platforms (updater >= 1.8.4). A real host always
+  // has memory_total > 0 when measurements exist, so identity alone must NOT
+  // count as telemetry — otherwise unmeasured zeros render as failing facts
+  // (0% CPU, "Firewall Disabled", a process uptime posing as host uptime).
   const telemetryReported = Boolean(
-    heartbeat?.system && (heartbeat.system.memory_total > 0 || heartbeat.system.os)
+    heartbeat?.system && heartbeat.system.memory_total > 0
+  );
+
+  // Security posture has its own collector (the cascade updater never runs
+  // one), so it needs its own signal: a real scan always sets firewall_status
+  // or a nonzero score. Gating it on system telemetry would flip the card to
+  // zero-valued "facts" the moment host metrics start arriving.
+  const securityReported = Boolean(
+    heartbeat?.security &&
+      (heartbeat.security.security_score > 0 || heartbeat.security.firewall_status)
   );
 
   // The group currently persisted on the instance, and the group the user has
@@ -512,8 +522,12 @@ export default function InstanceDetailPage() {
               <span className="text-white">{instance.last_ip_address || "Unknown"}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-400">System Uptime</span>
-              <span className="text-white">{formatUptime(heartbeat?.system?.uptime)}</span>
+              <span className="text-slate-400">Host Uptime</span>
+              <span className="text-white">
+                {/* Pre-1.8.4 updaters put their own process uptime here; only
+                    trust it when real host measurements came with it. */}
+                {telemetryReported ? formatUptime(heartbeat?.system?.uptime) : "Not reported"}
+              </span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-400">Updater Version</span>
@@ -717,10 +731,10 @@ export default function InstanceDetailPage() {
               Security
             </h2>
 
-            {/* A heartbeat without host telemetry carries a zero-valued
+            {/* A heartbeat without a security scan carries a zero-valued
                 security block; rendering it would show a healthy host as
                 "Firewall Disabled, score 0/100". */}
-            {!telemetryReported ? (
+            {!securityReported ? (
               <p className="text-sm text-slate-500">
                 Not reported — this updater does not collect security posture.
               </p>

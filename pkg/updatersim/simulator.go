@@ -401,6 +401,23 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 		children = s.childrenFn()
 	}
 
+	// Report real host measurements when the platform supports collection.
+	// Anything not measured stays zero, which the dashboard renders as
+	// "Not reported" — never as a failing 0% or an uptime of the process.
+	system := platformtypes.SystemMetrics{
+		OS:   operatingSystem,
+		Arch: architecture,
+	}
+	if telemetry, ok := collectHostTelemetry(); ok {
+		system.CPUUsage = telemetry.CPUUsage
+		system.MemoryTotal = telemetry.MemoryTotal
+		system.MemoryUsed = telemetry.MemoryUsed
+		system.DiskTotal = telemetry.DiskTotal
+		system.DiskUsed = telemetry.DiskUsed
+		system.LoadAverage = telemetry.LoadAverage
+		system.Uptime = telemetry.Uptime
+	}
+
 	return platformtypes.Heartbeat{
 		InstanceID:       s.config.Instance.ID,
 		InstanceType:     s.config.Instance.Type,
@@ -415,12 +432,8 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 			Valid:     s.config.Server.LicenseKey != "",
 			LastCheck: time.Now().UTC(),
 		},
-		Products: products,
-		System: platformtypes.SystemMetrics{
-			OS:     operatingSystem,
-			Arch:   architecture,
-			Uptime: int64(time.Since(s.started).Seconds()),
-		},
+		Products:          products,
+		System:            system,
 		Timestamp:         time.Now().UTC(),
 		LastUpdateAttempt: s.state.LastUpdateAttempt,
 		Children:          children,

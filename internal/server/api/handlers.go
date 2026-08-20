@@ -752,9 +752,13 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		// Log but don't fail
 	}
 
-	// Check if auto-update is enabled for this instance
+	// The auto-update toggle gates PRODUCT updates only. The updater's own
+	// binary ("updater-<os>-<arch>" products) is fleet infrastructure and must
+	// stay current even on nodes whose product installs are an explicit
+	// opt-in, so self-update checks bypass the gate.
+	selfUpdateProduct := strings.HasPrefix(product, "updater-")
 	instance, _ := instanceRepo.GetByInstanceID(r.Context(), req.InstanceID)
-	if instance != nil && !instance.AutoUpdateEnabled {
+	if instance != nil && !instance.AutoUpdateEnabled && !selfUpdateProduct {
 		// Auto-update disabled - don't notify of updates
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"update_available": false,
