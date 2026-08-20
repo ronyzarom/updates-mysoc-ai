@@ -1,0 +1,69 @@
+# SiemCore cascade updater — production configuration (cascade tier 2)
+#
+# This node never talks to updates.mysoc.ai. It heartbeats to the operator's
+# mysoc relay, installs siemcore updates served from the relay's verified
+# cache, and relays updates + telemetry for the swf agents beneath it.
+
+server:
+  # The mysoc relay's child-facing address (relay.listen on the mysoc node).
+  url: http://mysoc.example.internal:8443
+  # SiemCore enrollment credential agreed with the operator (any stable
+  # secret string; it is bound to a relay_token at first contact).
+  license_key: "CHANGE-ME-SIEMCORE-CREDENTIAL"
+  timeout: 30s
+
+instance:
+  # Stable unique id for this siemcore server.
+  id: siemcore-CHANGE-ME
+  type: server
+  product_tier: siemcore
+  # instance.id of the mysoc node this siemcore belongs to.
+  parent_id: mysoc-CHANGE-ME
+  # End customer this siemcore serves; flows up the cascade for fleet views.
+  customer_id: customer-CHANGE-ME
+  customer_name: "Customer Name"
+  hostname: ""            # defaults to the OS hostname when empty
+  updater_version: "@VERSION@"
+
+signing:
+  # Same pinned key as the whole fleet:
+  #   curl -s https://updates.mysoc.ai/api/v1/signing-key
+  public_key: "PASTE-HEX-PUBLIC-KEY"
+  require: true
+
+relay:
+  enabled: true
+  # Child-facing listener; swf updaters point their server.url here.
+  # NOTE: this binds at updater start (even in simulate mode, before any swf
+  # enrolls). v3 siemcore hosts already publish the app on :8443, so the
+  # default here is :18443 to avoid the collision.
+  listen: ":18443"
+  cache_dir: /var/lib/siemcore-cascade-updater/relay-cache
+  child_offline_after: 5m
+
+heartbeat:
+  interval: 60s
+  jitter: 10s
+
+simulation:
+  # "simulate" runs the full pipeline: verify signature + checksum, download,
+  # run the executor, report the result upstream.
+  mode: simulate
+  artifact_dir: /var/lib/siemcore-cascade-updater/artifacts
+  state_file: /var/lib/siemcore-cascade-updater/state.json
+  # PRODUCTION INSTALLS — v3 compose contract (DRAFT, do not enable until the
+  # siemcore team confirms the exact commands for their v3 hosts; the old
+  # v2 sample of `systemctl restart siemcore` + health on :9000 is obsolete).
+  # The updater stays simulate-only until this block is agreed and tested.
+  # executor: filesystem
+  # filesystem:
+  #   install_root: /opt/siemcore
+  #   # v3 hosts deploy via compose; deploy.sh reads SIEMCORE_HOST_PORT etc.
+  #   restart_command: ["bash", "-lc", "cd /opt/siemcore && ./deploy.sh"]
+  #   health_command: ["curl", "-fsS", "http://127.0.0.1:8443/health"]
+  #   keep_releases: 3
+
+products:
+  - name: siemcore
+    current_version: "0.0.0"   # set to the currently installed siemcore version
+    channel: stable

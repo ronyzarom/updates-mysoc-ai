@@ -1,0 +1,20 @@
+[Unit]
+Description=MySoc platform updater (cascade relay to updates.mysoc.ai)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mysoc-updater
+Group=mysoc-updater
+ExecStart=/usr/local/bin/mysoc-updater relay --config /etc/mysoc-updater/config.yaml
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mysoc-updater
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

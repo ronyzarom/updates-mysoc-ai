@@ -1,0 +1,60 @@
+# MySoc platform updater — production configuration (cascade tier 1)
+#
+# This node is the ONLY tier that talks to updates.mysoc.ai. It authenticates
+# with the operator's platform license key and relays updates + telemetry for
+# every siemcore (and their swf agents) beneath it.
+
+server:
+  url: https://updates.mysoc.ai
+  # The operator platform key issued on the Operators page (shown once).
+  license_key: "PASTE-PLATFORM-KEY"
+  timeout: 30s
+
+instance:
+  # Stable unique id for this platform node, e.g. mysoc-<operator-id>.
+  id: mysoc-CHANGE-ME
+  type: server
+  product_tier: mysoc
+  hostname: ""            # defaults to the OS hostname when empty
+  updater_version: "@VERSION@"
+
+signing:
+  # Pin the release-signing public key at provisioning time:
+  #   curl -s https://updates.mysoc.ai/api/v1/signing-key
+  public_key: "PASTE-HEX-PUBLIC-KEY"
+  require: true
+
+relay:
+  enabled: true
+  # Child-facing listener; siemcore updaters point their server.url here.
+  # Binds at updater start (even in simulate mode). Plain HTTP: keep it on a
+  # management network or front it with TLS.
+  listen: ":8443"
+  cache_dir: /var/lib/mysoc-updater/relay-cache
+  child_offline_after: 5m
+
+heartbeat:
+  interval: 60s
+  jitter: 10s
+
+simulation:
+  # "simulate" runs the full pipeline: verify signature + checksum, download,
+  # run the executor, report the result upstream.
+  mode: simulate
+  artifact_dir: /var/lib/mysoc-updater/artifacts
+  state_file: /var/lib/mysoc-updater/state.json
+  # PRODUCTION INSTALLS: uncomment to perform real versioned installs with
+  # atomic activation and automatic rollback. Set the commands for your host.
+  # executor: filesystem
+  # filesystem:
+  #   install_root: /opt/mysoc
+  #   restart_command: ["systemctl", "restart", "mysoc-backend", "mysoc-frontend"]
+  #   health_command: ["curl", "-fsS", "http://127.0.0.1:8080/health"]
+  #   keep_releases: 3
+
+products:
+  - name: mysoc
+    # Set to the version actually installed on this host BEFORE first start —
+    # do not leave 0.0.0.
+    current_version: "0.0.0"
+    channel: stable
