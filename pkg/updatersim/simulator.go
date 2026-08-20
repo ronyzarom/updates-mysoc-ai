@@ -32,6 +32,11 @@ type Simulator struct {
 	random    *rand.Rand
 	publicKey ed25519.PublicKey // release-signing key; nil disables verification
 
+	// binaryVersion is the ldflags-stamped version of the running executable,
+	// set via SetBinaryVersion. It anchors self-update comparisons; empty for
+	// unstamped dev builds, which never self-update.
+	binaryVersion string
+
 	// childrenFn supplies the cascade rollup for relay-mode heartbeats.
 	childrenFn func() []platformtypes.ChildReport
 }
@@ -221,12 +226,27 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 			cycleErrors = append(cycleErrors, err)
 		}
 	}
+
+	// After product work, see whether the updater itself has a newer release.
+	// A successful activation aborts the cycle with ErrRestartPending so the
+	// process can exit for the service manager to relaunch the new binary.
+	if err := s.maybeSelfUpdate(ctx, mode); err != nil {
+		if errors.Is(err, ErrRestartPending) {
+			return err
+		}
+		cycleErrors = append(cycleErrors, err)
+	}
 	return errors.Join(cycleErrors...)
 }
 
-// Run starts an immediate cycle followed by jittered heartbeat cycles.
+// Run starts an immediate cycle followed by jittered heartbeat cycles. It
+// returns ErrRestartPending when a self-update was activated, so the caller
+// can exit the process for the service manager to relaunch the new binary.
 func (s *Simulator) Run(ctx context.Context, mode Mode) error {
 	if err := s.RunCycle(ctx, mode); err != nil && !errors.Is(err, context.Canceled) {
+		if errors.Is(err, ErrRestartPending) {
+			return err
+		}
 		s.logger.Error("simulator cycle failed", "error", err)
 	}
 
@@ -240,6 +260,9 @@ func (s *Simulator) Run(ctx context.Context, mode Mode) error {
 			return nil
 		case <-timer.C:
 			if err := s.RunCycle(ctx, mode); err != nil && !errors.Is(err, context.Canceled) {
+				if errors.Is(err, ErrRestartPending) {
+					return err
+				}
 				s.logger.Error("simulator cycle failed", "error", err)
 			}
 		}
@@ -263,40 +286,15 @@ func (s *Simulator) processOffer(
 	if mode == ModeObserve {
 		return nil
 	}
-	if offer.DownloadURL == "" {
-		return fmt.Errorf("update %s %s has no download URL", offer.Product, offer.LatestVersion)
-	}
 
-	// Verify the origin release signature before touching the artifact. In the
-	// cascade this is what prevents any intermediate hop from substituting a
-	// payload: the signature is minted only by the updates server.
-	if s.publicKey != nil {
-		if err := signing.Verify(s.publicKey, offer.Product, offer.LatestVersion, offer.Checksum, offer.Signature); err != nil {
-			return fmt.Errorf("release signature for %s %s: %w", offer.Product, offer.LatestVersion, err)
-		}
-	} else if s.config.Signing.Require {
-		return fmt.Errorf("signing.require is set but signing.public_key is not configured")
-	}
-
-	result, err := s.client.DownloadArtifact(
-		ctx,
-		offer.DownloadURL,
-		offer.Checksum,
-		s.config.Simulation.ArtifactDir,
-		fmt.Sprintf("%s-%s.artifact", offer.Product, offer.LatestVersion),
-		s.config.Simulation.MaxDownloadBytes,
-	)
+	// verifyAndDownload enforces the origin release signature before touching
+	// the artifact. In the cascade this is what prevents any intermediate hop
+	// from substituting a payload: the signature is minted only by the updates
+	// server.
+	result, err := s.verifyAndDownload(ctx, offer)
 	if err != nil {
-		return fmt.Errorf("download %s %s: %w", offer.Product, offer.LatestVersion, err)
+		return err
 	}
-	s.logger.Info(
-		"artifact downloaded and verified",
-		"product", offer.Product,
-		"target_version", offer.LatestVersion,
-		"bytes", result.Size,
-		"path", result.Path,
-		"sha256", result.Checksum,
-	)
 	if mode == ModeDownload {
 		return nil
 	}

@@ -21,12 +21,25 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-echo "==> installing binary"
-install -m 0755 "$BIN" /usr/local/bin/$NAME
-
 echo "==> creating service user and directories"
 id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $NAME
 mkdir -p /etc/$NAME /var/lib/$NAME
+
+echo "==> installing binary (self-updatable layout)"
+# The binary lives in a versioned directory owned by the service user, and
+# runs through symlinks: this is what lets the unprivileged updater update
+# itself later with an atomic symlink swap + service restart. /usr/local/bin
+# keeps a stable entry point for the unit and for operators.
+VER=$("./$BIN" version 2>/dev/null | awk 'NR==1{print $2}')
+if [[ -z "$VER" ]]; then
+    echo "could not determine binary version from $BIN" >&2
+    exit 1
+fi
+LAYOUT=/var/lib/$NAME/self-update
+mkdir -p "$LAYOUT/releases/$VER"
+install -m 0755 "$BIN" "$LAYOUT/releases/$VER/$NAME"
+ln -sfn "$LAYOUT/releases/$VER" "$LAYOUT/current"
+ln -sfn "$LAYOUT/current/$NAME" /usr/local/bin/$NAME
 chown -R $NAME:$NAME /var/lib/$NAME
 
 echo "==> installing configuration"

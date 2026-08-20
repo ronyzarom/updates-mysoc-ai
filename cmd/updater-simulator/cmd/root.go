@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -213,7 +214,7 @@ func newOnceCommand(opts *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return simulator.RunCycle(command.Context(), mode)
+			return finishOnRestart(logger(opts), simulator.RunCycle(command.Context(), mode))
 		},
 	}
 	addModeFlags(command, &download, &simulate)
@@ -308,7 +309,7 @@ func newRunCommand(opts *options) *cobra.Command {
 
 			select {
 			case err := <-runErr:
-				return err
+				return finishOnRestart(log, err)
 			case <-ctx.Done():
 				drain := cfg.Simulation.DrainTimeout.Duration
 				log.Info(
@@ -318,7 +319,7 @@ func newRunCommand(opts *options) *cobra.Command {
 				select {
 				case err := <-runErr:
 					log.Info("simulator drained cleanly")
-					return err
+					return finishOnRestart(log, err)
 				case <-time.After(drain):
 					log.Warn("drain timeout exceeded; forcing shutdown", "drain_timeout", drain.String())
 					return nil
@@ -395,7 +396,7 @@ relay.enabled: true (and relay.listen) in the configuration.`,
 			case err := <-runErr:
 				stop()
 				<-serveErr
-				return err
+				return finishOnRestart(log, err)
 			case <-ctx.Done():
 				<-serveErr
 				<-runErr
@@ -445,7 +446,22 @@ func loadSimulator(opts *options) (*updatersim.Simulator, *updatersim.Config, er
 	if err != nil {
 		return nil, nil, err
 	}
+	// The stamped binary version anchors self-update comparisons and settles
+	// any pending self-update marker: the new binary finalizes it, any other
+	// binary triggers the watchdog restore.
+	simulator.SetBinaryVersion(opts.version)
+	simulator.ResolveSelfUpdate()
 	return simulator, cfg, nil
+}
+
+// finishOnRestart converts ErrRestartPending into a clean exit so the service
+// manager (systemd Restart=always) relaunches the freshly activated updater.
+func finishOnRestart(log *slog.Logger, err error) error {
+	if errors.Is(err, updatersim.ErrRestartPending) {
+		log.Info("self-update activated; exiting so the service manager restarts the new updater")
+		return nil
+	}
+	return err
 }
 
 // buildExecutor selects the Executor implementation from configuration. The

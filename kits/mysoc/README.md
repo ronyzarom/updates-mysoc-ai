@@ -56,6 +56,19 @@ do, also add the install root to the systemd sandbox:
 ReadWritePaths=/var/lib/mysoc-updater /opt/mysoc
 ```
 
+## Self-update
+
+The updater keeps itself updated (on by default). `install.sh` places the
+binary in a versioned layout under `/var/lib/mysoc-updater/self-update/` and
+runs it through symlinks; when the updates server publishes a release for the
+product `updater-<os>-<arch>`, the updater verifies its signature, stages and
+validates the new binary, atomically retargets the `current` symlink, and
+exits — systemd relaunches it as the new version, which confirms the handoff
+(a watchdog restores the previous binary if the wrong version comes up). This
+is independent of `simulation.mode`: the updater manages its own binary even
+while product installs stay simulated. Opt out with `self_update: { disabled:
+true }`.
+
 ## Network
 
 - Outbound HTTPS to `updates.mysoc.ai` (the only internet dependency).

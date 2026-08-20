@@ -45,6 +45,18 @@ heartbeat:
   interval: 60s
   jitter: 10s
 
+# The updater keeps ITSELF updated from the cascade (on by default): each
+# cycle it also checks the mysoc relay for the product "updater-<os>-<arch>"
+# using the running binary's stamped version. Offers are signature-verified,
+# staged, validated (the candidate must execute and report the offered
+# version), then activated with an atomic symlink swap and a service restart.
+# Requires the install layout created by install.sh. This is independent of
+# simulation.mode — the updater manages its own binary even while product
+# installs stay simulate-only.
+# self_update:
+#   disabled: true      # opt out of updater self-updates
+#   channel: stable
+
 simulation:
   # "simulate" runs the full pipeline: verify signature + checksum, download,
   # run the executor, report the result upstream.
