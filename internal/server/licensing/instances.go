@@ -36,9 +36,21 @@ func ValidateUpdateGroup(group string) error {
 
 // SQL column lists - explicitly different to prevent scan mismatches
 const (
+	// derivedStatusCol computes liveness at read time: a node that has not
+	// been heard from (directly via last_heartbeat, or through rollup via
+	// reported_at — GREATEST ignores NULLs) within the threshold reads as
+	// offline, regardless of the stored status. Nothing writes 'offline'
+	// back; the stored value flips to 'online' again on the next contact.
+	derivedStatusCol = `CASE
+		WHEN status IN ('online', 'degraded')
+		     AND GREATEST(last_heartbeat, reported_at) < NOW() - INTERVAL '5 minutes'
+		THEN 'offline'
+		ELSE status
+	END AS status`
+
 	// selectInstanceFullCols includes last_heartbeat_data for detail views
 	selectInstanceFullCols = `id, instance_id, instance_type, hostname, display_name, license_id, 
-		api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, 
+		api_key_hash, last_heartbeat, last_heartbeat_data, ` + derivedStatusCol + `, auto_update_enabled, 
 		update_group, last_ip_address, last_ip_seen_at, last_update_from_version, 
 		last_update_target_version, last_update_success, last_update_error, last_update_at,
 		product_tier, parent_instance_id, customer_id, customer_name, reported_via, reported_at,
@@ -46,7 +58,7 @@ const (
 
 	// selectInstanceListCols excludes last_heartbeat_data and update details for lighter list queries
 	selectInstanceListCols = `id, instance_id, instance_type, hostname, display_name, license_id, 
-		api_key_hash, last_heartbeat, status, auto_update_enabled, update_group, 
+		api_key_hash, last_heartbeat, ` + derivedStatusCol + `, auto_update_enabled, update_group, 
 		last_ip_address, product_tier, parent_instance_id, customer_id, customer_name,
 		reported_via, reported_at, created_at, updated_at`
 )
@@ -276,7 +288,7 @@ func (r *InstanceRepository) GetByAPIKeyHash(ctx context.Context, apiKeyHash str
 // List retrieves all instances
 func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error) {
 	rows, err := r.db.Pool.Query(ctx, `
-		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, status, auto_update_enabled, update_group, product_tier, parent_instance_id, customer_id, customer_name, reported_via, reported_at, created_at, updated_at
+		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, `+derivedStatusCol+`, auto_update_enabled, update_group, product_tier, parent_instance_id, customer_id, customer_name, reported_via, reported_at, created_at, updated_at
 		FROM instances
 		ORDER BY created_at DESC
 	`)
@@ -582,19 +594,6 @@ func (r *InstanceRepository) Delete(ctx context.Context, id string) error {
 		return ErrInstanceNotFound
 	}
 	return nil
-}
-
-// UpdateOfflineInstances marks instances as offline if no heartbeat in threshold
-func (r *InstanceRepository) UpdateOfflineInstances(ctx context.Context, threshold time.Duration) error {
-	cutoff := time.Now().Add(-threshold)
-
-	_, err := r.db.Pool.Exec(ctx, `
-		UPDATE instances
-		SET status = 'offline', updated_at = NOW()
-		WHERE last_heartbeat < $1 AND status = 'online'
-	`, cutoff)
-
-	return err
 }
 
 // UpdateDisplayName updates the display name for an instance
