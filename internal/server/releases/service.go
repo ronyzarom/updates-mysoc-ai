@@ -17,51 +17,49 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
 
-// parseVersion extracts major, minor, patch from a version string
-// Handles formats like "1.0.0", "v1.0.0", "1.0", "1"
-func parseVersion(version string) (major, minor, patch int, ok bool) {
+// parseVersion extracts up to four numeric components from a version string
+// (MAJOR.MINOR.PATCH.BUILD — the platform's own convention, and SWF's).
+// Handles formats like "1.0.0.1", "v1.0.0", "1.0", "1". Missing components
+// compare as zero.
+func parseVersion(version string) (parts [4]int, ok bool) {
 	// Remove leading 'v' or 'V' if present
 	version = strings.TrimPrefix(strings.TrimPrefix(version, "v"), "V")
 
-	// Extract version numbers using regex
-	re := regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?`)
+	re := regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?`)
 	matches := re.FindStringSubmatch(version)
 	if len(matches) < 2 {
-		return 0, 0, 0, false
+		return parts, false
 	}
-
-	major, _ = strconv.Atoi(matches[1])
-	if len(matches) > 2 && matches[2] != "" {
-		minor, _ = strconv.Atoi(matches[2])
+	for i := 0; i < 4; i++ {
+		if len(matches) > i+1 && matches[i+1] != "" {
+			parts[i], _ = strconv.Atoi(matches[i+1])
+		}
 	}
-	if len(matches) > 3 && matches[3] != "" {
-		patch, _ = strconv.Atoi(matches[3])
-	}
-
-	return major, minor, patch, true
+	return parts, true
 }
 
-// isNewerVersion returns true if newVersion is greater than currentVersion
+// isNewerVersion returns true if newVersion is greater than currentVersion.
+// All four components participate: a rebuild (x.y.z.1 -> x.y.z.2) is an
+// update, both for our own artifacts and for four-part product versions.
 func isNewerVersion(currentVersion, newVersion string) bool {
 	if currentVersion == "" {
 		return true // No current version means any version is newer
 	}
 
-	currMajor, currMinor, currPatch, currOk := parseVersion(currentVersion)
-	newMajor, newMinor, newPatch, newOk := parseVersion(newVersion)
+	curr, currOk := parseVersion(currentVersion)
+	next, newOk := parseVersion(newVersion)
 
 	if !currOk || !newOk {
 		// If we can't parse versions, fall back to string comparison
 		return newVersion > currentVersion
 	}
 
-	if newMajor != currMajor {
-		return newMajor > currMajor
+	for i := 0; i < 4; i++ {
+		if next[i] != curr[i] {
+			return next[i] > curr[i]
+		}
 	}
-	if newMinor != currMinor {
-		return newMinor > currMinor
-	}
-	return newPatch > currPatch
+	return false
 }
 
 // Service handles release business logic

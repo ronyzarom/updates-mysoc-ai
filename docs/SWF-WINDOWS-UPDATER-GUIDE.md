@@ -37,6 +37,20 @@ Enrollment is trust-on-first-contact: the first heartbeat for a new
 `instance_id` enrolls it and returns the token. If the relay restarts and
 forgets you, the token you present is re-adopted — keep presenting it.
 
+Credential lifecycle (confirmed):
+
+- Tokens are static — no rotation, no expiry. The relay's child table is
+  in-memory only.
+- **Lost token / lost secret**: the device cannot recover by itself. Recovery
+  is operator-driven: the siemcore operator restarts the relay service
+  (`siemcore-cascade-updater`), which clears the in-memory bindings; the
+  device's next heartbeat re-enrolls it (presenting whatever it has) and, if
+  it presented no token, receives a fresh one.
+- **On `401`**: do not retry-loop or invent credentials. Keep heartbeating at
+  the normal 60 s cadence with what you have, and raise a local alert — a
+  relay restart on the other side heals the mismatch without device-side
+  action. Never wipe your stored token in response to a 401.
+
 ## 3. The five endpoints
 
 All requests carry `Content-Type: application/json` plus the two headers above.
@@ -185,6 +199,23 @@ Order of operations: verify the signature over (product, version, checksum
 compare to the offered checksum → only then install. Reject and report on any
 mismatch. .NET note: ed25519 is not in the BCL — use NSec or BouncyCastle.
 
+The key is a raw 32-byte ed25519 public key, hex-encoded — no PEM/DER
+wrapping. Test vector (a real production-signed release; must verify against
+the pinned key above):
+
+```
+product:   updater-linux-amd64
+version:   1.8.4.1
+checksum:  d22bd7fa746d45f79fd1b5418015dacfb1bb63cdf75ed7f6fe71748bbab0f4bb
+message:   "mysoc-release-v1\nupdater-linux-amd64\n1.8.4.1\nd22bd7fa746d45f79fd1b5418015dacfb1bb63cdf75ed7f6fe71748bbab0f4bb"
+signature: A27Af3+U0jutLmEZz/mhV3FEW6c3BFex57X/N0JTlXoPivrXyiX2o/dLGqPJM4wjXCZ+JAvyU450wzp3Bfp/Ag==
+```
+
+Key rotation / revocation: manual and coordinated — there is no online
+revocation. A new key is distributed out-of-band (config update at every
+node), after which releases signed with the old key stop verifying. Design
+your agent so the pinned key is a config value, not a compile-time constant.
+
 ## 5. Install behavior expected of your agent
 
 The mechanics are yours (MSI, service swap, etc.), but the cascade expects:
@@ -220,9 +251,11 @@ distribution.
 2. Get from the siemcore team: the relay address, and confirmation the port
    is reachable from that machine.
 3. Configure your agent: `instance_id` (`swf-<customer>-<hostname>`),
-   generated device secret, `parent_instance_id: siemcore-testing-01`,
-   `customer_id`/`customer_name` matching what the siemcore node reports,
-   pinned signing key, simulate mode ON.
+   generated device secret, pinned signing key, simulate mode ON, and the
+   confirmed pilot identity values:
+   - `parent_instance_id`: `siemcore-testing-01`
+   - `customer_id`: `siemcore-internal`
+   - `customer_name`: `SiemCore Internal (Testing)`
 4. Start it. Within ~2 minutes the node must appear on the dashboard under
    the customer, `reported_via` showing the cascade path. That round-trip is
    the pilot's success criterion.
@@ -242,14 +275,35 @@ The heartbeat reply's `relay_token` proves enrollment works; the node will
 show on the dashboard within a heartbeat cycle. (Delete the test node from
 the dashboard afterwards.)
 
-## 8. Field notes
+## 8. Field notes and error semantics
 
-- The relay caps request bodies at 4 MB (heartbeat) / 1 MB (check, report).
+Status codes on the child-facing endpoints (confirmed against the
+implementation):
+
+| Status | Meaning | Agent behavior |
+|---|---|---|
+| `401` | Missing `X-License-Key`, or relay-token mismatch for your `instance_id` | See §2 credential recovery. Keep normal cadence; never wipe stored credentials. |
+| `404` | Unknown product/version (passed through from upstream) | Treat as "no such release". Log, don't retry the same version aggressively. |
+| `409`, `429` | **Not emitted today** on child-facing endpoints | Future-proof: treat `429` as retryable with backoff and honor `Retry-After` if present; treat `409` as fatal for that operation. |
+| `5xx` / network error | Relay restarting, upstream unreachable | Exponential backoff, resume normal cadence on recovery. The relay itself does the same toward its parent. |
+
+Other confirmed limits and rules:
+
+- Request body caps: 4 MB (heartbeat), 1 MB (check, report).
+- Maximum artifact size: **500 MB** (server-side upload cap; SWF is far below).
+- No redirects are ever issued — configure your HTTP client to **not follow
+  redirects** and treat one as an error.
+- Install reports are idempotent — a duplicate report simply overwrites the
+  last-attempt record; retrying a report after a network error is safe.
+- Versions: four-part `MAJOR.MINOR.PATCH.BUILD` is fully supported — stored,
+  displayed, and signed exactly as uploaded, and all four components
+  participate in update comparison (server ≥ 1.8.5).
 - Product and version strings: letters, digits, dots, dashes, underscores.
-- Back off on `5xx`/network errors (the relay may be restarting — your
-  siemcore peer does the same upstream); resume the normal cadence when it
-  recovers. Never skip signature verification because a previous attempt
-  verified the same version.
+- Never skip signature verification because a previous attempt verified the
+  same version.
+- Transport: plain HTTP on the relay port is **pilot-only**. TLS on the relay
+  port becomes mandatory before any production customer rollout — build your
+  agent to accept an `https://` base URL and a custom CA from config now.
 - Your agent's own self-update can ride the same protocol later (product
   `updater-windows-amd64` is reserved for that, mirroring how the Linux
   updaters already update themselves) — out of scope for the pilot.
