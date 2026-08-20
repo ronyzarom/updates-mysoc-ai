@@ -151,9 +151,32 @@ repeat `X-Checksum-SHA256` and `X-Signature-Ed25519`.
 
 ### 3.4 Release metadata — `GET /api/v1/releases/swf/{version}`
 
-Returns `{"product","version","checksum","signature","size"}`. Optional for a
-leaf — the check response already carries checksum and signature — but useful
-for re-verifying a previously downloaded artifact.
+Optional for a leaf — the check response (3.2) already carries checksum and
+signature — but useful for re-verifying a previously downloaded artifact.
+
+The relay proxies the server's **full release object**. The fields that
+matter (note the exact key names — `product_name` and `artifact_size`, not
+`product`/`size`):
+
+```json
+{
+  "id": "fabc1735-…",
+  "product_name": "swf",
+  "version": "2.2.0.29",
+  "channel": "stable",
+  "checksum": "<lowercase hex sha-256>",
+  "signature": "<base64 ed25519>",
+  "artifact_size": 9945272,
+  "release_notes": "…",
+  "target_groups": ["alpha"],
+  "manifest": { "product": "swf", "version": "2.2.0.29", "…": "…" }
+}
+```
+
+Additional fields are present and may be added over time — parse leniently
+and ignore unknown keys. (Guide revisions before 2026-08-20 documented a
+compact `{"product","size"}` shape that was never what the relay emits; if
+you implemented against that, rename those two lookups.)
 
 ### 3.5 Install report — `POST /api/v1/updates/swf/report`
 
