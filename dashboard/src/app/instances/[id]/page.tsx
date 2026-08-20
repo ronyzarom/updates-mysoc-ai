@@ -186,6 +186,19 @@ export default function InstanceDetailPage() {
     return isNaN(d.getTime()) || d.getFullYear() <= 1970 ? null : d;
   })();
 
+  // Cascade children (siemcore/swf) authenticate to their parent relay, not to
+  // this server — only the tier-1 platform holds the operator license. Their
+  // heartbeats carry an empty license block, which must not read as "Invalid".
+  const viaRelay = Boolean(instance.reported_via || instance.parent_instance_id);
+
+  // The updater reports identity and product versions but may not collect host
+  // telemetry (simulate mode, or the collector is off). A real host always has
+  // memory_total > 0 when telemetry is collected, so all-zero system data means
+  // "not reported" — render it as such instead of as failing measurements.
+  const telemetryReported = Boolean(
+    heartbeat?.system && (heartbeat.system.memory_total > 0 || heartbeat.system.os)
+  );
+
   // The group currently persisted on the instance, and the group the user has
   // chosen. Never allow submitting an empty group value.
   const currentGroup = instance.update_group || "stable";
@@ -518,24 +531,37 @@ export default function InstanceDetailPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-400">Status</span>
-              <span
-                className={
-                  heartbeat?.license?.valid
-                    ? "text-emerald-400"
-                    : heartbeat?.license?.valid === false
-                    ? "text-red-400"
-                    : "text-slate-400"
-                }
-              >
-                {heartbeat?.license?.valid === undefined
-                  ? instance.license_id
-                    ? "Unknown"
-                    : "No license"
-                  : heartbeat.license.valid
-                  ? "Valid"
-                  : "Invalid"}
-              </span>
+              {viaRelay && !heartbeat?.license?.valid ? (
+                <span className="text-slate-400" title="Cascade children authenticate to their parent relay; only the tier-1 platform licenses against this server">
+                  N/A — via relay
+                </span>
+              ) : (
+                <span
+                  className={
+                    heartbeat?.license?.valid
+                      ? "text-emerald-400"
+                      : heartbeat?.license?.valid === false
+                      ? "text-red-400"
+                      : "text-slate-400"
+                  }
+                >
+                  {heartbeat?.license?.valid === undefined
+                    ? instance.license_id
+                      ? "Unknown"
+                      : "No license"
+                    : heartbeat.license.valid
+                    ? "Valid"
+                    : "Invalid"}
+                </span>
+              )}
             </div>
+            {viaRelay && !heartbeat?.license?.valid && (
+              <p className="text-xs text-slate-500">
+                This node is covered by its operator&apos;s platform license and
+                authenticates to its parent relay
+                {instance.reported_via ? ` (${instance.reported_via})` : ""}.
+              </p>
+            )}
             {licenseExpiry && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">Expires</span>
@@ -614,6 +640,11 @@ export default function InstanceDetailPage() {
               System Metrics
             </h2>
 
+            {!telemetryReported ? (
+              <p className="text-sm text-slate-500">
+                Not reported — this updater does not collect host metrics.
+              </p>
+            ) : (
             <div className="space-y-4">
               <MetricBar
                 label="CPU"
@@ -641,6 +672,7 @@ export default function InstanceDetailPage() {
                 icon={<HardDrive className="w-4 h-4" />}
               />
             </div>
+            )}
           </div>
         )}
 
@@ -685,6 +717,14 @@ export default function InstanceDetailPage() {
               Security
             </h2>
 
+            {/* A heartbeat without host telemetry carries a zero-valued
+                security block; rendering it would show a healthy host as
+                "Firewall Disabled, score 0/100". */}
+            {!telemetryReported ? (
+              <p className="text-sm text-slate-500">
+                Not reported — this updater does not collect security posture.
+              </p>
+            ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">Security Score</span>
@@ -707,6 +747,7 @@ export default function InstanceDetailPage() {
                 <span className="text-white">{heartbeat.security.pending_updates}</span>
               </div>
             </div>
+            )}
           </div>
         )}
       </div>

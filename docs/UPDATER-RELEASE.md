@@ -52,6 +52,17 @@ Tailoring means pre-filling a rendered kit's `config.yaml` (instance id,
 | mysoc | `mysoc-updater` | |
 | siemcore | `siemcore-cascade-updater` | Renamed in 1.8.1.1; `siemcore-updater` is the retired v2 daemon and is flagged by v3 posture audits. Never mask either unit to silence an audit. |
 
+## Known issue: binaries labeled 1.8.0.1 may not roll up children
+
+The first tailored kits (testing.mysoc.ai pilot) shipped binaries built
+mid-development of 1.8.0 and stamped `1.8.0.1` before the relay rollup fixes
+were committed. Symptom: children enroll and heartbeat to the relay, but never
+appear on the dashboard — the relay's upward heartbeats silently omit them.
+Fix: upgrade the relay binary; **minimum relay version for rollup is
+1.8.1.1**. This is exactly the unanchored-artifact failure `build-kits.sh`
+now prevents (clean-tree requirement + `-dirty` stamping + no rebuilds under
+an existing version).
+
 ## Release checklist
 
 1. Develop on `version/MAJOR.MINOR.PATCH`; bump `VERSION`.
