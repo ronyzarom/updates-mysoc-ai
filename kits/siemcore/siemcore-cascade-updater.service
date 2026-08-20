@@ -1,0 +1,20 @@
+[Unit]
+Description=SiemCore cascade updater (relay to the operator's mysoc node)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=siemcore-cascade-updater
+Group=siemcore-cascade-updater
+ExecStart=/usr/local/bin/siemcore-cascade-updater relay --config /etc/siemcore-cascade-updater/config.yaml
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/siemcore-cascade-updater
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

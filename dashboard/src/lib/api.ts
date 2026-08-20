@@ -10,6 +10,12 @@ export interface Instance {
   instance_type: string;
   product_tier?: string;
   parent_instance_id?: string;
+  customer_id?: string;
+  customer_name?: string;
+  // Cascade provenance: set when this node is known through a relay's rollup
+  // instead of heartbeating to this server directly.
+  reported_via?: string;
+  reported_at?: string;
   hostname: string;
   display_name?: string;
   license_id?: string;
