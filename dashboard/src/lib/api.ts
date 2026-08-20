@@ -197,6 +197,9 @@ export interface SystemMetrics {
 
 export interface SecurityStatus {
   firewall_enabled: boolean;
+  // Set by a real security scan; empty in the zero-valued block sent by
+  // agents that don't collect posture (used to tell "not reported" apart).
+  firewall_status?: string;
   ssh_hardened: boolean;
   security_score: number;
   pending_updates: number;

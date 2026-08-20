@@ -698,11 +698,17 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 		parentInstanceIDPtr = &parent
 	}
 
+	// Cascade children (nodes declaring a parent) default to auto-update OFF:
+	// real product installs on a freshly enrolled child must be an explicit
+	// operator decision, not a side effect of enrollment. (Updater self-update
+	// is exempt from the toggle and stays on.)
+	autoUpdate := parentInstanceIDPtr == nil
+
 	_, err = r.db.Pool.Exec(ctx, `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
 		                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at,
-		                       product_tier, parent_instance_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $9, $9)
+		                       product_tier, parent_instance_id, auto_update_enabled, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $9, $9)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),
 			last_ip_address = EXCLUDED.last_ip_address,
@@ -712,7 +718,7 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 			hostname = COALESCE(NULLIF(instances.hostname, ''), EXCLUDED.hostname),
 			updated_at = EXCLUDED.updated_at
 	`, uuid.New().String(), instanceID, instanceType, heartbeat.Hostname, licenseIDPtr,
-		now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr)
+		now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr, autoUpdate)
 	return err
 }
 
@@ -782,6 +788,9 @@ func (r *InstanceRepository) upsertReportedNode(ctx context.Context, reporterID,
 		Timestamp:         lastSeen,
 		LastUpdateAttempt: child.LastUpdateAttempt,
 	}
+	if child.System != nil {
+		snapshot.System = *child.System
+	}
 	heartbeatData, err := json.Marshal(snapshot)
 	if err != nil {
 		return fmt.Errorf("marshal reported heartbeat: %w", err)
@@ -802,13 +811,15 @@ func (r *InstanceRepository) upsertReportedNode(ctx context.Context, reporterID,
 
 	// The freshness guard keeps a direct heartbeat (or a fresher rollup) from
 	// being clobbered by an older report.
+	// Every rollup-reported node is a cascade child: default auto-update OFF
+	// on first sight (see TouchFromCheck). Existing rows keep their setting.
 	_, err = r.db.Pool.Exec(ctx, `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
 		                       last_heartbeat, last_heartbeat_data, status, product_tier, parent_instance_id,
 		                       customer_id, customer_name, reported_via, reported_at,
 		                       last_update_from_version, last_update_target_version, last_update_success,
-		                       last_update_error, last_update_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $14, $14)
+		                       last_update_error, last_update_at, auto_update_enabled, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, FALSE, $14, $14)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			hostname = COALESCE(NULLIF(EXCLUDED.hostname, ''), instances.hostname),
 			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),

@@ -30,8 +30,18 @@ func TestRelayChildrenFlowIntoHeartbeat(t *testing.T) {
 	}
 	relay.mu.Lock()
 	relay.children["siemcore-a"] = &childState{
-		Heartbeat: platformtypes.Heartbeat{InstanceID: "siemcore-a", ProductTier: "siemcore", CustomerID: "acme"},
-		LastSeen:  time.Now(),
+		Heartbeat: platformtypes.Heartbeat{
+			InstanceID:  "siemcore-a",
+			ProductTier: "siemcore",
+			CustomerID:  "acme",
+			System: platformtypes.SystemMetrics{
+				OS:          "linux",
+				Arch:        "amd64",
+				MemoryTotal: 8 << 30,
+				Uptime:      3600,
+			},
+		},
+		LastSeen: time.Now(),
 	}
 	relay.mu.Unlock()
 
@@ -44,6 +54,15 @@ func TestRelayChildrenFlowIntoHeartbeat(t *testing.T) {
 	hb := sim.buildHeartbeat()
 	if len(hb.Children) != 1 {
 		t.Fatalf("expected 1 child in heartbeat, got %d", len(hb.Children))
+	}
+	// The rollup must carry the child's host identity/measurements upward so
+	// cascaded nodes render OS/arch/uptime on the dashboard like direct ones.
+	sys := hb.Children[0].System
+	if sys == nil {
+		t.Fatal("child system metrics missing from rollup")
+	}
+	if sys.OS != "linux" || sys.Arch != "amd64" || sys.MemoryTotal != 8<<30 || sys.Uptime != 3600 {
+		t.Fatalf("child system metrics not forwarded intact: %+v", sys)
 	}
 	data, _ := json.Marshal(hb)
 	if !json.Valid(data) {
