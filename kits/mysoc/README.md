@@ -72,9 +72,11 @@ true }`.
 ## Network
 
 - Outbound HTTPS to `updates.mysoc.ai` (the only internet dependency).
-- Inbound from siemcore servers on the relay port (default `:8443`). Put a
-  TLS-terminating proxy in front of it or restrict it to the management
-  network; the relay itself speaks plain HTTP.
+- Inbound from siemcore servers on the relay port (default `:8443`). The
+  relay listener is TLS-only (1.9.0+): it self-provisions a certificate
+  under `relay.tls.dir` on first start. Distribute that directory's
+  `cert.pem` to each siemcore operator, who pins it via `server.ca_file`.
+  List every address children use to reach this host in `relay.tls.hosts`.
 
 ## Security properties
 

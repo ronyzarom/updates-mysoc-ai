@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -159,7 +161,34 @@ func NewClient(cfg ServerConfig) (*Client, error) {
 			return nil
 		},
 	}
+	if cfg.CAFile != "" {
+		transport, err := transportWithCA(cfg.CAFile)
+		if err != nil {
+			return nil, err
+		}
+		client.httpClient.Transport = transport
+	}
 	return client, nil
+}
+
+// transportWithCA builds a transport that trusts exactly the given PEM bundle
+// for TLS verification. Used to pin a cascade relay's self-provisioned
+// certificate instead of the system roots.
+func transportWithCA(caFile string) (*http.Transport, error) {
+	pemData, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("read ca_file: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pemData) {
+		return nil, fmt.Errorf("ca_file %s contains no usable PEM certificates", caFile)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{
+		RootCAs:    pool,
+		MinVersion: tls.VersionTLS12,
+	}
+	return transport, nil
 }
 
 // SetAPIKey updates the credential returned by enrollment.

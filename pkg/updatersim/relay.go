@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -87,19 +88,28 @@ func (r *Relay) Serve(ctx context.Context) error {
 	mux.HandleFunc("GET /api/v1/releases/{product}/{version}", r.handleChildReleaseMeta)
 	mux.HandleFunc("GET /api/v1/releases/{product}/{version}/download", r.handleChildDownload)
 
+	// The child-facing listener is TLS-only: the child token and telemetry
+	// must never cross the network in cleartext.
+	certFile, keyFile, err := ensureRelayTLS(r.config, r.logger)
+	if err != nil {
+		return fmt.Errorf("relay TLS material: %w", err)
+	}
+
 	server := &http.Server{
 		Addr:              r.config.Relay.Listen,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 	errCh := make(chan error, 1)
 	go func() {
 		r.logger.Info("relay listening",
 			"listen", r.config.Relay.Listen,
+			"tls_cert", certFile,
 			"cache_dir", r.config.Relay.CacheDir,
 			"signature_verification", r.publicKey != nil,
 		)
-		errCh <- server.ListenAndServe()
+		errCh <- server.ListenAndServeTLS(certFile, keyFile)
 	}()
 
 	select {
