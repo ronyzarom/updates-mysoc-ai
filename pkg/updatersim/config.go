@@ -144,6 +144,28 @@ type RelayConfig struct {
 	// ChildOfflineAfter marks a child offline in rollups when it has not
 	// heartbeated for this long (default 5m).
 	ChildOfflineAfter Duration `yaml:"child_offline_after,omitempty"`
+	// TLS configures the child-facing listener's certificate. The listener is
+	// always TLS; there is no plaintext mode.
+	TLS RelayTLSConfig `yaml:"tls,omitempty"`
+}
+
+// RelayTLSConfig selects the relay listener's certificate. When cert_file and
+// key_file are both set the operator-provided material is used as-is.
+// Otherwise the relay self-provisions a long-lived self-signed certificate
+// under dir; its cert.pem doubles as the CA file child updaters pin via
+// server.ca_file.
+type RelayTLSConfig struct {
+	// CertFile and KeyFile point at operator-provided PEM material. Set both
+	// or neither.
+	CertFile string `yaml:"cert_file,omitempty"`
+	KeyFile  string `yaml:"key_file,omitempty"`
+	// Dir holds self-provisioned material (cert.pem, key.pem). Default:
+	// "relay-tls" beside the configuration file.
+	Dir string `yaml:"dir,omitempty"`
+	// Hosts lists extra DNS names or IP addresses children use to reach this
+	// relay (the OS hostname, localhost, 127.0.0.1, and ::1 are always
+	// included). Changing this list regenerates self-provisioned material.
+	Hosts []string `yaml:"hosts,omitempty"`
 }
 
 // ServerConfig configures the Updates Server client.
@@ -154,6 +176,10 @@ type ServerConfig struct {
 	Timeout                Duration `yaml:"timeout"`
 	MaxResponseBytes       int64    `yaml:"max_response_bytes"`
 	AllowExternalDownloads bool     `yaml:"allow_external_downloads"`
+	// CAFile is a PEM bundle to trust for the server URL instead of the
+	// system roots. Required when the parent is a cascade relay with a
+	// self-provisioned certificate: pin the relay's cert.pem here.
+	CAFile string `yaml:"ca_file,omitempty"`
 }
 
 // InstanceConfig identifies the simulated machine and its place in the product
@@ -300,6 +326,9 @@ func (c *Config) setDefaults() {
 		if c.Relay.ChildOfflineAfter.Duration == 0 {
 			c.Relay.ChildOfflineAfter.Duration = 5 * time.Minute
 		}
+		if c.Relay.TLS.Dir == "" {
+			c.Relay.TLS.Dir = "relay-tls"
+		}
 	}
 	for i := range c.Products {
 		if c.Products[i].CurrentVersion == "" {
@@ -382,6 +411,18 @@ func (c *Config) resolvePaths(configDir string) {
 	}
 	if c.Relay.CacheDir != "" && !filepath.IsAbs(c.Relay.CacheDir) {
 		c.Relay.CacheDir = filepath.Join(configDir, c.Relay.CacheDir)
+	}
+	if c.Relay.TLS.Dir != "" && !filepath.IsAbs(c.Relay.TLS.Dir) {
+		c.Relay.TLS.Dir = filepath.Join(configDir, c.Relay.TLS.Dir)
+	}
+	if c.Relay.TLS.CertFile != "" && !filepath.IsAbs(c.Relay.TLS.CertFile) {
+		c.Relay.TLS.CertFile = filepath.Join(configDir, c.Relay.TLS.CertFile)
+	}
+	if c.Relay.TLS.KeyFile != "" && !filepath.IsAbs(c.Relay.TLS.KeyFile) {
+		c.Relay.TLS.KeyFile = filepath.Join(configDir, c.Relay.TLS.KeyFile)
+	}
+	if c.Server.CAFile != "" && !filepath.IsAbs(c.Server.CAFile) {
+		c.Server.CAFile = filepath.Join(configDir, c.Server.CAFile)
 	}
 	if c.SelfUpdate.Dir == "" {
 		// Default beside the state file so the layout lives in the service's
@@ -474,6 +515,9 @@ func (c *Config) Validate() error {
 		}
 		if c.Relay.MaxArtifactBytes <= 0 {
 			return fmt.Errorf("relay.max_artifact_bytes must be positive")
+		}
+		if (c.Relay.TLS.CertFile == "") != (c.Relay.TLS.KeyFile == "") {
+			return fmt.Errorf("relay.tls.cert_file and relay.tls.key_file must be set together")
 		}
 	}
 	if c.Signing.Require && strings.TrimSpace(c.Signing.PublicKey) == "" {

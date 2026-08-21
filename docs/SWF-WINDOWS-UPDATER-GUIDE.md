@@ -16,10 +16,14 @@ relay port** on the SIEMCore server that the SWF machine already forwards logs
 to. It never contacts `updates.mysoc.ai` or the mysoc platform — no internet
 egress, no extra firewall rules beyond reaching the SIEMCore server.
 
-- Base URL: `http://<siemcore-server-address>:18443` (the siemcore team
+- Base URL: `https://<siemcore-server-address>:18443` (the siemcore team
   confirms the address and port; `18443` is the kit default).
-- Transport today is plain HTTP on the customer's internal network. Treat the
-  network path accordingly; TLS on the relay port is a coordinated later step.
+- Transport is **TLS-only as of relay 1.9.0** — plain HTTP connections are
+  refused. The relay serves a self-signed certificate; the siemcore operator
+  gives you its `cert.pem` (from the relay's `relay-tls` directory) and your
+  agent pins it as the sole trust root for this base URL. Do not fall back to
+  the Windows system store for this connection, and never disable
+  verification.
 - Your node appears on the central dashboard automatically through the
   relay's fleet rollup — you do not register anywhere.
 
@@ -269,8 +273,8 @@ distribution.
 
 1. Pick one Windows machine that can reach the pilot SIEMCore server
    (`siemcore-testing-01`'s host) on port `18443`.
-2. Get from the siemcore team: the relay address, and confirmation the port
-   is reachable from that machine.
+2. Get from the siemcore team: the relay address, its relay CA file
+   (`cert.pem`), and confirmation the port is reachable from that machine.
 3. Configure your agent: `instance_id` (`swf-<customer>-<hostname>`),
    generated device secret, pinned signing key, simulate mode ON, and the
    confirmed pilot identity values:
@@ -286,11 +290,15 @@ distribution.
 Quick smoke test from the Windows machine (curl.exe ships with Windows):
 
 ```bat
-curl -s http://SIEMCORE-ADDRESS:18443/health
-curl -s -X POST http://SIEMCORE-ADDRESS:18443/api/v1/heartbeat ^
+curl -s --cacert relay-ca.pem https://SIEMCORE-ADDRESS:18443/health
+curl -s --cacert relay-ca.pem -X POST https://SIEMCORE-ADDRESS:18443/api/v1/heartbeat ^
   -H "Content-Type: application/json" -H "X-License-Key: <device-secret>" ^
   -d "{\"instance_id\":\"swf-pilot-test\",\"product_tier\":\"swf\",\"hostname\":\"%COMPUTERNAME%\"}"
 ```
+
+(`relay-ca.pem` is the relay's `cert.pem` provided by the siemcore team. A
+certificate error here means the relay regenerated its material or you were
+given the wrong file — re-fetch it from the operator; do not bypass it.)
 
 The heartbeat reply's `relay_token` proves enrollment works; the node will
 show on the dashboard within a heartbeat cycle. (Delete the test node from
@@ -322,9 +330,12 @@ Other confirmed limits and rules:
 - Product and version strings: letters, digits, dots, dashes, underscores.
 - Never skip signature verification because a previous attempt verified the
   same version.
-- Transport: plain HTTP on the relay port is **pilot-only**. TLS on the relay
-  port becomes mandatory before any production customer rollout — build your
-  agent to accept an `https://` base URL and a custom CA from config now.
+- Transport: **TLS-only since relay 1.9.0** (the earlier pilot-only plain
+  HTTP no longer exists). Base URL is `https://`, trust anchored exclusively
+  in the relay CA file from config. The relay speaks TLS 1.2+. If the
+  siemcore operator adds hostnames/IPs to the relay's certificate, the
+  certificate changes — plan for the CA file to be replaceable in your
+  agent's config without reinstalling.
 - Your agent's own self-update can ride the same protocol later (product
   `updater-windows-amd64` is reserved for that, mirroring how the Linux
   updaters already update themselves) — out of scope for the pilot.

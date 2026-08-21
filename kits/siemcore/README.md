@@ -90,11 +90,14 @@ installs stay simulated. Opt out with `self_update: { disabled: true }`.
 
 ## Network
 
-- Outbound to the mysoc relay only. No internet access required.
+- Outbound to the mysoc relay only (TLS; pin its `cert.pem` via
+  `server.ca_file`). No internet access required.
 - Inbound from swf agents on the relay port (default `:18443` — chosen to
   avoid the app's own `:8443` on v3 siemcore hosts), typically the
-  customer's LAN. Plain HTTP: keep it on a management network or front it
-  with TLS.
+  customer's LAN. The listener is TLS-only (1.9.0+): it self-provisions a
+  certificate under `relay.tls.dir` on first start. Give that directory's
+  `cert.pem` to the swf team so their agents pin it, and list every address
+  swf agents use to reach this host in `relay.tls.hosts`.
 
 ## Security properties
 

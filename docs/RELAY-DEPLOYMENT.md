@@ -69,7 +69,8 @@ updater-simulator relay --config config.yaml
 
 ```yaml
 server:
-  url: http://mysoc-op1.internal:8443    # the mysoc relay, not updates.mysoc.ai
+  url: https://mysoc-op1.internal:8443   # the mysoc relay, not updates.mysoc.ai
+  ca_file: mysoc-relay-ca.pem            # the mysoc relay's cert.pem
   license_key: "<siemcore instance credential>"
 
 instance:
@@ -98,7 +99,8 @@ and presents it as `X-Relay-Token` from then on.
 
 ```yaml
 server:
-  url: http://siemcore-a.customer.lan:8443   # the siemcore relay
+  url: https://siemcore-a.customer.lan:8443  # the siemcore relay
+  ca_file: siemcore-relay-ca.pem             # the siemcore relay's cert.pem
   license_key: "<customer credential>"
 
 instance:

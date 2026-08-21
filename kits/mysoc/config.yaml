@@ -26,12 +26,22 @@ signing:
 
 relay:
   enabled: true
-  # Child-facing listener; siemcore updaters point their server.url here.
-  # Binds at updater start (even in simulate mode). Plain HTTP: keep it on a
-  # management network or front it with TLS.
+  # Child-facing listener; siemcore updaters point their server.url here
+  # (https:// — the listener is TLS-only). Binds at updater start (even in
+  # simulate mode).
   listen: ":8443"
   cache_dir: /var/lib/mysoc-updater/relay-cache
   child_offline_after: 5m
+  tls:
+    # The relay self-provisions a long-lived self-signed certificate under
+    # dir on first start; give its cert.pem to every child operator to pin
+    # via server.ca_file. List every DNS name / IP children use to reach
+    # this relay — changing the list regenerates the certificate.
+    hosts: []          # e.g. ["mysoc.example.internal", "10.0.1.20"]
+    dir: /var/lib/mysoc-updater/relay-tls
+    # Or provide your own PEM material instead (set both):
+    # cert_file: /etc/mysoc-updater/relay.crt
+    # key_file: /etc/mysoc-updater/relay.key
 
 heartbeat:
   interval: 60s

@@ -6,7 +6,11 @@
 
 server:
   # The mysoc relay's child-facing address (relay.listen on the mysoc node).
-  url: http://mysoc.example.internal:8443
+  # The relay listener is TLS-only: use https:// and pin its certificate.
+  url: https://mysoc.example.internal:8443
+  # The mysoc relay's cert.pem (from its relay.tls dir) — get it from the
+  # mysoc operator and install it beside this config.
+  ca_file: mysoc-relay-ca.pem
   # SiemCore enrollment credential agreed with the operator (any stable
   # secret string; it is bound to a relay_token at first contact).
   license_key: "CHANGE-ME-SIEMCORE-CREDENTIAL"
@@ -33,13 +37,24 @@ signing:
 
 relay:
   enabled: true
-  # Child-facing listener; swf updaters point their server.url here.
-  # NOTE: this binds at updater start (even in simulate mode, before any swf
-  # enrolls). v3 siemcore hosts already publish the app on :8443, so the
-  # default here is :18443 to avoid the collision.
+  # Child-facing listener; swf updaters point their server.url here
+  # (https:// — the listener is TLS-only). NOTE: this binds at updater start
+  # (even in simulate mode, before any swf enrolls). v3 siemcore hosts
+  # already publish the app on :8443, so the default here is :18443 to avoid
+  # the collision.
   listen: ":18443"
   cache_dir: /var/lib/siemcore-cascade-updater/relay-cache
   child_offline_after: 5m
+  tls:
+    # The relay self-provisions a long-lived self-signed certificate under
+    # dir on first start; give its cert.pem to the swf team so their agents
+    # can pin it. List every DNS name / IP swf agents use to reach this
+    # host — changing the list regenerates the certificate.
+    hosts: []          # e.g. ["siemcore01.customer.internal", "10.0.2.30"]
+    dir: /var/lib/siemcore-cascade-updater/relay-tls
+    # Or provide your own PEM material instead (set both):
+    # cert_file: /etc/siemcore-cascade-updater/relay.crt
+    # key_file: /etc/siemcore-cascade-updater/relay.key
 
 heartbeat:
   interval: 60s
