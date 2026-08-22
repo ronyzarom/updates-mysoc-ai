@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	ErrUserNotFound     = errors.New("user not found")
-	ErrUserExists       = errors.New("user already exists")
-	ErrSessionNotFound  = errors.New("session not found")
-	ErrSessionExpired   = errors.New("session expired")
-	ErrAccountLocked    = errors.New("account locked due to failed attempts")
+	ErrUserNotFound       = errors.New("user not found")
+	ErrUserExists         = errors.New("user already exists")
+	ErrSessionNotFound    = errors.New("session not found")
+	ErrSessionExpired     = errors.New("session expired")
+	ErrAccountLocked      = errors.New("account locked due to failed attempts")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 )
 

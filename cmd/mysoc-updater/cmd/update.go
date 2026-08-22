@@ -109,4 +109,3 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nUpdate check complete.")
 	return nil
 }
-

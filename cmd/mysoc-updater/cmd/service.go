@@ -55,7 +55,7 @@ var serviceLogsCmd = &cobra.Command{
 
 func init() {
 	ServiceCmd.PersistentFlags().StringVarP(&serviceConfigPath, "config", "c", "", "Path to config file")
-	
+
 	ServiceCmd.AddCommand(serviceListCmd)
 	ServiceCmd.AddCommand(serviceRestartCmd)
 	ServiceCmd.AddCommand(serviceStopCmd)
@@ -182,4 +182,3 @@ func getServiceStatusSimple(serviceName string) string {
 	}
 	return strings.TrimSpace(string(output))
 }
-
