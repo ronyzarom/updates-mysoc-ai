@@ -78,19 +78,25 @@ simulation:
   mode: simulate
   artifact_dir: /var/lib/siemcore-cascade-updater/artifacts
   state_file: /var/lib/siemcore-cascade-updater/state.json
-  # PRODUCTION INSTALLS — v3 compose contract (DRAFT, do not enable until the
-  # siemcore team confirms the exact commands for their v3 hosts; the old
-  # v2 sample of `systemctl restart siemcore` + health on :9000 is obsolete).
-  # The updater stays simulate-only until this block is agreed and tested.
+  # PRODUCTION INSTALLS — v3 compose contract (FINAL, confirmed by the
+  # siemcore team and proven on production-track releases 3.3.132.1 and
+  # 3.3.133.1). Canonical copies of this block and the host shim live in the
+  # siemcore repo under deploy/cascade/ and docs/operations/cascade-updater.md.
   # Commands receive the lifecycle phase (apply/rollback/health) as a trailing
-  # argument and as UPDATER_PHASE; artifacts may ship their own updater/apply
-  # entrypoint — see docs/UPDATE-ENTRYPOINT-CONTRACT.md.
+  # argument and as UPDATER_PHASE (the shim's sudoers entry permits exactly
+  # the phase invocations and deliberately ignores the environment);
+  # artifacts may ship their own updater/apply entrypoint — see the bundled
+  # UPDATE-ENTRYPOINT-CONTRACT.md.
+  # To enable real installs: install the host shim + sudoers entry from the
+  # siemcore repo, set mode: real, and uncomment:
   # executor: filesystem
   # filesystem:
   #   install_root: /opt/siemcore
-  #   # v3 hosts deploy via compose; deploy.sh reads SIEMCORE_HOST_PORT etc.
-  #   restart_command: ["bash", "-lc", "cd /opt/siemcore && ./deploy.sh"]
-  #   health_command: ["curl", "-fsS", "http://127.0.0.1:8443/health"]
+  #   restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
+  #   # Version-matching health gate on :8443/health/live — copy the exact
+  #   # proven command from the siemcore repo (deploy/cascade/).
+  #   health_command: ["curl", "-fsS", "http://127.0.0.1:8443/health/live"]
+  #   command_timeout: 15m
   #   keep_releases: 3
 
 products:
