@@ -82,6 +82,9 @@ simulation:
   # siemcore team confirms the exact commands for their v3 hosts; the old
   # v2 sample of `systemctl restart siemcore` + health on :9000 is obsolete).
   # The updater stays simulate-only until this block is agreed and tested.
+  # Commands receive the lifecycle phase (apply/rollback/health) as a trailing
+  # argument and as UPDATER_PHASE; artifacts may ship their own updater/apply
+  # entrypoint — see docs/UPDATE-ENTRYPOINT-CONTRACT.md.
   # executor: filesystem
   # filesystem:
   #   install_root: /opt/siemcore

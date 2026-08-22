@@ -177,6 +177,48 @@ func TestFilesystemExecutorRestartCommandRunsWithEnv(t *testing.T) {
 	}
 }
 
+// TestFilesystemExecutorPhaseArgumentAndEnv proves the entrypoint contract:
+// every lifecycle command receives the phase as its trailing positional
+// argument AND as UPDATER_PHASE in the environment.
+func TestFilesystemExecutorPhaseArgumentAndEnv(t *testing.T) {
+	root := t.TempDir()
+	logFile := filepath.Join(t.TempDir(), "phases.log")
+	script := filepath.Join(t.TempDir(), "entrypoint.sh")
+	if err := os.WriteFile(script,
+		[]byte("#!/bin/sh\necho \"$UPDATER_PHASE:$1\" >> "+logFile+"\n"), 0o755); err != nil {
+		t.Fatalf("write entrypoint script: %v", err)
+	}
+	artifact := filepath.Join(t.TempDir(), "siemcore-v1.0.0.artifact")
+	makeTarGz(t, artifact, map[string]string{"VERSION": "v1.0.0"})
+
+	e := NewFilesystemExecutor(FilesystemConfig{
+		InstallRoot:    root,
+		RestartCommand: []string{script},
+		HealthCommand:  []string{script},
+		CommandTimeout: Duration{Duration: defaultCommandTimeout},
+	}, nil)
+	update := Update{Product: "siemcore", ToVersion: "v1.0.0", ArtifactPath: artifact}
+
+	if err := e.Apply(context.Background(), update); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if err := e.Validate(context.Background(), update); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if err := e.Rollback(context.Background(), update); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read phase log: %v", err)
+	}
+	want := "apply:apply\nhealth:health\nrollback:rollback\n"
+	if string(data) != want {
+		t.Fatalf("phase log = %q, want %q", string(data), want)
+	}
+}
+
 func TestFilesystemExecutorRawArtifactCopiedAsFile(t *testing.T) {
 	root := t.TempDir()
 	artifact := filepath.Join(t.TempDir(), "siemcore-v1.0.0.artifact")

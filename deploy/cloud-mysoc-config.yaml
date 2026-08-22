@@ -1,0 +1,61 @@
+# MySoc platform updater — cloud.mysoc.ai (cascade tier 1)
+#
+# Enrolled 2026-08-22 with the proven testing.mysoc.ai executor pattern.
+# This node talks directly to updates.mysoc.ai with its own operator key.
+
+server:
+  url: https://updates.mysoc.ai
+  # Operator platform key for cloud.mysoc.ai (operator id: cloud-mysoc-ai).
+  # The live value is NOT committed — it lives on the host and in keys/ (gitignored).
+  license_key: "PASTE-PLATFORM-KEY"
+  timeout: 30s
+
+instance:
+  id: mysoc-cloud-mysoc-ai
+  type: server
+  product_tier: mysoc
+  hostname: ""            # defaults to the OS hostname
+  updater_version: 1.9.0.1
+
+signing:
+  # Production release-signing public key, pinned 2026-08-19
+  # (verify anytime: curl -s https://updates.mysoc.ai/api/v1/signing-key)
+  public_key: "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57"
+  require: true
+
+relay:
+  # The mysoc tier always runs the relay listener (the binary enforces it).
+  # No children are enrolled through cloud today, and :8443 is not opened in
+  # the host firewall, so the listener is inert until deliberately exposed.
+  enabled: true
+  listen: ":8443"
+  cache_dir: /var/lib/mysoc-updater/relay-cache
+  child_offline_after: 5m
+  tls:
+    hosts: ["cloud.mysoc.ai"]
+    dir: /var/lib/mysoc-updater/relay-tls
+
+heartbeat:
+  interval: 60s
+  jitter: 10s
+
+simulation:
+  mode: simulate
+  artifact_dir: /var/lib/mysoc-updater/artifacts
+  state_file: /var/lib/mysoc-updater/state.json
+  # REAL INSTALLS: staged under /opt/mysoc-cascade, activated by the root
+  # wrapper (syncs /opt/mysoc, restarts services, health-gates at :8080).
+  # Releases shipping unapplied DB migrations are refused (clean rollback).
+  executor: filesystem
+  filesystem:
+    install_root: /opt/mysoc-cascade
+    restart_command: ["sudo", "/usr/local/sbin/mysoc-apply-update"]
+    health_command: ["curl", "-fsS", "http://127.0.0.1:8080/health"]
+    keep_releases: 3
+    command_timeout: 300s
+
+products:
+  - name: mysoc
+    # Verified against http://127.0.0.1:8080/health at enrollment time.
+    current_version: "1.3.12.6"
+    channel: stable

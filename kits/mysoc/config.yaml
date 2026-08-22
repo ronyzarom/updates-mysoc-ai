@@ -64,13 +64,23 @@ simulation:
   artifact_dir: /var/lib/mysoc-updater/artifacts
   state_file: /var/lib/mysoc-updater/state.json
   # PRODUCTION INSTALLS: uncomment to perform real versioned installs with
-  # atomic activation and automatic rollback. Set the commands for your host.
+  # atomic activation and automatic rollback. The proven pattern (running on
+  # testing.mysoc.ai since 1.3.12.9): the executor stages releases under its
+  # own install_root, and a root-owned apply wrapper (deploy/mysoc-apply-update.sh,
+  # invoked via a single NOPASSWD sudoers entry) syncs code into the live app
+  # layout, restarts services, and health-gates. The updater unit also needs
+  # NoNewPrivileges=no and ProtectSystem=no (sudo inherits the unit's mount
+  # namespace — see deploy/flip-testing-executor.sh).
+  # Commands receive the lifecycle phase (apply/rollback/health) as a trailing
+  # argument and as UPDATER_PHASE; artifacts may ship their own updater/apply
+  # entrypoint — see docs/UPDATE-ENTRYPOINT-CONTRACT.md.
   # executor: filesystem
   # filesystem:
-  #   install_root: /opt/mysoc
-  #   restart_command: ["systemctl", "restart", "mysoc-backend", "mysoc-frontend"]
+  #   install_root: /opt/mysoc-cascade
+  #   restart_command: ["sudo", "/usr/local/sbin/mysoc-apply-update"]
   #   health_command: ["curl", "-fsS", "http://127.0.0.1:8080/health"]
   #   keep_releases: 3
+  #   command_timeout: 300s
 
 products:
   - name: mysoc

@@ -25,6 +25,20 @@ updates.mysoc.ai  ◀── heartbeat + rollup ── THIS NODE (mysoc-updater, 
 
 ## Install
 
+One command (flag-driven; missing values are prompted for on a terminal):
+
+```bash
+sudo ./install.sh --update \
+  --license-key <platform-key> --instance-id mysoc-<operator> \
+  # --current-version auto-detected from /opt/mysoc/VERSION or :8080/health
+sudo systemctl start mysoc-updater
+```
+
+Use `--clean` instead of `--update` on a host with no app installed yet
+(enrolls at 0.0.0; the installer prints the fresh-install checklist).
+
+Or the manual flow:
+
 ```bash
 sudo ./install.sh
 sudo vi /etc/mysoc-updater/config.yaml   # fill the placeholders the installer prints
