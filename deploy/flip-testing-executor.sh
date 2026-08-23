@@ -48,7 +48,7 @@ old_draft = """  # PRODUCTION INSTALLS: uncomment to perform real versioned inst
   # filesystem:
   #   install_root: /opt/mysoc
   #   restart_command: ["systemctl", "restart", "mysoc-backend", "mysoc-frontend"]
-  #   health_command: ["curl", "-fsS", "http://127.0.0.1:8080/health"]
+  #   health_command: ["bash", "-c", "curl -fsS http://127.0.0.1:8080/health"]
   #   keep_releases: 3
 """
 new_block = """  # REAL INSTALLS (enabled 2026-08-22): the executor stages verified releases
@@ -59,7 +59,7 @@ new_block = """  # REAL INSTALLS (enabled 2026-08-22): the executor stages verif
   filesystem:
     install_root: /opt/mysoc-cascade
     restart_command: ["sudo", "/usr/local/sbin/mysoc-apply-update"]
-    health_command: ["curl", "-fsS", "http://127.0.0.1:8080/health"]
+    health_command: ["bash", "-c", "curl -fsS http://127.0.0.1:8080/health"]
     keep_releases: 3
     command_timeout: 300s
 """

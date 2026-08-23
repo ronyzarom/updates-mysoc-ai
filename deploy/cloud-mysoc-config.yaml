@@ -50,7 +50,7 @@ simulation:
   filesystem:
     install_root: /opt/mysoc-cascade
     restart_command: ["sudo", "/usr/local/sbin/mysoc-apply-update"]
-    health_command: ["curl", "-fsS", "http://127.0.0.1:8080/health"]
+    health_command: ["bash", "-c", "curl -fsS http://127.0.0.1:8080/health"]
     keep_releases: 3
     command_timeout: 300s
 
