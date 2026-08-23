@@ -98,8 +98,11 @@ simulation:
   #   install_root: /opt/siemcore
   #   restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
   #   # Version-matching health gate on :8443/health/live — copy the exact
-  #   # proven command from the siemcore repo (deploy/cascade/).
-  #   health_command: ["curl", "-fsS", "http://127.0.0.1:8443/health/live"]
+  #   # proven command from the siemcore repo (deploy/cascade/). Keep the
+  #   # bash -c form: since 1.9.1 every command receives the lifecycle
+  #   # phase as a trailing argument, which bash -c absorbs (it lands in
+  #   # $0); a bare curl would treat it as a second URL and fail.
+  #   health_command: ["bash", "-c", "curl -fsS http://127.0.0.1:8443/health/live"]
   #   command_timeout: 15m
   #   keep_releases: 3
 
