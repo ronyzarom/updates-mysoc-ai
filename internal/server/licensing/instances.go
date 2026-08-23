@@ -711,8 +711,15 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $9, $9)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),
-			last_ip_address = EXCLUDED.last_ip_address,
-			last_ip_seen_at = EXCLUDED.last_ip_seen_at,
+			-- For relay-reported (cascade) nodes the check arrives from the
+			-- relay's egress address, not the child's: keep the address the
+			-- relay observed and rolled up instead of clobbering it.
+			last_ip_address = CASE WHEN instances.reported_via IS NULL
+				THEN EXCLUDED.last_ip_address
+				ELSE COALESCE(instances.last_ip_address, EXCLUDED.last_ip_address) END,
+			last_ip_seen_at = CASE WHEN instances.reported_via IS NULL
+				THEN EXCLUDED.last_ip_seen_at
+				ELSE COALESCE(instances.last_ip_seen_at, EXCLUDED.last_ip_seen_at) END,
 			product_tier = COALESCE(instances.product_tier, EXCLUDED.product_tier),
 			parent_instance_id = COALESCE(instances.parent_instance_id, EXCLUDED.parent_instance_id),
 			hostname = COALESCE(NULLIF(instances.hostname, ''), EXCLUDED.hostname),
