@@ -161,4 +161,3 @@ type ServiceStatus struct {
 	RestartCount int
 	LastRestart  time.Time
 }
-

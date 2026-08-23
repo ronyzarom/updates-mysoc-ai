@@ -67,7 +67,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("╔═══════════════════════════════════════════════════════════════╗")
 	fmt.Println("║                  MySoc Updater Status                          ║")
 	fmt.Println("╠═══════════════════════════════════════════════════════════════╣")
-	
+
 	// Instance info
 	fmt.Printf("║  Instance:     %-46s ║\n", cfg.Instance.ID)
 	fmt.Printf("║  Type:         %-46s ║\n", cfg.Instance.Type)
@@ -93,7 +93,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Security status
 	securityScore := getSecurityScore(cfg)
 	fmt.Printf("║  Security Score: %-44s ║\n", securityScore)
-	
+
 	// Updater daemon status
 	updaterStatus := getServiceStatus("mysoc-updater.service")
 	fmt.Printf("║  Updater Daemon: %-44s ║\n", updaterStatus)
@@ -161,7 +161,7 @@ func getServiceStatus(serviceName string) string {
 func getProductVersion(cfg *config.Config, productName string) string {
 	baseDir := config.BaseDir(cfg.Instance.Type)
 	versionFile := filepath.Join(baseDir, "updater", "versions", productName+".version")
-	
+
 	data, err := os.ReadFile(versionFile)
 	if err != nil {
 		return "?.?.?"
@@ -218,4 +218,3 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:maxLen-3] + "..."
 }
-

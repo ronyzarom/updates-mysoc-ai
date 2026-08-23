@@ -54,4 +54,3 @@ func (db *DB) Exec(ctx context.Context, sql string, args ...interface{}) error {
 	_, err := db.Pool.Exec(ctx, sql, args...)
 	return err
 }
-

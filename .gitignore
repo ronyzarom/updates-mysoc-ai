@@ -58,3 +58,6 @@ build/
 update-server-linux
 siemcore-updater-linux-amd64
 
+
+# Secrets — never commit license keys or credentials
+keys/

@@ -37,6 +37,23 @@ mysoc relay  ◀── heartbeat + rollup ── THIS NODE (siemcore-cascade-upd
 
 ## Install
 
+One command (flag-driven; missing values are prompted for on a terminal):
+
+```bash
+sudo ./install.sh --update \
+  --license-key <credential> --parent-url https://relay.op.example:8443 \
+  --instance-id siemcore-acme-01 --parent-id mysoc-op-01 \
+  --customer-id acme --customer-name "Acme Corp" \
+  --signing-key <hex> --current-version 3.3.133.1 \
+  --ca-file ./mysoc-relay-ca.pem     # omit when the relay serves a public cert
+sudo systemctl start siemcore-cascade-updater
+```
+
+Use `--clean` instead of `--update` on a host with no siemcore installed yet
+(enrolls at 0.0.0; the installer prints the fresh-install checklist).
+
+Or the manual flow:
+
 ```bash
 sudo ./install.sh
 sudo vi /etc/siemcore-cascade-updater/config.yaml   # fill the printed placeholders

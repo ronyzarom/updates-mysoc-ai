@@ -107,4 +107,3 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	fmt.Println("Daemon stopped")
 	return nil
 }
-

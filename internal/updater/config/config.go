@@ -56,26 +56,26 @@ type MaintenanceWindow struct {
 // ProductConfig holds configuration for a managed product
 type ProductConfig struct {
 	Name           string `yaml:"name"`
-	Service        string `yaml:"service"`        // systemd service name
-	Binary         string `yaml:"binary"`         // path to binary
-	Config         string `yaml:"config"`         // path to config file
-	Type           string `yaml:"type"`           // binary, data
+	Service        string `yaml:"service"`         // systemd service name
+	Binary         string `yaml:"binary"`          // path to binary
+	Config         string `yaml:"config"`          // path to config file
+	Type           string `yaml:"type"`            // binary, data
 	HealthEndpoint string `yaml:"health_endpoint"` // HTTP health check URL
-	HotReload      bool   `yaml:"hot_reload"`     // can reload without restart
+	HotReload      bool   `yaml:"hot_reload"`      // can reload without restart
 }
 
 // SecurityConfig holds security hardening settings
 type SecurityConfig struct {
-	Enabled       bool                   `yaml:"enabled"`
-	ScanInterval  time.Duration          `yaml:"scan_interval"`
-	Firewall      FirewallConfig         `yaml:"firewall"`
-	SSH           SSHConfig              `yaml:"ssh"`
-	TLS           TLSConfig              `yaml:"tls"`
-	OSUpdates     OSUpdatesConfig        `yaml:"os_updates"`
-	FileIntegrity FileIntegrityConfig    `yaml:"file_integrity"`
-	PortScan      PortScanConfig         `yaml:"port_scan"`
-	UserAudit     UserAuditConfig        `yaml:"user_audit"`
-	Compliance    ComplianceConfig       `yaml:"compliance"`
+	Enabled       bool                `yaml:"enabled"`
+	ScanInterval  time.Duration       `yaml:"scan_interval"`
+	Firewall      FirewallConfig      `yaml:"firewall"`
+	SSH           SSHConfig           `yaml:"ssh"`
+	TLS           TLSConfig           `yaml:"tls"`
+	OSUpdates     OSUpdatesConfig     `yaml:"os_updates"`
+	FileIntegrity FileIntegrityConfig `yaml:"file_integrity"`
+	PortScan      PortScanConfig      `yaml:"port_scan"`
+	UserAudit     UserAuditConfig     `yaml:"user_audit"`
+	Compliance    ComplianceConfig    `yaml:"compliance"`
 }
 
 // FirewallConfig holds firewall settings
@@ -96,26 +96,26 @@ type FirewallRule struct {
 
 // SSHConfig holds SSH hardening settings
 type SSHConfig struct {
-	Enabled        bool              `yaml:"enabled"`
-	Enforce        map[string]string `yaml:"enforce"`
-	AllowedUsers   []string          `yaml:"allowed_users"`
-	AuthorizedKeysSource string      `yaml:"authorized_keys_source"`
+	Enabled              bool              `yaml:"enabled"`
+	Enforce              map[string]string `yaml:"enforce"`
+	AllowedUsers         []string          `yaml:"allowed_users"`
+	AuthorizedKeysSource string            `yaml:"authorized_keys_source"`
 }
 
 // TLSConfig holds TLS certificate settings
 type TLSConfig struct {
-	Enabled      bool              `yaml:"enabled"`
-	Certificates []CertConfig      `yaml:"certificates"`
-	Settings     TLSSettings       `yaml:"settings"`
+	Enabled      bool         `yaml:"enabled"`
+	Certificates []CertConfig `yaml:"certificates"`
+	Settings     TLSSettings  `yaml:"settings"`
 }
 
 // CertConfig holds certificate configuration
 type CertConfig struct {
-	Domain         string `yaml:"domain"`
-	CertPath       string `yaml:"cert_path"`
-	KeyPath        string `yaml:"key_path"`
-	Provider       string `yaml:"provider"` // letsencrypt, managed
-	RenewBeforeDays int   `yaml:"renew_before_days"`
+	Domain          string `yaml:"domain"`
+	CertPath        string `yaml:"cert_path"`
+	KeyPath         string `yaml:"key_path"`
+	Provider        string `yaml:"provider"` // letsencrypt, managed
+	RenewBeforeDays int    `yaml:"renew_before_days"`
 }
 
 // TLSSettings holds TLS security settings
@@ -126,26 +126,26 @@ type TLSSettings struct {
 
 // OSUpdatesConfig holds OS update settings
 type OSUpdatesConfig struct {
-	Enabled       bool               `yaml:"enabled"`
-	SecurityOnly  bool               `yaml:"security_only"`
-	Schedule      string             `yaml:"schedule"`
-	AutoReboot    bool               `yaml:"auto_reboot"`
+	Enabled           bool               `yaml:"enabled"`
+	SecurityOnly      bool               `yaml:"security_only"`
+	Schedule          string             `yaml:"schedule"`
+	AutoReboot        bool               `yaml:"auto_reboot"`
 	MaintenanceWindow *MaintenanceWindow `yaml:"maintenance_window,omitempty"`
 }
 
 // FileIntegrityConfig holds file integrity monitoring settings
 type FileIntegrityConfig struct {
-	Enabled          bool     `yaml:"enabled"`
-	MonitoredPaths   []string `yaml:"monitored_paths"`
-	BaselineRefresh  string   `yaml:"baseline_refresh"`
+	Enabled         bool     `yaml:"enabled"`
+	MonitoredPaths  []string `yaml:"monitored_paths"`
+	BaselineRefresh string   `yaml:"baseline_refresh"`
 }
 
 // PortScanConfig holds port scanning settings
 type PortScanConfig struct {
-	Enabled            bool           `yaml:"enabled"`
-	Interval           time.Duration  `yaml:"interval"`
-	ExpectedListening  []ExpectedPort `yaml:"expected_listening"`
-	AlertOnUnexpected  bool           `yaml:"alert_on_unexpected"`
+	Enabled           bool           `yaml:"enabled"`
+	Interval          time.Duration  `yaml:"interval"`
+	ExpectedListening []ExpectedPort `yaml:"expected_listening"`
+	AlertOnUnexpected bool           `yaml:"alert_on_unexpected"`
 }
 
 // ExpectedPort defines an expected listening port
@@ -290,4 +290,3 @@ func BaseDir(instanceType string) string {
 		return "/opt/siemcore"
 	}
 }
-

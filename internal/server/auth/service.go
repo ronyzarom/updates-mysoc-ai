@@ -29,13 +29,13 @@ const (
 )
 
 var (
-	ErrInvalidToken     = errors.New("invalid token")
-	ErrTokenExpired     = errors.New("token expired")
-	ErrMFARequired      = errors.New("MFA verification required")
-	ErrInvalidMFACode   = errors.New("invalid MFA code")
-	ErrMFANotEnabled    = errors.New("MFA is not enabled")
+	ErrInvalidToken      = errors.New("invalid token")
+	ErrTokenExpired      = errors.New("token expired")
+	ErrMFARequired       = errors.New("MFA verification required")
+	ErrInvalidMFACode    = errors.New("invalid MFA code")
+	ErrMFANotEnabled     = errors.New("MFA is not enabled")
 	ErrMFAAlreadyEnabled = errors.New("MFA is already enabled")
-	ErrPasswordTooWeak  = errors.New("password must be at least 8 characters")
+	ErrPasswordTooWeak   = errors.New("password must be at least 8 characters")
 )
 
 // Service handles authentication operations

@@ -154,7 +154,7 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 		"target", versionDir,
 	)
 
-	if err := e.runCommand(ctx, "restart", e.RestartCommand, update); err != nil {
+	if err := e.runCommand(ctx, "restart", "apply", e.RestartCommand, update); err != nil {
 		return fmt.Errorf("restart service: %w", err)
 	}
 
@@ -181,7 +181,7 @@ func (e *FilesystemExecutor) Validate(ctx context.Context, update Update) error 
 		return fmt.Errorf("live version %q does not match expected %q", meta.Version, update.ToVersion)
 	}
 
-	if err := e.runCommand(ctx, "health", e.HealthCommand, update); err != nil {
+	if err := e.runCommand(ctx, "health", "health", e.HealthCommand, update); err != nil {
 		return fmt.Errorf("health check: %w", err)
 	}
 	e.logger.Info("filesystem install validated", "product", update.Product, "version", update.ToVersion)
@@ -201,7 +201,7 @@ func (e *FilesystemExecutor) Rollback(ctx context.Context, update Update) error 
 			return fmt.Errorf("remove current symlink: %w", err)
 		}
 		e.logger.Info("filesystem install rolled back (fresh install removed)", "product", update.Product)
-		return e.runCommand(ctx, "restart", e.RestartCommand, update)
+		return e.runCommand(ctx, "restart", "rollback", e.RestartCommand, update)
 	}
 
 	if err := e.swapCurrent(update.Product, prevTarget); err != nil {
@@ -212,7 +212,7 @@ func (e *FilesystemExecutor) Rollback(ctx context.Context, update Update) error 
 		"product", update.Product,
 		"restored_target", prevTarget,
 	)
-	return e.runCommand(ctx, "restart", e.RestartCommand, update)
+	return e.runCommand(ctx, "restart", "rollback", e.RestartCommand, update)
 }
 
 // swapCurrent atomically points <product>/current at target using a temp symlink
@@ -289,7 +289,11 @@ func (e *FilesystemExecutor) pruneOldReleases(product, keepCurrent, keepPrevious
 	}
 }
 
-func (e *FilesystemExecutor) runCommand(ctx context.Context, kind string, argv []string, update Update) error {
+// runCommand executes a configured command for one lifecycle phase ("apply",
+// "rollback", or "health"). The phase is passed both as a trailing positional
+// argument (argument-first entrypoint contract; extra args are harmless to
+// wrappers that predate it) and as UPDATER_PHASE in the environment.
+func (e *FilesystemExecutor) runCommand(ctx context.Context, kind, phase string, argv []string, update Update) error {
 	if len(argv) == 0 {
 		return nil
 	}
@@ -300,13 +304,15 @@ func (e *FilesystemExecutor) runCommand(ctx context.Context, kind string, argv [
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
+	args := append(append([]string{}, argv[1:]...), phase)
+	cmd := exec.CommandContext(runCtx, argv[0], args...)
 	cmd.Env = append(os.Environ(),
 		"PRODUCT="+update.Product,
 		"VERSION="+update.ToVersion,
 		"FROM_VERSION="+update.FromVersion,
 		"CURRENT_DIR="+e.currentLink(update.Product),
 		"INSTALL_ROOT="+e.InstallRoot,
+		"UPDATER_PHASE="+phase,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

@@ -190,4 +190,3 @@ func (h *Hardener) applyOSUpdates() HardenResult {
 	result.Success = true
 	return result
 }
-

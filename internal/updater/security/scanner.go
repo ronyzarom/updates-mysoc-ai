@@ -295,4 +295,3 @@ func (s *Scanner) checkPorts() []CheckResult {
 
 	return results
 }
-

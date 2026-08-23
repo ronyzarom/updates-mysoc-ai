@@ -461,4 +461,3 @@ func startServices(products []types.ProductInstall) error {
 
 	return nil
 }
-

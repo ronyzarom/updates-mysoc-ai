@@ -161,4 +161,3 @@ func getCurrentVersion(cfg *config.Config, productName string) string {
 	}
 	return strings.TrimSpace(string(data))
 }
-
