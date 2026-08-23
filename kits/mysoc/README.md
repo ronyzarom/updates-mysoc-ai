@@ -7,7 +7,7 @@ aggregates telemetry for every siemcore server (and their swf agents) in the
 operator's fleet.
 
 ```
-updates.mysoc.ai  ◀── heartbeat + rollup ── THIS NODE (mysoc-updater, relay :8443)
+updates.mysoc.ai  ◀── heartbeat + rollup ── THIS NODE (mysoc-updater, relay :18443)
                                                  ▲
                                     siemcore updaters heartbeat here
 ```
@@ -86,11 +86,16 @@ true }`.
 ## Network
 
 - Outbound HTTPS to `updates.mysoc.ai` (the only internet dependency).
-- Inbound from siemcore servers on the relay port (default `:8443`). The
-  relay listener is TLS-only (1.9.0+): it self-provisions a certificate
-  under `relay.tls.dir` on first start. Distribute that directory's
-  `cert.pem` to each siemcore operator, who pins it via `server.ca_file`.
-  List every address children use to reach this host in `relay.tls.hosts`.
+- Inbound from siemcore servers on the relay port (`:18443` — the ONE relay
+  port across the whole cascade). The listener protects its own port
+  (1.10.0+): unknown sources are restricted to the enrollment path and
+  strictly rate-limited, repeated auth failures earn escalating temp-bans,
+  and authenticated children are auto-learned. It can be opened broadly;
+  children never configure firewalls. The relay listener is TLS-only
+  (1.9.0+): it self-provisions a certificate under `relay.tls.dir` on first
+  start. Distribute that directory's `cert.pem` to each siemcore operator,
+  who pins it via `server.ca_file`. List every address children use to
+  reach this host in `relay.tls.hosts`.
 
 ## Security properties
 

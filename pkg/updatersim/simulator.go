@@ -39,11 +39,19 @@ type Simulator struct {
 
 	// childrenFn supplies the cascade rollup for relay-mode heartbeats.
 	childrenFn func() []platformtypes.ChildReport
+
+	// guardStatsFn supplies the relay listener's port-protection counters.
+	guardStatsFn func() *platformtypes.RelayGuardStats
 }
 
 // SetChildrenProvider wires the relay's rollup into this node's heartbeats.
 func (s *Simulator) SetChildrenProvider(provider func() []platformtypes.ChildReport) {
 	s.childrenFn = provider
+}
+
+// SetGuardStatsProvider wires the relay guard's counters into heartbeats.
+func (s *Simulator) SetGuardStatsProvider(provider func() *platformtypes.RelayGuardStats) {
+	s.guardStatsFn = provider
 }
 
 // NewSimulator loads durable state and constructs a simulator.
@@ -400,6 +408,10 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	if s.childrenFn != nil {
 		children = s.childrenFn()
 	}
+	var guardStats *platformtypes.RelayGuardStats
+	if s.guardStatsFn != nil {
+		guardStats = s.guardStatsFn()
+	}
 
 	// Report real host measurements when the platform supports collection.
 	// Anything not measured stays zero, which the dashboard renders as
@@ -437,6 +449,7 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 		Timestamp:         time.Now().UTC(),
 		LastUpdateAttempt: s.state.LastUpdateAttempt,
 		Children:          children,
+		RelayGuard:        guardStats,
 	}
 }
 

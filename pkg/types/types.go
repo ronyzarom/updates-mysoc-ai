@@ -162,6 +162,20 @@ type Heartbeat struct {
 	// Children carries the cascaded fleet rollup: every node that heartbeats
 	// to this updater (recursively). Only relays populate it.
 	Children []ChildReport `json:"children,omitempty"`
+
+	// RelayGuard carries the relay listener's self-protection counters
+	// (blocked/rate-limited/banned totals). Only relays populate it.
+	RelayGuard *RelayGuardStats `json:"relay_guard,omitempty"`
+}
+
+// RelayGuardStats summarizes the relay listener's port-protection activity
+// since process start. Pure visibility: nothing here is configurable.
+type RelayGuardStats struct {
+	Blocked     uint64 `json:"blocked"`      // requests rejected (unknown IP on a restricted path)
+	RateLimited uint64 `json:"rate_limited"` // requests rejected by per-IP rate limits
+	Banned      uint64 `json:"banned"`       // requests rejected because the IP was temp-banned
+	ActiveBans  int    `json:"active_bans"`  // IPs currently banned
+	LearnedIPs  int    `json:"learned_ips"`  // source IPs learned from authenticated children
 }
 
 // ChildReport is one node in a relay's fleet rollup. Parentage is implied by
@@ -182,6 +196,9 @@ type ChildReport struct {
 	LastSeen          time.Time      `json:"last_seen"`
 	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
 	Children          []ChildReport  `json:"children,omitempty"`
+	// SourceIP is the address the relay observed this child connecting from;
+	// it rolls up so the dashboard can show cascaded nodes' addresses.
+	SourceIP string `json:"source_ip,omitempty"`
 }
 
 // LicenseStatus reports license state

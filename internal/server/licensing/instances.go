@@ -813,13 +813,23 @@ func (r *InstanceRepository) upsertReportedNode(ctx context.Context, reporterID,
 	// being clobbered by an older report.
 	// Every rollup-reported node is a cascade child: default auto-update OFF
 	// on first sight (see TouchFromCheck). Existing rows keep their setting.
+	// SourceIP is the address the relay observed the child connecting from;
+	// it gives cascaded nodes an address on the dashboard (they never reach
+	// this server directly).
+	var sourceIP *string
+	if child.SourceIP != "" {
+		sourceIP = &child.SourceIP
+	}
+
 	_, err = r.db.Pool.Exec(ctx, `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
 		                       last_heartbeat, last_heartbeat_data, status, product_tier, parent_instance_id,
 		                       customer_id, customer_name, reported_via, reported_at,
 		                       last_update_from_version, last_update_target_version, last_update_success,
-		                       last_update_error, last_update_at, auto_update_enabled, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, FALSE, $14, $14)
+		                       last_update_error, last_update_at, last_ip_address, last_ip_seen_at,
+		                       auto_update_enabled, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+		        CASE WHEN $20::text IS NULL THEN NULL ELSE $14::timestamptz END, FALSE, $14, $14)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			hostname = COALESCE(NULLIF(EXCLUDED.hostname, ''), instances.hostname),
 			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),
@@ -837,11 +847,13 @@ func (r *InstanceRepository) upsertReportedNode(ctx context.Context, reporterID,
 			last_update_success = COALESCE(EXCLUDED.last_update_success, instances.last_update_success),
 			last_update_error = COALESCE(EXCLUDED.last_update_error, instances.last_update_error),
 			last_update_at = COALESCE(EXCLUDED.last_update_at, instances.last_update_at),
+			last_ip_address = COALESCE(EXCLUDED.last_ip_address, instances.last_ip_address),
+			last_ip_seen_at = COALESCE(EXCLUDED.last_ip_seen_at, instances.last_ip_seen_at),
 			updated_at = EXCLUDED.updated_at
 		WHERE instances.last_heartbeat IS NULL OR instances.last_heartbeat <= EXCLUDED.last_heartbeat
 	`, uuid.New().String(), child.InstanceID, instanceType, child.Hostname, licenseIDPtr,
 		lastSeen, heartbeatData, status, child.ProductTier, parentID,
 		child.CustomerID, child.CustomerName, reporterID, now,
-		attemptFrom, attemptTarget, attemptSuccess, attemptError, attemptAt)
+		attemptFrom, attemptTarget, attemptSuccess, attemptError, attemptAt, sourceIP)
 	return err
 }

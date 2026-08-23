@@ -11,7 +11,7 @@ Time required: about 10 minutes.
 | Item | Example |
 | ---- | ------- |
 | Updater kit (zip, tailored to your fleet) | `siemcore-updater-kit-1.9.0.1.zip` |
-| Relay address (the operator's mysoc node) | `https://relay.operator.example:8443` |
+| Relay address (the operator's mysoc node) | `https://relay.operator.example:18443` |
 | Relay certificate to pin | `mysoc-relay-ca.pem` (skip if the relay serves a public certificate) |
 | Enrollment credential | any stable secret string agreed with the operator |
 | Release-signing public key (hex) | pre-filled in tailored kits |

@@ -42,6 +42,7 @@ func TestRelayChildrenFlowIntoHeartbeat(t *testing.T) {
 			},
 		},
 		LastSeen: time.Now(),
+		SourceIP: "10.0.2.30",
 	}
 	relay.mu.Unlock()
 
@@ -50,6 +51,7 @@ func TestRelayChildrenFlowIntoHeartbeat(t *testing.T) {
 		t.Fatal(err)
 	}
 	sim.SetChildrenProvider(relay.ChildrenReport)
+	sim.SetGuardStatsProvider(relay.GuardStats)
 
 	hb := sim.buildHeartbeat()
 	if len(hb.Children) != 1 {
@@ -63,6 +65,15 @@ func TestRelayChildrenFlowIntoHeartbeat(t *testing.T) {
 	}
 	if sys.OS != "linux" || sys.Arch != "amd64" || sys.MemoryTotal != 8<<30 || sys.Uptime != 3600 {
 		t.Fatalf("child system metrics not forwarded intact: %+v", sys)
+	}
+	// The observed source address rolls up so the dashboard can show
+	// cascaded nodes' IPs (they never reach the server directly).
+	if hb.Children[0].SourceIP != "10.0.2.30" {
+		t.Fatalf("child source IP not forwarded: %+v", hb.Children[0])
+	}
+	// Relay nodes report their port-protection counters.
+	if hb.RelayGuard == nil {
+		t.Fatal("relay guard stats missing from heartbeat")
 	}
 	data, _ := json.Marshal(hb)
 	if !json.Valid(data) {

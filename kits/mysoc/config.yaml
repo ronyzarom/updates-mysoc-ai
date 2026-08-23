@@ -28,8 +28,11 @@ relay:
   enabled: true
   # Child-facing listener; siemcore updaters point their server.url here
   # (https:// — the listener is TLS-only). Binds at updater start (even in
-  # simulate mode).
-  listen: ":8443"
+  # simulate mode). :18443 is the ONE relay port across the whole cascade
+  # (mysoc and siemcore tiers alike) — the port protects itself (rate
+  # limits, auth-failure bans, learned-source restriction), so it can be
+  # opened broadly; children never configure firewalls.
+  listen: ":18443"
   cache_dir: /var/lib/mysoc-updater/relay-cache
   child_offline_after: 5m
   tls:
