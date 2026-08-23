@@ -46,7 +46,7 @@ func (s *Simulator) RunReconcile(ctx context.Context, mode Mode, manifest *Syste
 		mode = s.config.Simulation.Mode
 	}
 	switch mode {
-	case ModeObserve, ModeDownload, ModeSimulate:
+	case ModeObserve, ModeDownload, ModeReal:
 	default:
 		return fmt.Errorf("invalid cycle mode %q", mode)
 	}

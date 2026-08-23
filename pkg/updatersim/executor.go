@@ -15,7 +15,6 @@ type Update struct {
 	ReleaseNotes   string
 	ArtifactPath   string
 	ArtifactSHA256 string
-	SimulationOnly bool
 }
 
 // Executor is the integration seam for a real SiemCore or SWF updater.
@@ -63,9 +62,10 @@ type ReconcilingExecutor interface {
 	RollbackReconcile(context.Context, Plan) error
 }
 
-// NoopExecutor simulates lifecycle latency without changing the machine. It
-// satisfies both Executor and ReconcilingExecutor so the simulator can exercise
-// the full reconcile pipeline safely by default.
+// NoopExecutor waits out lifecycle latency without changing the machine. It
+// satisfies both Executor and ReconcilingExecutor for tests and dry runs. In
+// real mode the simulator refuses to report success through it: an install
+// that did not happen must never be reported as one.
 type NoopExecutor struct {
 	Delay time.Duration
 }

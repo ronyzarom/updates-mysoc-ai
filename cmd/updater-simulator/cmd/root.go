@@ -418,21 +418,28 @@ func addModeFlags(command *cobra.Command, download, simulate *bool) {
 	)
 	command.Flags().BoolVar(
 		simulate,
+		"real",
+		false,
+		"Run the full pipeline: verify, download, run the configured executor, report",
+	)
+	command.Flags().BoolVar(
+		simulate,
 		"simulate",
 		false,
-		"Run the no-op executor, report success, and advance simulator state",
+		"Deprecated alias of --real (the retired name could silently report fake success)",
 	)
+	_ = command.Flags().MarkDeprecated("simulate", "use --real")
 }
 
-func selectedMode(configured updatersim.Mode, download, simulate bool) (updatersim.Mode, error) {
-	if download && simulate {
-		return "", fmt.Errorf("--download and --simulate are mutually exclusive")
+func selectedMode(configured updatersim.Mode, download, real bool) (updatersim.Mode, error) {
+	if download && real {
+		return "", fmt.Errorf("--download and --real are mutually exclusive")
 	}
 	if download {
 		return updatersim.ModeDownload, nil
 	}
-	if simulate {
-		return updatersim.ModeSimulate, nil
+	if real {
+		return updatersim.ModeReal, nil
 	}
 	return configured, nil
 }

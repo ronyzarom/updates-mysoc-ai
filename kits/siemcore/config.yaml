@@ -68,15 +68,18 @@ heartbeat:
 # version), then activated with an atomic symlink swap and a service restart.
 # Requires the install layout created by install.sh. This is independent of
 # simulation.mode — the updater manages its own binary even while product
-# installs stay simulate-only.
+# installs are not yet wired to an executor.
 # self_update:
 #   disabled: true      # opt out of updater self-updates
 #   channel: stable
 
 simulation:
-  # "simulate" runs the full pipeline: verify signature + checksum, download,
-  # run the executor, report the result upstream.
-  mode: simulate
+  # "real" runs the full pipeline: verify signature + checksum, download,
+  # run the executor, report the result upstream. Without the executor block
+  # below, offered updates are FAILED loudly (visible on the dashboard) —
+  # the updater never reports a success that did not happen. (The retired
+  # name "simulate" is still accepted as a deprecated alias of real.)
+  mode: real
   artifact_dir: /var/lib/siemcore-cascade-updater/artifacts
   state_file: /var/lib/siemcore-cascade-updater/state.json
   # PRODUCTION INSTALLS — v3 compose contract (FINAL, confirmed by the
@@ -89,7 +92,7 @@ simulation:
   # artifacts may ship their own updater/apply entrypoint — see the bundled
   # UPDATE-ENTRYPOINT-CONTRACT.md.
   # To enable real installs: install the host shim + sudoers entry from the
-  # siemcore repo, set mode: real, and uncomment:
+  # siemcore repo and uncomment:
   # executor: filesystem
   # filesystem:
   #   install_root: /opt/siemcore

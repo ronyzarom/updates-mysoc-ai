@@ -69,6 +69,9 @@ func NewSimulator(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if cfg.Simulation.LegacySimulateMode {
+		logger.Warn(`config uses the retired mode "simulate"; running as mode "real" — update the config (simulate is a deprecated alias and will be removed)`)
+	}
 
 	state, err := LoadState(cfg.Simulation.StateFile)
 	if err != nil {
@@ -205,7 +208,7 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 		mode = s.config.Simulation.Mode
 	}
 	switch mode {
-	case ModeObserve, ModeDownload, ModeSimulate:
+	case ModeObserve, ModeDownload, ModeReal:
 	default:
 		return fmt.Errorf("invalid cycle mode %q", mode)
 	}
@@ -316,13 +319,22 @@ func (s *Simulator) processOffer(
 		ReleaseNotes:   offer.ReleaseNotes,
 		ArtifactPath:   result.Path,
 		ArtifactSHA256: result.Checksum,
-		SimulationOnly: true,
 	}
+
+	// In real mode an install must actually happen. With no executor
+	// configured, reporting success would be a lie — the silent failure
+	// the retired "simulate" mode allowed. Fail loudly instead so the
+	// gap is visible on the dashboard and in reports.
+	if _, noop := s.executor.(NoopExecutor); noop {
+		return s.failAndRollback(ctx, update, fmt.Errorf(
+			"no executor configured: refusing to report a successful install that did not happen (set simulation.executor: filesystem)"))
+	}
+
 	if err := s.executor.Apply(ctx, update); err != nil {
-		return s.failAndRollback(ctx, update, fmt.Errorf("simulated apply: %w", err))
+		return s.failAndRollback(ctx, update, fmt.Errorf("apply: %w", err))
 	}
 	if err := s.executor.Validate(ctx, update); err != nil {
-		return s.failAndRollback(ctx, update, fmt.Errorf("simulated validation: %w", err))
+		return s.failAndRollback(ctx, update, fmt.Errorf("validation: %w", err))
 	}
 
 	s.recordAttempt(update, true, "")
@@ -335,11 +347,11 @@ func (s *Simulator) processOffer(
 		ToVersion:   update.ToVersion,
 		Success:     true,
 	}); err != nil {
-		return fmt.Errorf("report simulated update: %w", err)
+		return fmt.Errorf("report update: %w", err)
 	}
 
 	s.logger.Info(
-		"simulated update completed",
+		"update applied and verified",
 		"product", update.Product,
 		"from_version", update.FromVersion,
 		"to_version", update.ToVersion,
@@ -355,7 +367,7 @@ func (s *Simulator) failAndRollback(
 	rollbackErr := s.executor.Rollback(ctx, update)
 	errorMessage := updateErr.Error()
 	if rollbackErr != nil {
-		errorMessage += "; simulated rollback: " + rollbackErr.Error()
+		errorMessage += "; rollback: " + rollbackErr.Error()
 	}
 
 	s.recordAttempt(update, false, errorMessage)
@@ -394,13 +406,16 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	operatingSystem, architecture := s.platform()
 	products := make([]platformtypes.ProductStatus, 0, len(s.config.Products))
 	for _, product := range s.config.Products {
+		// HealthStatus is deliberately empty: the updater does not probe
+		// product health during heartbeats (the health gate runs only
+		// inside an apply), and the old "simulated" label misread as
+		// "this install is fake" on hosts doing real installs.
 		products = append(products, platformtypes.ProductStatus{
-			Name:         product.Name,
-			Version:      product.CurrentVersion,
-			Channel:      product.Channel,
-			Status:       "running",
-			Uptime:       int64(time.Since(s.started).Seconds()),
-			HealthStatus: "simulated",
+			Name:    product.Name,
+			Version: product.CurrentVersion,
+			Channel: product.Channel,
+			Status:  "running",
+			Uptime:  int64(time.Since(s.started).Seconds()),
 		})
 	}
 

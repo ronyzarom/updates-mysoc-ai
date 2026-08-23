@@ -104,14 +104,14 @@ func TestReconcileSimulateHappyPathCommitsAndReports(t *testing.T) {
 	server := newReconcileTestServer(t)
 	defer server.Close()
 
-	cfg := newSimulatorTestConfig(t, server.URL, ModeSimulate)
+	cfg := newSimulatorTestConfig(t, server.URL, ModeReal)
 	simulator, err := NewSimulator(cfg, NoopExecutor{}, discardLogger())
 	if err != nil {
 		t.Fatalf("new simulator: %v", err)
 	}
 	manifest := validTestManifest()
 
-	if err := simulator.RunReconcile(context.Background(), ModeSimulate, manifest); err != nil {
+	if err := simulator.RunReconcile(context.Background(), ModeReal, manifest); err != nil {
 		t.Fatalf("run reconcile: %v", err)
 	}
 
@@ -144,7 +144,7 @@ func TestReconcileSimulateHappyPathCommitsAndReports(t *testing.T) {
 	server.mu.Lock()
 	reportsBefore := len(server.reports)
 	server.mu.Unlock()
-	if err := simulator.RunReconcile(context.Background(), ModeSimulate, manifest); err != nil {
+	if err := simulator.RunReconcile(context.Background(), ModeReal, manifest); err != nil {
 		t.Fatalf("second reconcile: %v", err)
 	}
 	server.mu.Lock()
@@ -165,14 +165,14 @@ func TestReconcileStageFailureRollsBackAndReports(t *testing.T) {
 			server := newReconcileTestServer(t)
 			defer server.Close()
 
-			cfg := newSimulatorTestConfig(t, server.URL, ModeSimulate)
+			cfg := newSimulatorTestConfig(t, server.URL, ModeReal)
 			executor := &stageFailReconciler{fail: stage}
 			simulator, err := NewSimulator(cfg, executor, discardLogger())
 			if err != nil {
 				t.Fatalf("new simulator: %v", err)
 			}
 
-			err = simulator.RunReconcile(context.Background(), ModeSimulate, validTestManifest())
+			err = simulator.RunReconcile(context.Background(), ModeReal, validTestManifest())
 			if err == nil {
 				t.Fatalf("expected reconcile failure at %s", stage)
 			}
@@ -205,7 +205,7 @@ func TestReconcileSelfUpdateWatchdogRestoresOnHandoffFailure(t *testing.T) {
 	server := newReconcileTestServer(t)
 	defer server.Close()
 
-	cfg := newSimulatorTestConfig(t, server.URL, ModeSimulate)
+	cfg := newSimulatorTestConfig(t, server.URL, ModeReal)
 	previousUpdater := cfg.Instance.UpdaterVersion
 	executor := &stageFailReconciler{fail: StageSelfUpdate}
 	simulator, err := NewSimulator(cfg, executor, discardLogger())
@@ -213,7 +213,7 @@ func TestReconcileSelfUpdateWatchdogRestoresOnHandoffFailure(t *testing.T) {
 		t.Fatalf("new simulator: %v", err)
 	}
 
-	err = simulator.RunReconcile(context.Background(), ModeSimulate, validTestManifest())
+	err = simulator.RunReconcile(context.Background(), ModeReal, validTestManifest())
 	if err == nil {
 		t.Fatal("expected self-update handoff failure")
 	}
