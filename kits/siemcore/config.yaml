@@ -7,7 +7,7 @@
 server:
   # The mysoc relay's child-facing address (relay.listen on the mysoc node).
   # The relay listener is TLS-only: use https:// and pin its certificate.
-  url: https://mysoc.example.internal:8443
+  url: https://mysoc.example.internal:18443
   # The mysoc relay's cert.pem (from its relay.tls dir) — get it from the
   # mysoc operator and install it beside this config.
   ca_file: mysoc-relay-ca.pem
@@ -39,9 +39,10 @@ relay:
   enabled: true
   # Child-facing listener; swf updaters point their server.url here
   # (https:// — the listener is TLS-only). NOTE: this binds at updater start
-  # (even in simulate mode, before any swf enrolls). v3 siemcore hosts
-  # already publish the app on :8443, so the default here is :18443 to avoid
-  # the collision.
+  # (even in simulate mode, before any swf enrolls). :18443 is the ONE relay
+  # port across the whole cascade — the port protects itself (rate limits,
+  # auth-failure bans, learned-source restriction), so it can be opened
+  # broadly; children never configure firewalls.
   listen: ":18443"
   cache_dir: /var/lib/siemcore-cascade-updater/relay-cache
   child_offline_after: 5m

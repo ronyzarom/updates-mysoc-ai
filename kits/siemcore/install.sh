@@ -27,7 +27,7 @@ Options:
   --license-key KEY      enrollment credential agreed with your operator
   --instance-id ID       stable unique id, e.g. siemcore-acme-01
   --parent-url URL       the mysoc relay's child-facing address,
-                         e.g. https://relay.operator.example:8443
+                         e.g. https://relay.operator.example:18443
   --parent-id ID         instance id of the mysoc node this siemcore belongs to
   --customer-id ID       end customer identifier (groups the fleet view)
   --customer-name NAME   end customer display name
@@ -96,7 +96,7 @@ prompt() {
 # render_config — fill the kit template from flags and install it.
 render_config() {
     prompt LICENSE_KEY "Enrollment credential (agreed with your operator)"
-    prompt PARENT_URL "Mysoc relay address (e.g. https://relay.op.example:8443)"
+    prompt PARENT_URL "Mysoc relay address (e.g. https://relay.op.example:18443)"
     prompt INSTANCE_ID "Instance id (e.g. siemcore-acme-01)"
     prompt PARENT_ID "Parent mysoc instance id"
     prompt CUSTOMER_ID "Customer id"
@@ -120,7 +120,7 @@ render_config() {
         echo "    existing config backed up beside it"
     fi
     tmp=$(mktemp)
-    sed -e "s|url: https://mysoc.example.internal:8443|url: $PARENT_URL|" \
+    sed -e "s|url: https://mysoc.example.internal:18443|url: $PARENT_URL|" \
         -e "s|license_key: \"CHANGE-ME-SIEMCORE-CREDENTIAL\"|license_key: \"$LICENSE_KEY\"|" \
         -e "s|id: siemcore-CHANGE-ME|id: $INSTANCE_ID|" \
         -e "s|parent_id: mysoc-CHANGE-ME|parent_id: $PARENT_ID|" \

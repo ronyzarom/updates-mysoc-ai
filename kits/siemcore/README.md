@@ -16,13 +16,17 @@ mysoc relay  ◀── heartbeat + rollup ── THIS NODE (siemcore-cascade-upd
 - The unit is `siemcore-cascade-updater`, **not** `siemcore-updater` — the
   latter is the retired v2 daemon and v3 posture audits flag it. Never
   `systemctl mask` either name to silence an audit.
-- The relay listens on `:18443` by default because v3 siemcore hosts publish
-  the app itself on `:8443`; the port binds at updater start, even in
-  simulate mode.
-- The `executor: filesystem` block in `config.yaml` is a **v3
-  compose-contract DRAFT** — the siemcore team must confirm the exact
-  deploy/health commands before anyone enables it. Until then this tier is
-  simulate-only.
+- The relay listens on `:18443` — the ONE relay port across the whole
+  cascade (also chosen because v3 siemcore hosts publish the app itself on
+  `:8443`); the port binds at updater start, even in simulate mode. The
+  listener protects its own port (1.10.0+): unknown sources are restricted
+  and rate-limited, repeated auth failures earn escalating temp-bans, and
+  authenticated children are auto-learned — it can be opened broadly, and
+  children never configure firewalls.
+- The `executor: filesystem` block in `config.yaml` is the **confirmed-final
+  v3 compose contract** (proven on production-track releases 3.3.132.1 and
+  3.3.133.1); canonical copies live in the siemcore repo under
+  `deploy/cascade/`.
 
 ## Kit contents
 
@@ -41,7 +45,7 @@ One command (flag-driven; missing values are prompted for on a terminal):
 
 ```bash
 sudo ./install.sh --update \
-  --license-key <credential> --parent-url https://relay.op.example:8443 \
+  --license-key <credential> --parent-url https://relay.op.example:18443 \
   --instance-id siemcore-acme-01 --parent-id mysoc-op-01 \
   --customer-id acme --customer-name "Acme Corp" \
   --signing-key <hex> --current-version 3.3.133.1 \
@@ -109,9 +113,10 @@ installs stay simulated. Opt out with `self_update: { disabled: true }`.
 
 - Outbound to the mysoc relay only (TLS; pin its `cert.pem` via
   `server.ca_file`). No internet access required.
-- Inbound from swf agents on the relay port (default `:18443` — chosen to
-  avoid the app's own `:8443` on v3 siemcore hosts), typically the
-  customer's LAN. The listener is TLS-only (1.9.0+): it self-provisions a
+- Inbound from swf agents on the relay port (`:18443` — the ONE relay port
+  cascade-wide, also avoiding the app's own `:8443` on v3 siemcore hosts).
+  The listener protects its own port (1.10.0+; see "Naming and ports"), so
+  it can be opened broadly. It is TLS-only (1.9.0+): it self-provisions a
   certificate under `relay.tls.dir` on first start. Give that directory's
   `cert.pem` to the swf team so their agents pin it, and list every address
   swf agents use to reach this host in `relay.tls.hosts`.

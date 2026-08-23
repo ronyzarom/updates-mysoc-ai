@@ -366,6 +366,7 @@ relay.enabled: true (and relay.listen) in the configuration.`,
 				return err
 			}
 			simulator.SetChildrenProvider(relay.ChildrenReport)
+			simulator.SetGuardStatsProvider(relay.GuardStats)
 
 			ctx, stop := signal.NotifyContext(
 				context.Background(),

@@ -533,6 +533,28 @@ export default function InstanceDetailPage() {
               <span className="text-slate-400">Updater Version</span>
               <span className="text-white">{heartbeat?.updater_version || "Unknown"}</span>
             </div>
+            {heartbeat?.relay_guard && (
+              <div className="flex items-center justify-between text-sm">
+                <span
+                  className="text-slate-400"
+                  title="The relay listener protects its own open port automatically: unknown sources are restricted and rate-limited, repeated auth failures earn escalating temp-bans. Nothing to configure."
+                >
+                  Port Protection
+                </span>
+                <span className="text-white">
+                  {heartbeat.relay_guard.learned_ips} trusted
+                  {" · "}
+                  {heartbeat.relay_guard.blocked + heartbeat.relay_guard.rate_limited + heartbeat.relay_guard.banned}{" "}
+                  rejected
+                  {heartbeat.relay_guard.active_bans > 0 && (
+                    <span className="text-amber-400">
+                      {" · "}
+                      {heartbeat.relay_guard.active_bans} banned now
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

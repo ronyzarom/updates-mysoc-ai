@@ -37,6 +37,7 @@ type Relay struct {
 	upstream  *Client
 	logger    *slog.Logger
 	publicKey ed25519.PublicKey // nil = signature verification disabled
+	guard     *relayGuard       // port self-protection (see relayguard.go)
 
 	mu       sync.Mutex
 	children map[string]*childState
@@ -49,6 +50,7 @@ type childState struct {
 	LastSeen   time.Time
 	Token      string
 	LastReport *platformtypes.UpdateAttempt
+	SourceIP   string // address the child last connected from
 }
 
 // NewRelay builds the relay listener component.
@@ -63,6 +65,7 @@ func NewRelay(cfg *Config, upstream *Client, logger *slog.Logger) (*Relay, error
 		config:   cfg,
 		upstream: upstream,
 		logger:   logger,
+		guard:    newRelayGuard(),
 		children: map[string]*childState{},
 	}
 	if pubHex := strings.TrimSpace(cfg.Signing.PublicKey); pubHex != "" {
@@ -95,10 +98,13 @@ func (r *Relay) Serve(ctx context.Context) error {
 		return fmt.Errorf("relay TLS material: %w", err)
 	}
 
+	// The guard fronts every route: temp-bans, per-IP rate limits, and the
+	// learned-source restriction are applied before any handler runs.
 	server := &http.Server{
 		Addr:              r.config.Relay.Listen,
-		Handler:           mux,
+		Handler:           r.guard.middleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
+		MaxHeaderBytes:    16 << 10,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 	errCh := make(chan error, 1)
@@ -161,6 +167,7 @@ func (r *Relay) ChildrenReport() []platformtypes.ChildReport {
 			LastSeen:          child.LastSeen,
 			LastUpdateAttempt: attempt,
 			Children:          hb.Children,
+			SourceIP:          child.SourceIP,
 		})
 	}
 	sort.Slice(reports, func(i, j int) bool { return reports[i].InstanceID < reports[j].InstanceID })
@@ -194,6 +201,7 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Header.Get("X-License-Key")) == "" {
+		r.guard.noteAuthFailure(req.RemoteAddr)
 		relayError(w, http.StatusUnauthorized, "a child credential (X-License-Key) is required")
 		return
 	}
@@ -205,6 +213,15 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 	issuedToken := ""
 	switch {
 	case !known:
+		// Bound the child map: an internet-reachable listener must not let
+		// arbitrary instance_ids balloon relay memory.
+		if len(r.children) >= guardMaxChildren {
+			r.mu.Unlock()
+			r.logger.Warn("relay children capacity reached; rejecting new enrollment",
+				"instance_id", heartbeat.InstanceID, "remote", req.RemoteAddr)
+			relayError(w, http.StatusTooManyRequests, "relay children capacity reached")
+			return
+		}
 		token := presented
 		if token == "" {
 			token = newRelayToken()
@@ -214,12 +231,15 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 		r.children[heartbeat.InstanceID] = child
 	case child.Token != "" && presented != child.Token:
 		r.mu.Unlock()
+		r.guard.noteAuthFailure(req.RemoteAddr)
 		relayError(w, http.StatusUnauthorized, "relay token mismatch for this instance_id")
 		return
 	}
 	child.Heartbeat = heartbeat
 	child.LastSeen = time.Now()
+	child.SourceIP = remoteIP(req.RemoteAddr)
 	r.mu.Unlock()
+	r.guard.noteAuthSuccess(req.RemoteAddr)
 
 	if issuedToken != "" {
 		r.logger.Info("child enrolled at relay",
@@ -464,17 +484,26 @@ func (r *Relay) ensureCached(
 // relay token issued at enrollment.
 func (r *Relay) authorizeChild(w http.ResponseWriter, req *http.Request, instanceID string) bool {
 	if strings.TrimSpace(req.Header.Get("X-License-Key")) == "" {
+		r.guard.noteAuthFailure(req.RemoteAddr)
 		relayError(w, http.StatusUnauthorized, "a child credential (X-License-Key) is required")
 		return false
 	}
 	presented := strings.TrimSpace(req.Header.Get("X-Relay-Token"))
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if child, ok := r.children[instanceID]; ok && child.Token != "" && presented != child.Token {
+		r.mu.Unlock()
+		r.guard.noteAuthFailure(req.RemoteAddr)
 		relayError(w, http.StatusUnauthorized, "relay token mismatch for this instance_id")
 		return false
 	}
+	r.mu.Unlock()
+	r.guard.noteAuthSuccess(req.RemoteAddr)
 	return true
+}
+
+// GuardStats exposes the port-protection counters for the upward heartbeat.
+func (r *Relay) GuardStats() *platformtypes.RelayGuardStats {
+	return r.guard.Stats()
 }
 
 func newRelayToken() string {

@@ -174,6 +174,17 @@ export interface HeartbeatData {
   license?: LicenseStatus;
   last_update_attempt?: UpdateAttempt;
   timestamp: string;
+  relay_guard?: RelayGuardStats;
+}
+
+// Port-protection counters reported by relay listeners (since process start).
+// Pure visibility: the guard is automatic and has no configuration.
+export interface RelayGuardStats {
+  blocked: number;
+  rate_limited: number;
+  banned: number;
+  active_bans: number;
+  learned_ips: number;
 }
 
 export interface ProductStatus {

@@ -51,7 +51,7 @@ signing:
 
 relay:
   enabled: true
-  listen: ":8443"            # child-facing address
+  listen: ":18443"           # child-facing address — the ONE relay port cascade-wide
   cache_dir: /var/lib/mysoc-updater/relay-cache
   child_offline_after: 5m
 
@@ -69,7 +69,7 @@ updater-simulator relay --config config.yaml
 
 ```yaml
 server:
-  url: https://mysoc-op1.internal:8443   # the mysoc relay, not updates.mysoc.ai
+  url: https://mysoc-op1.internal:18443  # the mysoc relay, not updates.mysoc.ai
   ca_file: mysoc-relay-ca.pem            # the mysoc relay's cert.pem
   license_key: "<siemcore instance credential>"
 
@@ -87,7 +87,7 @@ signing:
 
 relay:
   enabled: true
-  listen: ":8443"
+  listen: ":18443"
   cache_dir: /var/lib/siemcore-updater/relay-cache
 ```
 
@@ -99,7 +99,7 @@ and presents it as `X-Relay-Token` from then on.
 
 ```yaml
 server:
-  url: https://siemcore-a.customer.lan:8443  # the siemcore relay
+  url: https://siemcore-a.customer.lan:18443 # the siemcore relay
   ca_file: siemcore-relay-ca.pem             # the siemcore relay's cert.pem
   license_key: "<customer credential>"
 
@@ -134,6 +134,27 @@ updater-simulator run --config config.yaml
 Verification happens at **every** hop, so a compromised relay cannot inject a
 forged artifact — children re-verify signature and checksum themselves before
 installing.
+
+### Port protection (1.10.0+)
+
+The relay port (`:18443`, the one relay port cascade-wide) is designed to be
+opened broadly — children never configure firewalls, and there is no ACL to
+maintain anywhere. The listener protects itself, with zero configuration:
+
+- **Auto-learned sources**: IPs that authenticate successfully (credential /
+  relay token) get full service. Unknown IPs can only reach the heartbeat
+  enrollment path, never release metadata or downloads. Learning is
+  in-memory and self-heals after restarts (children re-authenticate every
+  heartbeat).
+- **Per-IP rate limits**: generous for learned children, strict (5/min) for
+  unknown sources.
+- **Auth-failure temp-bans**: repeated failures from one IP earn escalating
+  bans (5m, 30m, 6h), answered before any request parsing.
+- **Bounded state**: per-IP tracking and the child registry are capped, so
+  scanners cannot balloon relay memory.
+
+Counters (`blocked`, `rate_limited`, `banned`) roll up in the relay's
+heartbeat and appear on the instance page as "Port Protection".
 
 ## 6. Operations
 
