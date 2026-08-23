@@ -40,7 +40,7 @@ heartbeat:
   jitter: 10s
 
 simulation:
-  mode: simulate
+  mode: real
   artifact_dir: /var/lib/mysoc-updater/artifacts
   state_file: /var/lib/mysoc-updater/state.json
   # REAL INSTALLS: staged under /opt/mysoc-cascade, activated by the root

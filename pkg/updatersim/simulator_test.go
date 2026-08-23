@@ -61,7 +61,7 @@ func TestSimulatorObserveDoesNotDownloadOrReport(t *testing.T) {
 	}
 }
 
-func TestSimulatorSimulateDownloadsReportsAndPersistsVersion(t *testing.T) {
+func TestSimulatorRealModeDownloadsReportsAndPersistsVersion(t *testing.T) {
 	t.Parallel()
 
 	artifact := []byte("simulated artifact")
@@ -98,13 +98,13 @@ func TestSimulatorSimulateDownloadsReportsAndPersistsVersion(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := newSimulatorTestConfig(t, server.URL, ModeSimulate)
+	cfg := newSimulatorTestConfig(t, server.URL, ModeReal)
 	executor := &recordingExecutor{}
 	simulator, err := NewSimulator(cfg, executor, discardLogger())
 	if err != nil {
 		t.Fatalf("new simulator: %v", err)
 	}
-	if err := simulator.RunCycle(context.Background(), ModeSimulate); err != nil {
+	if err := simulator.RunCycle(context.Background(), ModeReal); err != nil {
 		t.Fatalf("run simulate cycle: %v", err)
 	}
 
@@ -131,17 +131,89 @@ func TestSimulatorSimulateDownloadsReportsAndPersistsVersion(t *testing.T) {
 	}
 }
 
+func TestSimulatorRealModeWithoutExecutorRefusesToReportSuccess(t *testing.T) {
+	t.Parallel()
+
+	artifact := []byte("artifact that must never be reported installed")
+	sum := sha256.Sum256(artifact)
+	checksum := hex.EncodeToString(sum[:])
+	var report UpdateReportRequest
+	var reportCount int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/heartbeat":
+			writeTestJSON(t, w, HeartbeatResponse{Status: "ok"})
+		case "/api/v1/updates/siemcore/check":
+			writeTestJSON(t, w, UpdateCheckResponse{
+				UpdateAvailable: true,
+				LatestVersion:   "1.1.0",
+				DownloadURL:     "/artifact",
+				SHA256:          checksum,
+				Channel:         "stable",
+				UpdateGroup:     "alpha",
+			})
+		case "/artifact":
+			w.Header().Set("X-Checksum-SHA256", checksum)
+			_, _ = w.Write(artifact)
+		case "/api/v1/updates/siemcore/report":
+			reportCount++
+			if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
+				t.Fatalf("decode report: %v", err)
+			}
+			writeTestJSON(t, w, map[string]string{"status": "ok"})
+		default:
+			t.Fatalf("unexpected request: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := newSimulatorTestConfig(t, server.URL, ModeReal)
+	simulator, err := NewSimulator(cfg, NoopExecutor{}, discardLogger())
+	if err != nil {
+		t.Fatalf("new simulator: %v", err)
+	}
+
+	// The cycle must error, the attempt must be reported as a FAILURE, and
+	// the tracked version must not advance: an install that did not happen
+	// is never reported as one (the silent failure of the retired
+	// "simulate" mode).
+	if err := simulator.RunCycle(context.Background(), ModeReal); err == nil {
+		t.Fatal("real mode with no executor reported a clean cycle")
+	}
+	if reportCount != 1 || report.Success {
+		t.Fatalf("expected one failure report, got count=%d report=%#v", reportCount, report)
+	}
+	if report.Error == "" {
+		t.Fatalf("failure report carries no error message: %#v", report)
+	}
+	if cfg.Products[0].CurrentVersion != "1.0.0" {
+		t.Fatalf("version advanced to %s despite no install", cfg.Products[0].CurrentVersion)
+	}
+}
+
+func TestConfigNormalizesLegacySimulateMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := newSimulatorTestConfig(t, "http://127.0.0.1:1", ModeSimulate)
+	cfg.setDefaults()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("legacy simulate config rejected: %v", err)
+	}
+	if cfg.Simulation.Mode != ModeReal || !cfg.Simulation.LegacySimulateMode {
+		t.Fatalf("legacy simulate not normalized: mode=%q flag=%v",
+			cfg.Simulation.Mode, cfg.Simulation.LegacySimulateMode)
+	}
+}
+
 type recordingExecutor struct {
 	applied    bool
 	validated  bool
 	rolledBack bool
 }
 
-func (e *recordingExecutor) Apply(_ context.Context, update Update) error {
+func (e *recordingExecutor) Apply(_ context.Context, _ Update) error {
 	e.applied = true
-	if !update.SimulationOnly {
-		panic("simulator passed a non-simulation update")
-	}
 	return nil
 }
 

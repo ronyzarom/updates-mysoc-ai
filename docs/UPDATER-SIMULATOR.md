@@ -199,25 +199,27 @@ Download and verify without reporting success:
   once --download
 ```
 
-Simulate a successful update:
+Run a full update cycle:
 
 ```bash
 ./bin/updater-simulator \
   --config examples/updater-simulator/siemcore.yaml \
-  once --simulate
+  once --real
 ```
 
-Simulate mode:
+Real mode:
 
 1. Sends a heartbeat.
 2. Checks group-aware policy.
 3. Downloads the artifact.
 4. Verifies SHA-256 metadata and the download response header.
-5. Calls the no-op executor.
-6. Reports simulated success.
-7. Advances the version only in the simulator state file.
+5. Runs the configured executor (`filesystem` performs the install).
+6. Reports the outcome and advances the tracked version on success.
 
-It never starts or executes the artifact.
+With no executor configured (`noop`), the offered update is **failed loudly**
+instead of applied: the updater never reports a success that did not happen.
+(The retired mode name `simulate` — which allowed exactly that silent lie —
+is still parsed as a deprecated alias of `real`.)
 
 ### Run Continuously
 
@@ -232,7 +234,7 @@ interval with jitter. On `SIGINT` or `SIGTERM` the simulator stops scheduling ne
 work, gives any in-flight cycle a bounded drain window (`simulation.drain_timeout`,
 default `30s`), and then exits.
 
-`run --download` and `run --simulate` override the configured mode.
+`run --download` and `run --real` override the configured mode.
 
 ### Reconcile a Desired-State Manifest
 
@@ -250,16 +252,15 @@ then:
 ```bash
 ./bin/updater-simulator \
   --config examples/updater-simulator/siemcore.yaml \
-  reconcile --simulate
+  reconcile --real
 ```
 
 The pipeline runs `prepare -> migrate -> containers -> config -> self-update ->
 health -> security -> commit`. Any stage failure rolls back the prior stages and
 reports the failing stage. `observe` computes and logs the plan only; `download`
-runs the stages without committing state or reporting success; `simulate` commits
-the simulated state and reports the result. Every stage is delegated to the
-`ReconcilingExecutor` seam, which defaults to a no-op, so nothing on the host is
-changed.
+runs the stages without committing state or reporting success; `real` commits
+the state and reports the result. Every stage is delegated to the
+`ReconcilingExecutor` seam.
 
 ## Configuration
 
@@ -306,15 +307,20 @@ products:
 
 - `observe`: heartbeat and policy check only
 - `download`: download and verify only
-- `simulate`: run the configured executor lifecycle, report, and update state
+- `real`: run the configured executor lifecycle, report, and update state
+- `simulate`: **retired** — parsed as a deprecated alias of `real` with a
+  startup warning. The old name suggested "no side effects" while the mode
+  ran the executor and reported success, which silently lied on hosts with
+  no executor configured.
 
 ### Executors
 
 The `simulation.executor` field selects what happens after an artifact is
-downloaded and verified in `simulate` mode:
+downloaded and verified in `real` mode:
 
-- `noop` (default): simulates apply/validate/rollback latency without changing
-  the machine. Safe for protocol testing against any server.
+- `noop` (default): waits out apply/validate/rollback latency without changing
+  the machine. In `real` mode an offered update is **failed loudly** through
+  it — the updater never reports a success that did not happen.
 - `filesystem`: a **real** installer that writes to disk. Use it to exercise a
   genuine install/update on a local machine.
 
@@ -342,7 +348,7 @@ Behavior:
 
 ```yaml
 simulation:
-  mode: simulate
+  mode: real
   executor: filesystem
   artifact_dir: ./artifacts
   state_file: ./state.json

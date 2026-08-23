@@ -61,9 +61,12 @@ heartbeat:
 #   channel: stable
 
 simulation:
-  # "simulate" runs the full pipeline: verify signature + checksum, download,
-  # run the executor, report the result upstream.
-  mode: simulate
+  # "real" runs the full pipeline: verify signature + checksum, download,
+  # run the executor, report the result upstream. Without the executor block
+  # below, offered updates are FAILED loudly (visible on the dashboard) —
+  # the updater never reports a success that did not happen. (The retired
+  # name "simulate" is still accepted as a deprecated alias of real.)
+  mode: real
   artifact_dir: /var/lib/mysoc-updater/artifacts
   state_file: /var/lib/mysoc-updater/state.json
   # PRODUCTION INSTALLS: uncomment to perform real versioned installs with

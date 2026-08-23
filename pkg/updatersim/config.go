@@ -64,7 +64,15 @@ const (
 	ModeObserve Mode = "observe"
 	// ModeDownload downloads and verifies an artifact without reporting success.
 	ModeDownload Mode = "download"
-	// ModeSimulate downloads, verifies, runs the configured Executor, and reports.
+	// ModeReal downloads, verifies, runs the configured Executor, and reports.
+	// A real (non-noop) executor is required: with none configured the
+	// attempt is failed loudly instead of reporting a success that never
+	// happened.
+	ModeReal Mode = "real"
+	// ModeSimulate is the retired name for the full pipeline. Configs using
+	// it are normalized to ModeReal at load with a deprecation warning: the
+	// name suggested "no side effects" while the pipeline ran the executor
+	// and reported success, which silently lied on hosts with no executor.
 	ModeSimulate Mode = "simulate"
 )
 
@@ -222,6 +230,11 @@ type SimulationConfig struct {
 	LegacyFallback   bool             `yaml:"legacy_fallback"`
 	DrainTimeout     Duration         `yaml:"drain_timeout"`
 	Filesystem       FilesystemConfig `yaml:"filesystem,omitempty"`
+
+	// LegacySimulateMode records that the config said "simulate" and was
+	// normalized to ModeReal, so the simulator can warn about the retired
+	// name at startup.
+	LegacySimulateMode bool `yaml:"-"`
 }
 
 // FilesystemConfig configures the real filesystem installer used when
@@ -288,6 +301,10 @@ func (c *Config) setDefaults() {
 	}
 	if c.Simulation.Mode == "" {
 		c.Simulation.Mode = ModeObserve
+	}
+	if c.Simulation.Mode == ModeSimulate {
+		c.Simulation.Mode = ModeReal
+		c.Simulation.LegacySimulateMode = true
 	}
 	if c.Simulation.Executor == "" {
 		c.Simulation.Executor = ExecutorNoop
@@ -472,7 +489,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("drain_timeout must be positive")
 	}
 	switch c.Simulation.Mode {
-	case ModeObserve, ModeDownload, ModeSimulate:
+	case ModeObserve, ModeDownload, ModeReal:
 	default:
 		return fmt.Errorf("invalid simulation mode %q", c.Simulation.Mode)
 	}
