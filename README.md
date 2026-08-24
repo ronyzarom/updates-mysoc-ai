@@ -59,10 +59,10 @@ cd updates-mysoc-ai
 go mod download
 ```
 
-3. Create database:
+3. Create database (migrations run automatically at server startup):
 ```bash
 createdb mysoc_updates
-psql -d mysoc_updates -f migrations/001_initial.up.sql
+psql -d mysoc_updates -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'
 ```
 
 4. Configure environment:
