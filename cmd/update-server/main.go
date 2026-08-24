@@ -42,6 +42,13 @@ func main() {
 	}
 	defer db.Close()
 
+	// Bring the schema to head before serving anything. A failed migration
+	// aborts startup: better a visibly down server than one running against
+	// a half-migrated schema.
+	if err := db.Migrate(context.Background()); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+
 	// Initialize storage
 	store, err := storage.New(cfg.Storage)
 	if err != nil {
