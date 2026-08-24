@@ -37,7 +37,10 @@ func NewRepository(db *database.DB) *Repository {
 // CreateUser creates a new user
 func (r *Repository) CreateUser(ctx context.Context, email, passwordHash, name, role string) (*types.User, error) {
 	var user types.User
-	var lastLoginAt, mfaVerifiedAt, emailVerifiedAt, lockedUntil pgtype.Timestamptz
+	var lastLoginAt pgtype.Timestamptz
+	// avatar_url is NULL on a fresh row; scanning it into a plain string
+	// made every successful INSERT report a 500 to the dashboard.
+	var avatarURL sql.NullString
 
 	err := r.db.Pool.QueryRow(ctx, `
 		INSERT INTO users (email, password_hash, name, role)
@@ -45,7 +48,7 @@ func (r *Repository) CreateUser(ctx context.Context, email, passwordHash, name, 
 		RETURNING id, email, name, role, avatar_url, mfa_enabled, is_active, email_verified,
 				  last_login_at, password_changed_at, created_at, updated_at
 	`, email, passwordHash, name, role).Scan(
-		&user.ID, &user.Email, &user.Name, &user.Role, &user.AvatarURL,
+		&user.ID, &user.Email, &user.Name, &user.Role, &avatarURL,
 		&user.MFAEnabled, &user.IsActive, &user.EmailVerified,
 		&lastLoginAt, &user.PasswordChangedAt, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -56,12 +59,12 @@ func (r *Repository) CreateUser(ctx context.Context, email, passwordHash, name, 
 		return nil, err
 	}
 
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
+	}
 	if lastLoginAt.Valid {
 		user.LastLoginAt = &lastLoginAt.Time
 	}
-	_ = mfaVerifiedAt
-	_ = emailVerifiedAt
-	_ = lockedUntil
 
 	return &user, nil
 }
