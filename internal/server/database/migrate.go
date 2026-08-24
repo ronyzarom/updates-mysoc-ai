@@ -58,16 +58,33 @@ func (db *DB) Migrate(ctx context.Context) error {
 		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, migrationLockKey)
 	}()
 
+	// to_regclass is not privilege-filtered (unlike information_schema),
+	// so detection works no matter which role runs the migration.
 	var ledgerExists bool
 	if err := conn.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM information_schema.tables
-		  WHERE table_schema = 'public' AND table_name = 'schema_migrations')`,
+		`SELECT to_regclass('public.schema_migrations') IS NOT NULL`,
 	).Scan(&ledgerExists); err != nil {
 		return fmt.Errorf("migrate: check ledger: %w", err)
 	}
 
 	if !ledgerExists {
-		if _, err := conn.Exec(ctx, `
+		// No ledger but a populated schema means this database predates the
+		// runner and was migrated by hand; its schema is at head by
+		// definition of the release that ships this code. Ledger creation
+		// and baseline commit atomically so a crash in between can never
+		// leave an empty ledger that would route a rerun into apply mode.
+		var schemaPopulated bool
+		if err := conn.QueryRow(ctx,
+			`SELECT to_regclass('public.instances') IS NOT NULL`,
+		).Scan(&schemaPopulated); err != nil {
+			return fmt.Errorf("migrate: check schema: %w", err)
+		}
+
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("migrate: begin ledger init: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
 			CREATE TABLE schema_migrations (
 				version    TEXT PRIMARY KEY,
 				name       TEXT NOT NULL,
@@ -75,27 +92,23 @@ func (db *DB) Migrate(ctx context.Context) error {
 				baseline   BOOLEAN NOT NULL DEFAULT FALSE,
 				applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 			)`); err != nil {
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("migrate: create ledger: %w", err)
-		}
-
-		// No ledger but a populated schema means this database predates the
-		// runner and was migrated by hand; its schema is at head by
-		// definition of the release that ships this code.
-		var schemaPopulated bool
-		if err := conn.QueryRow(ctx,
-			`SELECT EXISTS (SELECT 1 FROM information_schema.tables
-			  WHERE table_schema = 'public' AND table_name = 'instances')`,
-		).Scan(&schemaPopulated); err != nil {
-			return fmt.Errorf("migrate: check schema: %w", err)
 		}
 		if schemaPopulated {
 			for _, m := range set {
-				if _, err := conn.Exec(ctx, `
+				if _, err := tx.Exec(ctx, `
 					INSERT INTO schema_migrations (version, name, checksum, baseline)
 					VALUES ($1, $2, $3, TRUE)`, m.Version, m.Name, m.Sum); err != nil {
+					_ = tx.Rollback(ctx)
 					return fmt.Errorf("migrate: baseline %s_%s: %w", m.Version, m.Name, err)
 				}
 			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("migrate: commit ledger init: %w", err)
+		}
+		if schemaPopulated {
 			log.Printf("migrations: baselined existing schema at %s_%s (%d recorded, none executed)",
 				set[len(set)-1].Version, set[len(set)-1].Name, len(set))
 			return nil
