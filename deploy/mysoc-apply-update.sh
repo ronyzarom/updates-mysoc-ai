@@ -13,8 +13,16 @@
 # as UPDATER_PHASE ("apply" or "rollback"); context in CURRENT_DIR, VERSION,
 # FROM_VERSION, PRODUCT, INSTALL_ROOT. The authoritative version is read from
 # the release directory itself so the same code path is correct on apply and
-# on rollback. After the host-policy checks below, control is delegated to
-# the artifact's own updater/apply entrypoint when the release ships one.
+# on rollback.
+#
+# Ordering (contract v1.1): after the universal host checks, a release that
+# ships an executable updater/apply is delegated to IMMEDIATELY — it owns the
+# whole apply (DB migrate → code sync → restart → health), and its migration
+# policy is its own. The layout checks and the unapplied-migration guard
+# below the delegation point are preconditions of THIS script's fallback
+# apply only; they must never gate an entrypoint-bearing release, otherwise
+# a release that ships migrations plus the installer meant to run them would
+# be refused before its installer ever executed.
 set -euo pipefail
 
 log() { echo "[mysoc-apply-update] $*"; }
@@ -33,12 +41,26 @@ done
 RELDIR="$(readlink -f "$CUR")"
 [[ -f "$RELDIR/VERSION" ]] || { log "release has no VERSION file"; exit 1; }
 RELVER="$(tr -d '[:space:]' < "$RELDIR/VERSION")"
+
+# Delegation FIRST: a release that ships its own entrypoint owns the entire
+# apply — including running and recording its own DB migrations. Exit status
+# flows through; on rollback the previous release's own entrypoint (or this
+# script's fallback, for pre-entrypoint releases) runs instead.
+if [[ -x "$RELDIR/updater/apply" ]]; then
+    log "delegating $PHASE of $RELVER to artifact entrypoint"
+    exec "$RELDIR/updater/apply" "$PHASE"
+fi
+
+# ---- Fallback apply (releases without an entrypoint) ---------------------
+# Everything below is this script's own apply logic and its preconditions.
+
 [[ -x "$RELDIR/backend/mysoc-backend" ]] || { log "backend binary missing or not executable"; exit 1; }
 [[ -f "$RELDIR/frontend/server.js" ]] || { log "frontend server.js missing"; exit 1; }
 
-# Migration guard: this script never mutates the database. A release that
+# Migration guard: the fallback never mutates the database. A release that
 # ships migrations this host has not seen must be applied through the
-# documented DB migration path first; refusing here triggers a clean rollback.
+# documented DB migration path first (or ship an updater/apply entrypoint
+# that does it); refusing here triggers a clean rollback.
 if [[ -d "$RELDIR/migrations" ]]; then
     missing=0
     while IFS= read -r f; do
@@ -49,16 +71,9 @@ if [[ -d "$RELDIR/migrations" ]]; then
         fi
     done < <(find "$RELDIR/migrations" -maxdepth 1 -name '*.sql' | sort)
     if (( missing > 0 )); then
-        log "REFUSING install: $missing new migration(s) present; run DB migrations first, then retry"
+        log "REFUSING install: $missing new migration(s) present; run DB migrations first (or ship updater/apply), then retry"
         exit 1
     fi
-fi
-
-# Delegation: a release that ships its own entrypoint owns the apply logic
-# from here (host policy above has already passed). Exit status flows through.
-if [[ -x "$RELDIR/updater/apply" ]]; then
-    log "delegating $PHASE of $RELVER to artifact entrypoint"
-    exec "$RELDIR/updater/apply" "$PHASE"
 fi
 
 log "$PHASE: bringing $RELVER live from $RELDIR"

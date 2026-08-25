@@ -12,12 +12,16 @@
 ### 1. Database Setup
 
 ```bash
-# Create database
+# Create database (the uuid-ossp extension needs a superuser once)
 createdb mysoc_updates
-
-# Run migrations
-psql -d mysoc_updates -f migrations/001_initial.up.sql
+psql -d mysoc_updates -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'
 ```
+
+Schema migrations are applied automatically by the server at startup
+(embedded `migrations/*.up.sql`, recorded in `schema_migrations` under an
+advisory lock). A database that predates the runner is baselined on first
+start. Never edit an applied migration — add a new numbered one. Rollbacks
+are an operator action using the on-disk `*.down.sql` files.
 
 ### 2. Build
 

@@ -1,4 +1,4 @@
-# Update Entrypoint Contract (v1.1)
+# Update Entrypoint Contract (v1.2)
 
 How the updater invokes application-owned install logic. This is the interface
 app teams (mysoc, siemcore, swf) code against; the updater guarantees it from
@@ -7,7 +7,9 @@ platform version 1.9.1.
 v1.1 amends v1 with clarifications raised during the three-team countersign
 (no semantic change for any conformant implementation): per-host
 `command_timeout`, secrets vs. version-pin fields in host config, a third
-compliant migrations mode, and the fresh-install rollback refinement. The
+compliant migrations mode, and the fresh-install rollback refinement.
+v1.2 fixes the shim ordering rule: delegation precedes the shim's own
+fallback preconditions, and an entrypoint owns the whole apply. The
 changelog is at the bottom.
 
 ## Who runs what
@@ -28,6 +30,18 @@ updater (unprivileged)
 - The **host shim is the privilege boundary**: it is root-owned, installed by
   the host operator, referenced by a single `NOPASSWD` sudoers entry, and free
   to veto an install (non-zero exit) before delegating.
+- **Delegation ordering (v1.2):** the shim's veto covers *universal* host
+  policy only (release-tree containment, ownership, integrity of the staged
+  bundle). Preconditions of the shim's own fallback apply — expected file
+  layout, the unapplied-migration guard — must be checked **after** the
+  delegation point, so they never gate an entrypoint-bearing release.
+  Otherwise a release that ships migrations together with the installer
+  meant to run them is refused before that installer executes.
+- **An entrypoint owns the whole apply.** When `updater/apply` exists, it is
+  responsible for the full lifecycle — DB migrate (applied and recorded),
+  code sync, service restart, and health verification — for both phases.
+  There is no split mode in which the shim runs part of the apply around an
+  entrypoint; two owners of restart/health is how rollbacks get ambiguous.
 
 ## Entrypoint location
 
@@ -116,8 +130,9 @@ Defaults!/usr/local/sbin/<shim> env_keep += "UPDATER_PHASE CURRENT_DIR VERSION F
 
 ## Reference implementations
 
-- mysoc host shim: `deploy/mysoc-apply-update.sh` (migration guard,
-  code sync, restart, health gate, provenance file).
+- mysoc host shim: `deploy/mysoc-apply-update.sh` (delegates to
+  `updater/apply` first; fallback apply with migration guard, code sync,
+  restart, health gate, provenance file for entrypoint-less releases).
 - siemcore host shim: `/usr/local/sbin/siemcore-apply-update` (tree
   containment, ownership, manifest cross-check, `checksums.txt`
   verification) delegating to the app repo's `update.sh` (v3 compose
@@ -131,6 +146,14 @@ Defaults!/usr/local/sbin/<shim> env_keep += "UPDATER_PHASE CURRENT_DIR VERSION F
 
 ## Changelog
 
+- **v1.2** — delegation ordering fixed: the shim checks universal host
+  policy, then delegates to `updater/apply` when present; the shim's
+  fallback preconditions (layout checks, unapplied-migration guard) apply
+  only to entrypoint-less releases. Stated explicitly that an entrypoint
+  owns the complete apply lifecycle (migrate → sync → restart → health) —
+  no split ownership. Raised by mysoc while building their first
+  entrypoint-bearing release; without this fix a migration-bearing release
+  shipping its own installer would be refused before the installer ran.
 - **v1.1** — post-countersign clarifications, no semantic change for
   conformant implementations: `command_timeout` documented as per-host
   (mysoc 300s, siemcore 900s); requirement 3 distinguishes secrets
