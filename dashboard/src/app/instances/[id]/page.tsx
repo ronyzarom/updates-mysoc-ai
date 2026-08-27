@@ -29,7 +29,7 @@ import { formatDistanceToNow, format } from "date-fns";
 import { useState, useEffect } from "react";
 import { LoadingState, ErrorState, Switch } from "@/components/ui";
 import { RequireRole } from "@/lib/auth-context";
-import { effectiveUpdateGroup } from "@/lib/derive";
+import { effectiveUpdateGroup, supersededCurrentVersion } from "@/lib/derive";
 import { TierBadge } from "@/components/InstanceTree";
 import type { Instance } from "@/lib/api";
 
@@ -175,6 +175,10 @@ export default function InstanceDetailPage() {
   }
 
   const heartbeat = instance.last_heartbeat_data;
+
+  // A failed last-update attempt is rendered as resolved once the node
+  // demonstrably runs the version that attempt targeted (or newer).
+  const supersededVersion = supersededCurrentVersion(instance);
 
   // Agents serialize Go's zero time ("0001-01-01T00:00:00Z") when no license
   // expiry is set; treat anything implausibly old as "no expiry" instead of
@@ -625,6 +629,46 @@ export default function InstanceDetailPage() {
               <ArrowUpCircle className="w-5 h-5 text-cyan-400" />
               Last Update
             </h2>
+            {supersededVersion ? (
+              // The recorded failure is history, not state: the node now runs
+              // the version that attempt targeted (recovered out-of-band, e.g.
+              // reinstall). Show it as resolved; keep the attempt for audit.
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Status</span>
+                  <span className="text-emerald-400">
+                    Superseded — node now current ({supersededVersion})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">When</span>
+                  <span className="text-white">
+                    {formatDistanceToNow(new Date(instance.last_update_at), { addSuffix: true })}
+                  </span>
+                </div>
+                <details className="text-sm pt-2 border-t border-slate-700">
+                  <summary className="text-slate-400 cursor-pointer hover:text-slate-300">
+                    Original failed attempt (audit)
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">From Version</span>
+                      <span className="text-white">{instance.last_update_from_version || "—"}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">To Version</span>
+                      <span className="text-white">{instance.last_update_target_version || "—"}</span>
+                    </div>
+                    {instance.last_update_error && (
+                      <div>
+                        <span className="text-slate-400">Error</span>
+                        <p className="text-slate-300 mt-1 text-xs">{instance.last_update_error}</p>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              </div>
+            ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">From Version</span>
@@ -665,6 +709,7 @@ export default function InstanceDetailPage() {
                 </span>
               </div>
             </div>
+            )}
           </div>
         )}
 

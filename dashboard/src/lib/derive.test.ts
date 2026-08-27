@@ -6,9 +6,11 @@ import {
   isActivePath,
   effectiveUpdateGroup,
   sortInstancesByHeartbeat,
+  compareVersions,
+  supersededCurrentVersion,
   THIRTY_DAYS_MS,
 } from "./derive";
-import type { Instance } from "./api";
+import type { Instance, HeartbeatData } from "./api";
 
 const NOW = new Date("2026-06-01T00:00:00Z").getTime();
 const inDays = (d: number) => new Date(NOW + d * 24 * 60 * 60 * 1000).toISOString();
@@ -114,5 +116,92 @@ describe("sortInstancesByHeartbeat", () => {
     expect(sorted.map((i) => i.id)).toEqual(["b", "a", "c"]);
     // original array is untouched
     expect(input.map((i) => i.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("compareVersions", () => {
+  it("compares four-part versions numerically, not lexically", () => {
+    expect(compareVersions("2.2.0.31", "2.2.0.31")).toBe(0);
+    expect(compareVersions("2.2.0.31", "2.2.0.4")!).toBeGreaterThan(0);
+    expect(compareVersions("1.9.0.1", "1.10.0.1")!).toBeLessThan(0);
+  });
+  it("pads missing parts with zero", () => {
+    expect(compareVersions("2.2.0", "2.2.0.0")).toBe(0);
+    expect(compareVersions("2.2.1", "2.2.0.9")!).toBeGreaterThan(0);
+  });
+  it("refuses non-numeric versions instead of guessing", () => {
+    expect(compareVersions("dev", "2.2.0.31")).toBeNull();
+    expect(compareVersions("2.2.0.31", "2.2.0-rc1")).toBeNull();
+  });
+});
+
+describe("supersededCurrentVersion", () => {
+  const failedTo = (
+    target: string,
+    hb: Partial<HeartbeatData> | undefined
+  ): Pick<
+    Instance,
+    "last_update_success" | "last_update_target_version" | "last_heartbeat_data"
+  > => ({
+    last_update_success: false,
+    last_update_target_version: target,
+    last_heartbeat_data: hb as HeartbeatData | undefined,
+  });
+
+  it("resolves the SWF lifecycle case: failed attempt, node reinstalled to the target", () => {
+    // swf-e2e-ronyassus: failed 0.0.0.0 -> 2.2.0.31, now reports swf 2.2.0.31
+    const inst = failedTo("2.2.0.31", {
+      updater_version: "2.1.0.1",
+      products: [{ name: "swf", version: "2.2.0.31", status: "installed" }],
+    });
+    expect(supersededCurrentVersion(inst)).toBe("2.2.0.31");
+  });
+
+  it("accepts a single-product node that moved past the failed target", () => {
+    const inst = failedTo("2.2.0.31", {
+      updater_version: "2.1.0.1",
+      products: [{ name: "swf", version: "2.2.0.32", status: "installed" }],
+    });
+    expect(supersededCurrentVersion(inst)).toBe("2.2.0.32");
+  });
+
+  it("matches a failed updater self-update against the updater's own version", () => {
+    const inst = failedTo("2.1.0.2", {
+      updater_version: "2.1.0.2",
+      products: [{ name: "swf", version: "2.2.0.31", status: "installed" }],
+    });
+    expect(supersededCurrentVersion(inst)).toBe("2.1.0.2");
+  });
+
+  it("does not cross-compare products on multi-product nodes", () => {
+    // siemcore 3.3.133.1 > target 2.2.0.31 numerically, but it is a different
+    // product — only an exact match may supersede on multi-product nodes.
+    const inst = failedTo("2.2.0.31", {
+      updater_version: "1.10.1.1",
+      products: [
+        { name: "siemcore", version: "3.3.133.1", status: "installed" },
+        { name: "other", version: "9.0.0.0", status: "installed" },
+      ],
+    });
+    expect(supersededCurrentVersion(inst)).toBeNull();
+  });
+
+  it("keeps a genuine failure red", () => {
+    const inst = failedTo("2.2.0.31", {
+      updater_version: "2.1.0.1",
+      products: [{ name: "swf", version: "2.2.0.30", status: "installed" }],
+    });
+    expect(supersededCurrentVersion(inst)).toBeNull();
+  });
+
+  it("never supersedes successful or heartbeat-less attempts", () => {
+    expect(
+      supersededCurrentVersion({
+        last_update_success: true,
+        last_update_target_version: "2.2.0.31",
+        last_heartbeat_data: undefined,
+      })
+    ).toBeNull();
+    expect(supersededCurrentVersion(failedTo("2.2.0.31", undefined))).toBeNull();
   });
 });

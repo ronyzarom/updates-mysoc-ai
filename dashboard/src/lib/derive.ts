@@ -57,6 +57,54 @@ export function effectiveUpdateGroup(selected: string, current?: string): string
   return selected || current || "stable";
 }
 
+// Numeric comparison of dotted version strings (MAJOR.MINOR.PATCH.BUILD).
+// Returns <0 / 0 / >0 like a comparator, or null when either side is not
+// purely numeric — never guess an ordering for labels like "dev".
+export function compareVersions(a: string, b: string): number | null {
+  const pa = a.trim().split(".").map(Number);
+  const pb = b.trim().split(".").map(Number);
+  if (pa.some(Number.isNaN) || pb.some(Number.isNaN)) return null;
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+// A failed update attempt is moot once the node demonstrably runs the version
+// the attempt was trying to reach (or newer) — e.g. it recovered through an
+// out-of-band reinstall. Returns the current version proving supersession, or
+// null when the failure still stands. The attempt record carries no product
+// name, so: exact equality with anything the node reports (products or the
+// updater itself) is decisive, while "newer than target" is only trusted on
+// single-product nodes to avoid cross-product false positives.
+export function supersededCurrentVersion(
+  instance: Pick<
+    Instance,
+    "last_update_success" | "last_update_target_version" | "last_heartbeat_data"
+  >
+): string | null {
+  if (instance.last_update_success !== false) return null;
+  const target = instance.last_update_target_version;
+  const hb = instance.last_heartbeat_data;
+  if (!target || !hb) return null;
+
+  const products = hb.products || [];
+  const candidates = [
+    ...products.map((p) => p.version),
+    hb.updater_version,
+  ].filter((v): v is string => !!v);
+
+  const exact = candidates.find((v) => compareVersions(v, target) === 0);
+  if (exact) return exact;
+
+  if (products.length === 1 && products[0].version) {
+    const cmp = compareVersions(products[0].version, target);
+    if (cmp !== null && cmp > 0) return products[0].version;
+  }
+  return null;
+}
+
 // Returns instances ordered by most recent heartbeat first (non-mutating).
 export function sortInstancesByHeartbeat(instances: Instance[] | undefined): Instance[] {
   return [...(instances || [])].sort(

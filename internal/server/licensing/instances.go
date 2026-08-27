@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/catalog"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
@@ -698,11 +699,14 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 		parentInstanceIDPtr = &parent
 	}
 
-	// Cascade children (nodes declaring a parent) default to auto-update OFF:
-	// real product installs on a freshly enrolled child must be an explicit
-	// operator decision, not a side effect of enrollment. (Updater self-update
-	// is exempt from the toggle and stays on.)
-	autoUpdate := parentInstanceIDPtr == nil
+	// Cascade children default to auto-update OFF: real product installs on a
+	// freshly enrolled child must be an explicit operator decision, not a side
+	// effect of enrollment. (Updater self-update is exempt from the toggle and
+	// stays on.) A child is anything that declares a parent — or whose tier
+	// structurally requires one (siemcore, swf), because a first-contact check
+	// may legitimately omit parent_instance_id (orphan enrollment racing ahead
+	// of the relay rollup) and must not get wider authorization for it.
+	autoUpdate := parentInstanceIDPtr == nil && !catalog.RequiresParent(heartbeat.ProductTier)
 
 	_, err = r.db.Pool.Exec(ctx, `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
