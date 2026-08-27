@@ -3,6 +3,7 @@ package updatersim
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -213,6 +214,35 @@ func TestDecommissionExpiryPrunesRelayState(t *testing.T) {
 	relay.mu.Unlock()
 	if still {
 		t.Fatal("expired child still occupies relay state")
+	}
+}
+
+func TestGuardPermitsDecommissionFromUnknownSource(t *testing.T) {
+	// Guard learning is in-memory: a goodbye arriving right after a relay
+	// restart comes from an IP the guard has never seen and must still pass
+	// path policy (authentication then happens in the handler as usual),
+	// while other routes stay learned-only.
+	g := newRelayGuard()
+	reached := ""
+	mw := g.middleware(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		reached = req.URL.Path
+	}))
+
+	req := httptest.NewRequest("POST", "/api/v1/decommission", nil)
+	req.RemoteAddr = "203.0.113.9:4444"
+	rec := httptest.NewRecorder()
+	mw.ServeHTTP(rec, req)
+	if reached != "/api/v1/decommission" {
+		t.Fatalf("decommission blocked by guard for unknown source: %d %s", rec.Code, rec.Body.String())
+	}
+
+	reached = ""
+	req = httptest.NewRequest("GET", "/api/v1/releases/swf/1.0.0.0/download", nil)
+	req.RemoteAddr = "203.0.113.9:4444"
+	rec = httptest.NewRecorder()
+	mw.ServeHTTP(rec, req)
+	if reached != "" || rec.Code != 403 {
+		t.Fatalf("download must stay learned-only for unknown sources, got %d (reached %q)", rec.Code, reached)
 	}
 }
 
