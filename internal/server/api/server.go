@@ -170,6 +170,10 @@ func (s *Server) setupRoutes() {
 		// =====================
 		r.Post("/heartbeat", s.handleHeartbeat)
 
+		// Decommission: a direct node announces its own clean removal
+		// (state change, not deletion; contract 1.11.0 Item B).
+		r.Post("/decommission", s.handleDecommission)
+
 		// =====================
 		// Updates endpoint (siemcore-updater format)
 		// =====================

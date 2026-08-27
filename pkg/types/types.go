@@ -192,7 +192,7 @@ type ChildReport struct {
 	// System carries the child's host identity and measurements so cascaded
 	// nodes render OS/arch/uptime/metrics on the dashboard like direct ones.
 	System            *SystemMetrics `json:"system,omitempty"`
-	Status            string         `json:"status,omitempty"` // online, offline (relay's view)
+	Status            string         `json:"status,omitempty"` // online, offline, decommissioned (relay's view)
 	LastSeen          time.Time      `json:"last_seen"`
 	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
 	Children          []ChildReport  `json:"children,omitempty"`

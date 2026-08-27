@@ -28,6 +28,7 @@ import (
 // in the cascade: no siemcore/swf/mysoc product code is involved.
 //
 //   - POST /api/v1/heartbeat           — child check-in; stored for the rollup
+//   - POST /api/v1/decommission        — child announces its own clean removal
 //   - POST /api/v1/updates/{p}/check   — forwarded upstream with the relay's credential
 //   - POST /api/v1/updates/{p}/report  — recorded and carried up in the rollup
 //   - GET  /api/v1/releases/{p}/{v}/download — pull-through verified cache
@@ -51,7 +52,17 @@ type childState struct {
 	Token      string
 	LastReport *platformtypes.UpdateAttempt
 	SourceIP   string // address the child last connected from
+	// Decommissioned marks a child that announced its own removal
+	// (POST /api/v1/decommission). The mark rolls up as a child status and is
+	// cleared by any subsequent genuine heartbeat (honest revival).
+	Decommissioned   bool
+	DecommissionedAt time.Time
 }
+
+// decommissionRetention bounds how long a decommissioned child stays in relay
+// state after the mark: the updates server row is the durable record, the
+// relay only needs to deliver the status via rollups for a while.
+const decommissionRetention = 7 * 24 * time.Hour
 
 // NewRelay builds the relay listener component.
 func NewRelay(cfg *Config, upstream *Client, logger *slog.Logger) (*Relay, error) {
@@ -78,6 +89,7 @@ func NewRelay(cfg *Config, upstream *Client, logger *slog.Logger) (*Relay, error
 	if err := os.MkdirAll(cfg.Relay.CacheDir, 0700); err != nil {
 		return nil, fmt.Errorf("create relay cache dir: %w", err)
 	}
+	relay.loadTombstones()
 	return relay, nil
 }
 
@@ -86,6 +98,7 @@ func (r *Relay) Serve(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", r.handleHealth)
 	mux.HandleFunc("POST /api/v1/heartbeat", r.handleChildHeartbeat)
+	mux.HandleFunc("POST /api/v1/decommission", r.handleChildDecommission)
 	mux.HandleFunc("POST /api/v1/updates/{product}/check", r.handleChildCheck)
 	mux.HandleFunc("POST /api/v1/updates/{product}/report", r.handleChildReport)
 	mux.HandleFunc("GET /api/v1/releases/{product}/{version}", r.handleChildReleaseMeta)
@@ -141,12 +154,28 @@ func (r *Relay) ChildrenReport() []platformtypes.ChildReport {
 
 	offlineAfter := r.config.Relay.ChildOfflineAfter.Duration
 	now := time.Now()
+	pruned := false
 	reports := make([]platformtypes.ChildReport, 0, len(r.children))
-	for _, child := range r.children {
+	for id, child := range r.children {
+		// Decommissioned entries are kept only long enough to deliver the
+		// status upward; the server row is the durable record.
+		if child.Decommissioned && now.Sub(child.DecommissionedAt) > decommissionRetention {
+			delete(r.children, id)
+			pruned = true
+			continue
+		}
 		hb := child.Heartbeat
 		status := "online"
-		if offlineAfter > 0 && now.Sub(child.LastSeen) > offlineAfter {
+		lastSeen := child.LastSeen
+		if offlineAfter > 0 && now.Sub(lastSeen) > offlineAfter {
 			status = "offline"
+		}
+		if child.Decommissioned {
+			status = "decommissioned"
+			// The mark postdates any heartbeat or forwarded check by this
+			// child; reporting it as the last-seen moment keeps the server's
+			// rollup freshness guard from discarding the status.
+			lastSeen = child.DecommissionedAt
 		}
 		attempt := hb.LastUpdateAttempt
 		if attempt == nil {
@@ -164,13 +193,16 @@ func (r *Relay) ChildrenReport() []platformtypes.ChildReport {
 			Products:          hb.Products,
 			System:            &system,
 			Status:            status,
-			LastSeen:          child.LastSeen,
+			LastSeen:          lastSeen,
 			LastUpdateAttempt: attempt,
 			Children:          hb.Children,
 			SourceIP:          child.SourceIP,
 		})
 	}
 	sort.Slice(reports, func(i, j int) bool { return reports[i].InstanceID < reports[j].InstanceID })
+	if pruned {
+		r.saveTombstonesLocked()
+	}
 	return reports
 }
 
@@ -238,6 +270,15 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 	child.Heartbeat = heartbeat
 	child.LastSeen = time.Now()
 	child.SourceIP = remoteIP(req.RemoteAddr)
+	// A genuine heartbeat contradicts a decommission mark: revive (honest
+	// revival — reinstall without --purge, or a false mark from a leaked
+	// credential, which this makes visible).
+	revived := child.Decommissioned
+	child.Decommissioned = false
+	child.DecommissionedAt = time.Time{}
+	if revived {
+		r.saveTombstonesLocked()
+	}
 	r.mu.Unlock()
 	r.guard.noteAuthSuccess(req.RemoteAddr)
 
@@ -248,12 +289,147 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 			"customer_id", heartbeat.CustomerID,
 		)
 	}
+	if revived {
+		r.logger.Warn("decommissioned child revived by heartbeat",
+			"instance_id", heartbeat.InstanceID, "remote", req.RemoteAddr)
+	}
 
 	relayJSON(w, http.StatusOK, map[string]interface{}{
 		"status":      "ok",
 		"updates":     []interface{}{},
 		"relay_token": issuedToken,
+		// Identity adoption (contract 1.11.0 Item A): the relay attests what
+		// it knows so a bootstrap needs only the relay host. Static values;
+		// clients adopt once and never mutate on later responses.
+		"identity": r.identityObject(),
 	})
+}
+
+// identityObject builds the relay-attested identity for enrollment responses:
+// always the relay's own instance id as the parent, plus the customer
+// identity when configured. Unknown fields are omitted, never empty strings.
+func (r *Relay) identityObject() map[string]string {
+	identity := map[string]string{
+		"parent_instance_id": strings.TrimSpace(r.config.Instance.ID),
+	}
+	if c := strings.TrimSpace(r.config.Instance.CustomerID); c != "" {
+		identity["customer_id"] = c
+	}
+	if n := strings.TrimSpace(r.config.Instance.CustomerName); n != "" {
+		identity["customer_name"] = n
+	}
+	return identity
+}
+
+// handleChildDecommission marks a child as cleanly removed (contract 1.11.0
+// Item B). Idempotent by design: repeat calls, already-decommissioned and
+// unknown instance ids all ack — a goodbye is never worth retrying into a
+// ban. The mark reaches the updates server as a child status in the next
+// rollup and is cleared by any subsequent genuine heartbeat.
+func (r *Relay) handleChildDecommission(w http.ResponseWriter, req *http.Request) {
+	var body struct {
+		InstanceID string `json:"instance_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(req.Body, 1<<20)).Decode(&body); err != nil {
+		relayError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	instanceID := strings.TrimSpace(body.InstanceID)
+	if instanceID == "" {
+		relayError(w, http.StatusBadRequest, "instance_id is required")
+		return
+	}
+	if !r.authorizeChild(w, req, instanceID) {
+		return
+	}
+
+	now := time.Now()
+	r.mu.Lock()
+	child, known := r.children[instanceID]
+	if !known {
+		// Tombstone: the relay may have restarted and forgotten the child;
+		// the mark must still roll up. Bounded like enrollment — on a full
+		// relay the call still acks (best-effort goodbye), it just cannot
+		// be recorded.
+		if len(r.children) >= guardMaxChildren {
+			r.mu.Unlock()
+			r.logger.Warn("relay at children capacity; decommission mark dropped",
+				"instance_id", instanceID)
+			relayJSON(w, http.StatusOK, map[string]string{"status": "decommissioned"})
+			return
+		}
+		child = &childState{
+			Heartbeat: platformtypes.Heartbeat{InstanceID: instanceID},
+			LastSeen:  now,
+		}
+		r.children[instanceID] = child
+	}
+	already := child.Decommissioned
+	child.Decommissioned = true
+	if child.DecommissionedAt.IsZero() {
+		child.DecommissionedAt = now
+	}
+	r.saveTombstonesLocked()
+	r.mu.Unlock()
+
+	if !already {
+		r.logger.Info("child decommissioned",
+			"instance_id", instanceID, "remote", req.RemoteAddr)
+	}
+	relayJSON(w, http.StatusOK, map[string]string{"status": "decommissioned"})
+}
+
+// tombstonePath is the persisted set of decommission marks: a relay restart
+// must not lose a mark before the rollup has delivered it.
+func (r *Relay) tombstonePath() string {
+	return filepath.Join(r.config.Relay.CacheDir, "decommissioned.json")
+}
+
+// saveTombstonesLocked persists current decommission marks; r.mu must be held.
+func (r *Relay) saveTombstonesLocked() {
+	snapshot := map[string]time.Time{}
+	for id, child := range r.children {
+		if child.Decommissioned {
+			snapshot[id] = child.DecommissionedAt
+		}
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(r.tombstonePath(), data, 0600); err != nil {
+		r.logger.Warn("persist decommission tombstones", "error", err)
+	}
+}
+
+// loadTombstones restores decommission marks at startup, dropping expired ones.
+func (r *Relay) loadTombstones() {
+	data, err := os.ReadFile(r.tombstonePath())
+	if err != nil {
+		return
+	}
+	var snapshot map[string]time.Time
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return
+	}
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, at := range snapshot {
+		if now.Sub(at) > decommissionRetention || len(r.children) >= guardMaxChildren {
+			continue
+		}
+		child, ok := r.children[id]
+		if !ok {
+			child = &childState{
+				Heartbeat: platformtypes.Heartbeat{InstanceID: id},
+				LastSeen:  at,
+			}
+			r.children[id] = child
+		}
+		child.Decommissioned = true
+		child.DecommissionedAt = at
+	}
 }
 
 // handleChildCheck forwards the child's update check upstream using the

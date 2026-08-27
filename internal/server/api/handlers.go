@@ -677,6 +677,40 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleDecommission lets a directly-connected node announce its own clean
+// removal (contract 1.11.0 Item B). Authenticated exactly like a heartbeat
+// (license required); idempotent by design — repeat calls and unknown
+// instance ids all ack, because an uninstall's goodbye must never fail.
+// Cascaded children use the same endpoint on their relay instead; their mark
+// arrives here through the rollup.
+func (s *Server) handleDecommission(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		InstanceID string `json:"instance_id"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.InstanceID = strings.TrimSpace(req.InstanceID)
+	if req.InstanceID == "" {
+		writeError(w, http.StatusBadRequest, "instance_id is required")
+		return
+	}
+	if !s.enforceIPAllowed(w, r, req.InstanceID) {
+		return
+	}
+	if s.requireLicense(w, r) == nil {
+		return
+	}
+
+	instanceRepo := licensing.NewInstanceRepository(s.db)
+	if err := instanceRepo.MarkDecommissioned(r.Context(), req.InstanceID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record decommission")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "decommissioned"})
+}
+
 // Update check handler (siemcore-updater format)
 // Accepts the format sent by siemcore-updater and creates/updates instances
 
