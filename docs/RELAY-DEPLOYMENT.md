@@ -156,6 +156,24 @@ maintain anywhere. The listener protects itself, with zero configuration:
 Counters (`blocked`, `rate_limited`, `banned`) roll up in the relay's
 heartbeat and appear on the instance page as "Port Protection".
 
+### Identity adoption and decommission (1.11.0+)
+
+Full contract: `docs/RELAY-1.11.0-CONTRACT.md`. In short:
+
+- **Identity adoption**: every heartbeat response carries an `identity`
+  object (the relay's own instance id as `parent_instance_id`, plus
+  `customer_id`/`customer_name` when configured) so a bootstrap needs only
+  the relay host — clients adopt once and echo thereafter. Fields the relay
+  does not know are omitted, never sent empty.
+- **Decommission**: `POST /api/v1/decommission` (same credentials as a
+  heartbeat) marks a child as cleanly removed. The mark reaches the updates
+  server as a `decommissioned` child status in the next rollup, renders
+  neutrally on the dashboard, survives relay restarts (tombstones in the
+  cache dir), is pruned from relay state after 7 days, and is reversed by
+  any subsequent genuine heartbeat. It is a state change, never a deletion —
+  hard delete stays an admin dashboard action. Direct (tier-1) nodes use the
+  same endpoint on the updates server itself.
+
 ## 6. Operations
 
 - **Rotate a platform key**: dashboard → Operators → Rotate key. Update

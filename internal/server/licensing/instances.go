@@ -733,6 +733,19 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 	return err
 }
 
+// MarkDecommissioned records a node's own announcement of clean removal
+// (contract 1.11.0 Item B). It is a state change, never a deletion: the row
+// and its history stay for audit, and any subsequent genuine heartbeat or
+// check flips the status back to online (visible revival). Idempotent — a
+// missing row is not an error, because a goodbye must never fail loudly.
+func (r *InstanceRepository) MarkDecommissioned(ctx context.Context, instanceID string) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		UPDATE instances SET status = 'decommissioned', updated_at = NOW()
+		WHERE instance_id = $1
+	`, instanceID)
+	return err
+}
+
 // UpsertReportedChildren flattens a relay's rollup tree and upserts every node.
 // reporterInstanceID is the relay that sent the covering heartbeat; licenseID
 // is that relay's license (inherited by all reported nodes). Nodes that also
@@ -776,7 +789,7 @@ func (r *InstanceRepository) upsertReportedNode(ctx context.Context, reporterID,
 		instanceType = child.ProductTier
 	}
 	status := child.Status
-	if status != "online" && status != "offline" && status != "degraded" {
+	if status != "online" && status != "offline" && status != "degraded" && status != "decommissioned" {
 		status = "online"
 	}
 	lastSeen := child.LastSeen
@@ -845,7 +858,12 @@ func (r *InstanceRepository) upsertReportedNode(ctx context.Context, reporterID,
 			hostname = COALESCE(NULLIF(EXCLUDED.hostname, ''), instances.hostname),
 			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),
 			last_heartbeat = EXCLUDED.last_heartbeat,
-			last_heartbeat_data = EXCLUDED.last_heartbeat_data,
+			-- A decommission mark can arrive as a skeletal tombstone (relay
+			-- restarted, no retained heartbeat): keep the last real telemetry
+			-- instead of blanking the row's history.
+			last_heartbeat_data = CASE WHEN EXCLUDED.status = 'decommissioned'
+				THEN COALESCE(instances.last_heartbeat_data, EXCLUDED.last_heartbeat_data)
+				ELSE EXCLUDED.last_heartbeat_data END,
 			status = EXCLUDED.status,
 			product_tier = COALESCE(NULLIF(EXCLUDED.product_tier, ''), instances.product_tier),
 			parent_instance_id = COALESCE(NULLIF(EXCLUDED.parent_instance_id, ''), instances.parent_instance_id),

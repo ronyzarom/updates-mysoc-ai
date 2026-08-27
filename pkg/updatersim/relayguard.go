@@ -242,12 +242,17 @@ func (g *relayGuard) Stats() *platformtypes.RelayGuardStats {
 	return stats
 }
 
-// middleware wraps the relay mux with the guard checks. The enrollment path
-// (child heartbeat) is the only route unknown IPs may reach; everything else
-// requires a learned source. Denials are answered before any body parsing.
+// middleware wraps the relay mux with the guard checks. Unknown IPs may
+// reach only the enrollment path (child heartbeat) and the decommission
+// path — the latter because guard learning is in-memory, so a goodbye
+// arriving just after a relay restart must not be refused; both paths are
+// fully authenticated and rate-limited at the strict unknown tier.
+// Everything else requires a learned source. Denials are answered before
+// any body parsing.
 func (g *relayGuard) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		enrollPath := req.Method == http.MethodPost && req.URL.Path == "/api/v1/heartbeat"
+		enrollPath := req.Method == http.MethodPost &&
+			(req.URL.Path == "/api/v1/heartbeat" || req.URL.Path == "/api/v1/decommission")
 		switch g.check(req.RemoteAddr, enrollPath) {
 		case guardDenyBanned:
 			relayError(w, http.StatusForbidden, "source temporarily banned")

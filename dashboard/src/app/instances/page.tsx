@@ -242,6 +242,9 @@ function StatusBadge({ status }: { status: string }) {
     online: "status-badge status-online",
     offline: "status-badge status-offline",
     degraded: "status-badge status-degraded",
+    // Cleanly removed by its own announcement — deliberately neutral, not
+    // red: this is a resolved end state, not a failure.
+    decommissioned: "status-badge bg-slate-500/20 text-slate-400",
     unknown: "status-badge bg-slate-500/20 text-slate-400",
   };
 
