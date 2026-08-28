@@ -208,6 +208,9 @@ func (s *Server) setupRoutes() {
 			r.With(auth.JWTMiddleware(s.authService)).Get("/security/stats", s.handleSecurityStats)
 			// Fleet as a per-customer tier tree (mysoc > siemcore > swf).
 			r.With(auth.JWTMiddleware(s.authService)).Get("/tree", s.handleInstanceTree)
+			// Lazy, aggregate-by-default cascade tree: one level (children of a
+			// node, or roots) at a time, each with a SQL subtree rollup.
+			r.With(auth.JWTMiddleware(s.authService)).Get("/tree/children", s.handleInstanceTreeChildren)
 			// Exceptions-first, paged, SQL-aggregated customer directory
 			// (the scale replacement for rendering the whole tree).
 			r.With(auth.JWTMiddleware(s.authService)).Get("/customers", s.handleCustomerDirectory)

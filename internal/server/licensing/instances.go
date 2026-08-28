@@ -689,6 +689,159 @@ func (r *InstanceRepository) CustomerDirectory(ctx context.Context, search, sort
 	return out, total, rows.Err()
 }
 
+// SubtreeCounts rolls up a node's whole descendant cascade (the node itself
+// included) so a collapsed relay can show its coverage without the client
+// loading a single descendant row.
+type SubtreeCounts struct {
+	Total          int `json:"total"`
+	Online         int `json:"online"`
+	Offline        int `json:"offline"`
+	Degraded       int `json:"degraded"`
+	Decommissioned int `json:"decommissioned"`
+	Failed         int `json:"failed"`
+}
+
+// TreeChildRow is one node in the lazy fleet tree: its list-level fields plus a
+// SQL-computed rollup of everything beneath it. The client renders the cascade
+// by expanding one node at a time, so each request stays O(page) regardless of
+// fleet size.
+type TreeChildRow struct {
+	types.Instance
+	HasChildren bool          `json:"has_children"`
+	Subtree     SubtreeCounts `json:"subtree"`
+}
+
+// treeChildOrder surfaces exceptions first (offline, then failed updates), then
+// relays above leaves (mysoc > siemcore > swf), then by id for stability.
+var treeChildOrder = ` ORDER BY (` + derivedStatusExpr + `) = 'offline' DESC,
+	last_update_success IS FALSE DESC,
+	CASE product_tier WHEN 'mysoc' THEN 0 WHEN 'siemcore' THEN 1 WHEN 'swf' THEN 2 ELSE 3 END ASC,
+	instance_id ASC`
+
+// TreeChildren returns one level of the fleet cascade: the direct children of
+// f.Parent, or the cascade roots (nodes with no resolvable parent link) when
+// Parent is empty. Each returned node carries a rollup of its entire subtree so
+// the tree can be aggregate-by-default. The level query returns one page of
+// rows; the rollup is a single bounded recursive pass keyed to the returned
+// nodes. Nothing materializes the whole fleet on the client.
+func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFilter, limit, offset int) ([]TreeChildRow, int, error) {
+	var conds []string
+	var args []interface{}
+	add := func(cond string, val interface{}) {
+		args = append(args, val)
+		conds = append(conds, fmt.Sprintf(cond, len(args)))
+	}
+
+	if p := strings.TrimSpace(f.Parent); p != "" {
+		add("parent_instance_id = $%d", p)
+	} else {
+		// Cascade roots: no parent set at all.
+		conds = append(conds, "(parent_instance_id IS NULL OR parent_instance_id = '')")
+	}
+	if s := strings.TrimSpace(f.Tier); s != "" {
+		add("product_tier = $%d", s)
+	}
+	if s := strings.TrimSpace(f.Operator); s != "" {
+		add("EXISTS (SELECT 1 FROM licenses l WHERE l.id = instances.license_id AND l.operator_ref = $%d)", s)
+	}
+	if s := strings.TrimSpace(f.Search); s != "" {
+		args = append(args, "%"+s+"%")
+		n := len(args)
+		conds = append(conds, fmt.Sprintf(
+			"(instance_id ILIKE $%d OR hostname ILIKE $%d OR customer_name ILIKE $%d)", n, n, n))
+	}
+	if s := strings.TrimSpace(f.Status); s != "" {
+		args = append(args, s)
+		conds = append(conds, fmt.Sprintf("(%s) = $%d", derivedStatusExpr, len(args)))
+	}
+
+	where := ""
+	if len(conds) > 0 {
+		where = " WHERE " + strings.Join(conds, " AND ")
+	}
+
+	var total int
+	if err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM instances`+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count tree children: %w", err)
+	}
+
+	pageArgs := append(append([]interface{}{}, args...), limit, offset)
+	query := `SELECT ` + selectInstanceListCols + ` FROM instances` + where + treeChildOrder +
+		fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	rows, err := r.db.Pool.Query(ctx, query, pageArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list tree children: %w", err)
+	}
+	defer rows.Close()
+
+	var items []TreeChildRow
+	var ids []string
+	for rows.Next() {
+		inst, err := r.scanInstanceList(rows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan tree child: %w", err)
+		}
+		items = append(items, TreeChildRow{Instance: *inst})
+		ids = append(ids, inst.InstanceID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating tree children: %w", err)
+	}
+	if len(items) == 0 {
+		return []TreeChildRow{}, total, nil
+	}
+
+	// One recursive pass rolls each descendant up to the page node it sits
+	// under. The seed carries the columns derivedStatusExpr needs so the outer
+	// aggregate computes read-time status without re-reading instances. Depth is
+	// capped so malformed parent links can never loop forever.
+	rollup := `
+WITH RECURSIVE seed(root, iid, depth, reported_via, status, last_heartbeat, last_update_success) AS (
+    SELECT instance_id, instance_id, 0, reported_via, status, last_heartbeat, last_update_success
+    FROM instances WHERE instance_id = ANY($1)
+    UNION ALL
+    SELECT s.root, i.instance_id, s.depth + 1, i.reported_via, i.status, i.last_heartbeat, i.last_update_success
+    FROM instances i JOIN seed s ON i.parent_instance_id = s.iid
+    WHERE s.depth < 16
+)
+SELECT root,
+    COUNT(*) AS total,
+    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'online') AS online,
+    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'offline') AS offline,
+    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'degraded') AS degraded,
+    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'decommissioned') AS decommissioned,
+    COUNT(*) FILTER (WHERE last_update_success IS FALSE) AS failed
+FROM seed
+GROUP BY root`
+
+	srows, err := r.db.Pool.Query(ctx, rollup, ids)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to roll up subtree: %w", err)
+	}
+	defer srows.Close()
+
+	counts := make(map[string]SubtreeCounts, len(ids))
+	for srows.Next() {
+		var root string
+		var c SubtreeCounts
+		if err := srows.Scan(&root, &c.Total, &c.Online, &c.Offline, &c.Degraded, &c.Decommissioned, &c.Failed); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan subtree rollup: %w", err)
+		}
+		counts[root] = c
+	}
+	if err := srows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error rolling up subtree: %w", err)
+	}
+
+	for i := range items {
+		c := counts[items[i].InstanceID]
+		items[i].Subtree = c
+		// total counts the node itself; anything beyond one means descendants.
+		items[i].HasChildren = c.Total > 1
+	}
+	return items, total, nil
+}
+
 // SecurityStats is the SQL-aggregated fleet security posture, computed over
 // the security block inside each node's last heartbeat without shipping any
 // per-node rows.

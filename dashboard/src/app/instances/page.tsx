@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, InstanceQuery } from "@/lib/api";
-import { RefreshCw, LayoutGrid, Building2, Search } from "lucide-react";
+import { RefreshCw, LayoutGrid, Building2, Search, Network } from "lucide-react";
 import { CustomerDirectory } from "@/components/CustomerDirectory";
 import { InstancesList } from "@/components/InstancesList";
+import { FleetTree } from "@/components/FleetTree";
 
 const TIER_FILTERS = [
   { value: "all", label: "All tiers" },
@@ -43,7 +44,7 @@ function useDebounced<T>(value: T, delay = 300): T {
 }
 
 export default function InstancesPage() {
-  const [view, setView] = useState<"customers" | "list">("list");
+  const [view, setView] = useState<"customers" | "list" | "tree">("list");
   const [tierFilter, setTierFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<string>("created_at:desc");
@@ -99,30 +100,36 @@ export default function InstancesPage() {
               </option>
             ))}
           </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="input py-2"
-            aria-label="Filter by status"
-          >
-            {STATUS_FILTERS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            className="input py-2"
-            aria-label="Sort order"
-          >
-            {SORT_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          {/* Status/sort narrow the flat list; the cascade tree orders itself
+              (exceptions first) and drills by parent, so hide them there. */}
+          {view !== "tree" && (
+            <>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="input py-2"
+                aria-label="Filter by status"
+              >
+                {STATUS_FILTERS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value)}
+                className="input py-2"
+                aria-label="Sort order"
+              >
+                {SORT_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
           <div className="flex rounded-lg border border-slate-700 overflow-hidden">
             <button
               onClick={() => setView("customers")}
@@ -143,6 +150,16 @@ export default function InstancesPage() {
             >
               <LayoutGrid className="w-4 h-4" />
               List
+            </button>
+            <button
+              onClick={() => setView("tree")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm ${
+                view === "tree" ? "bg-slate-700 text-white" : "bg-transparent text-slate-400 hover:text-white"
+              }`}
+              aria-pressed={view === "tree"}
+            >
+              <Network className="w-4 h-4" />
+              Tree
             </button>
           </div>
           <button onClick={() => setRefreshTick((t) => t + 1)} className="btn btn-secondary">
@@ -165,6 +182,8 @@ export default function InstancesPage() {
 
       {view === "customers" ? (
         <CustomerDirectory tier={tierFilter} search={debouncedSearch} />
+      ) : view === "tree" ? (
+        <FleetTree key={refreshTick} tier={tierFilter} search={debouncedSearch} />
       ) : (
         <InstancesList
           key={refreshTick}
