@@ -127,6 +127,31 @@ export interface CustomerDirectoryResponse {
   total: number;
 }
 
+// Rollup of a node's whole subtree (the node included), so a collapsed relay
+// shows its coverage without loading descendants.
+export interface SubtreeCounts {
+  total: number;
+  online: number;
+  offline: number;
+  degraded: number;
+  decommissioned: number;
+  failed: number;
+}
+
+// One node in the lazy cascade tree: an instance plus its subtree rollup and
+// whether it has any descendants to expand.
+export interface TreeChildRow extends Instance {
+  has_children: boolean;
+  subtree: SubtreeCounts;
+}
+
+export interface TreeChildrenResponse {
+  items: TreeChildRow[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
 // SQL-aggregated security posture (GET /api/v1/instances/security/stats).
 export interface SecurityStats {
   reporting: number;
@@ -712,6 +737,14 @@ class ApiClient {
 
   async getInstanceTree(): Promise<InstanceTreeResponse> {
     return this.fetch<InstanceTreeResponse>("/api/v1/instances/tree");
+  }
+
+  // One lazily-loaded level of the cascade tree: direct children of q.parent
+  // (or the roots when parent is omitted), each with a SQL subtree rollup.
+  async getTreeChildren(q: InstanceQuery = {}): Promise<TreeChildrenResponse> {
+    return this.fetch<TreeChildrenResponse>(
+      `/api/v1/instances/tree/children${this.buildInstanceQuery(q)}`
+    );
   }
 
   // Exceptions-first, paged customer directory (SQL-aggregated).

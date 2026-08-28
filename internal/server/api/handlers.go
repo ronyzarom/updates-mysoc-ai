@@ -1036,6 +1036,28 @@ func (s *Server) handleCustomerDirectory(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// handleInstanceTreeChildren returns one lazily-loaded level of the fleet
+// cascade: the direct children of the ?parent node (or the cascade roots when
+// parent is empty), each with a SQL-computed rollup of its whole subtree. The
+// tree view drills in one node at a time so the payload stays O(page).
+func (s *Server) handleInstanceTreeChildren(w http.ResponseWriter, r *http.Request) {
+	limit := parseIntQueryParam(r, "limit", 100, 1, 500)
+	offset := parseIntQueryParam(r, "offset", 0, 0, -1)
+
+	repo := licensing.NewInstanceRepository(s.db)
+	items, total, err := repo.TreeChildren(r.Context(), instanceFilterFromQuery(r), limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items":  items,
+		"limit":  limit,
+		"offset": offset,
+		"total":  total,
+	})
+}
+
 // handleSecurityStats returns the SQL-aggregated fleet security posture.
 func (s *Server) handleSecurityStats(w http.ResponseWriter, r *http.Request) {
 	repo := licensing.NewInstanceRepository(s.db)
