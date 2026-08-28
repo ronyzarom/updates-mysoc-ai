@@ -1043,9 +1043,11 @@ func (s *Server) handleCustomerDirectory(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleInstanceTreeChildren(w http.ResponseWriter, r *http.Request) {
 	limit := parseIntQueryParam(r, "limit", 100, 1, 500)
 	offset := parseIntQueryParam(r, "offset", 0, 0, -1)
+	// Retired tombstones are hidden from the operational tree unless asked for.
+	includeDecommissioned := r.URL.Query().Get("include_decommissioned") == "true"
 
 	repo := licensing.NewInstanceRepository(s.db)
-	items, total, err := repo.TreeChildren(r.Context(), instanceFilterFromQuery(r), limit, offset)
+	items, total, err := repo.TreeChildren(r.Context(), instanceFilterFromQuery(r), includeDecommissioned, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

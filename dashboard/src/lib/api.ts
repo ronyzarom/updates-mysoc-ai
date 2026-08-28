@@ -95,6 +95,9 @@ export interface InstanceQuery {
   dir?: "asc" | "desc";
   limit?: number;
   offset?: number;
+  // Tree view only: surface retired (decommissioned) tombstones. Hidden by
+  // default so relays that keep re-reporting retired children don't clutter it.
+  includeDecommissioned?: boolean;
 }
 
 // SQL-aggregated fleet summary (GET /api/v1/instances/stats). Computed in the
@@ -705,6 +708,7 @@ class ApiClient {
     if (q.dir) params.set("dir", q.dir);
     if (q.limit != null) params.set("limit", String(q.limit));
     if (q.offset != null) params.set("offset", String(q.offset));
+    if (q.includeDecommissioned) params.set("include_decommissioned", "true");
     const s = params.toString();
     return s ? `?${s}` : "";
   }

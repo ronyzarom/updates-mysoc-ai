@@ -724,7 +724,12 @@ var treeChildOrder = ` ORDER BY (` + derivedStatusExpr + `) = 'offline' DESC,
 // the tree can be aggregate-by-default. The level query returns one page of
 // rows; the rollup is a single bounded recursive pass keyed to the returned
 // nodes. Nothing materializes the whole fleet on the client.
-func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFilter, limit, offset int) ([]TreeChildRow, int, error) {
+//
+// Decommissioned nodes are retired tombstones kept for audit and excluded from
+// alarms; by default they are hidden from the operational tree (and from the
+// has_children expandability test) so a relay that keeps re-reporting retired
+// children doesn't clutter the view. includeDecommissioned surfaces them.
+func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFilter, includeDecommissioned bool, limit, offset int) ([]TreeChildRow, int, error) {
 	var conds []string
 	var args []interface{}
 	add := func(cond string, val interface{}) {
@@ -737,6 +742,9 @@ func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFil
 	} else {
 		// Cascade roots: no parent set at all.
 		conds = append(conds, "(parent_instance_id IS NULL OR parent_instance_id = '')")
+	}
+	if !includeDecommissioned {
+		conds = append(conds, "("+derivedStatusExpr+") <> 'decommissioned'")
 	}
 	if s := strings.TrimSpace(f.Tier); s != "" {
 		add("product_tier = $%d", s)
@@ -837,7 +845,14 @@ GROUP BY root`
 		c := counts[items[i].InstanceID]
 		items[i].Subtree = c
 		// total counts the node itself; anything beyond one means descendants.
-		items[i].HasChildren = c.Total > 1
+		// When decommissioned rows are hidden, expandability must reflect only
+		// the descendants that would actually render, or the chevron would open
+		// to nothing.
+		if includeDecommissioned {
+			items[i].HasChildren = c.Total > 1
+		} else {
+			items[i].HasChildren = (c.Total - c.Decommissioned) > 1
+		}
 	}
 	return items, total, nil
 }

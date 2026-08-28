@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api, TreeChildRow, TreeChildrenResponse } from "@/lib/api";
 import {
@@ -10,6 +10,7 @@ import {
   Radio,
   Server,
   AlertTriangle,
+  Archive,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
@@ -50,11 +51,14 @@ function LastSeen({ ts }: { ts?: string }) {
 
 // SubtreeRollup shows a collapsed relay's coverage (its whole cascade) so the
 // tree stays informative without expanding. Counts come from SQL, not the
-// client counting rows.
-function SubtreeRollup({ node }: { node: TreeChildRow }) {
+// client counting rows. When retired nodes are hidden, they're excluded from
+// the "below" count so it matches what expanding actually shows.
+function SubtreeRollup({ node, showRetired }: { node: TreeChildRow; showRetired: boolean }) {
   const s = node.subtree;
   // total includes the node itself; show how many sit beneath it.
-  const below = Math.max(0, s.total - 1);
+  const below = showRetired
+    ? Math.max(0, s.total - 1)
+    : Math.max(0, s.total - s.decommissioned - 1);
   if (below === 0) return null;
   return (
     <span className="flex items-center gap-2 text-[11px] whitespace-nowrap">
@@ -64,6 +68,9 @@ function SubtreeRollup({ node }: { node: TreeChildRow }) {
       {s.online > 0 && <span className="text-emerald-400/80">{s.online.toLocaleString()} online</span>}
       {s.offline > 0 && <span className="text-red-400/80">{s.offline.toLocaleString()} offline</span>}
       {s.failed > 0 && <span className="text-amber-400/80">{s.failed.toLocaleString()} failed</span>}
+      {showRetired && s.decommissioned > 0 && (
+        <span className="text-slate-500">{s.decommissioned.toLocaleString()} retired</span>
+      )}
     </span>
   );
 }
@@ -71,15 +78,21 @@ function SubtreeRollup({ node }: { node: TreeChildRow }) {
 // useLevel lazily loads one cascade level: the direct children of `parent`, or
 // the roots when parent is undefined. Paged so a relay with thousands of leaves
 // never floods the client.
-function useLevel(parent: string | undefined, tier: string, enabled: boolean) {
+function useLevel(
+  parent: string | undefined,
+  tier: string,
+  showRetired: boolean,
+  enabled: boolean
+) {
   return useInfiniteQuery({
-    queryKey: ["fleet-tree", parent ?? "__roots__", tier],
+    queryKey: ["fleet-tree", parent ?? "__roots__", tier, showRetired],
     enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       api.getTreeChildren({
         parent,
         tier: tier === "all" ? undefined : tier,
+        includeDecommissioned: showRetired,
         limit: PAGE_SIZE,
         offset: pageParam as number,
       }),
@@ -90,9 +103,20 @@ function useLevel(parent: string | undefined, tier: string, enabled: boolean) {
   });
 }
 
-function TreeNode({ node, depth, tier }: { node: TreeChildRow; depth: number; tier: string }) {
+function TreeNode({
+  node,
+  depth,
+  tier,
+  showRetired,
+}: {
+  node: TreeChildRow;
+  depth: number;
+  tier: string;
+  showRetired: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const isRelay = node.has_children;
+  const retired = node.status === "decommissioned";
 
   return (
     <div>
@@ -140,15 +164,25 @@ function TreeNode({ node, depth, tier }: { node: TreeChildRow; depth: number; ti
             via {node.reported_via}
           </span>
         )}
+        {retired && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-600/30 text-slate-400 border border-slate-600/40 shrink-0"
+            title="Retired: decommissioned, excluded from alarms; kept for audit"
+          >
+            retired
+          </span>
+        )}
         {node.subtree.offline > 0 && !open && (
           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-label="Offline nodes below" />
         )}
         <div className="ml-auto flex items-center gap-3 shrink-0">
-          {!open && <SubtreeRollup node={node} />}
+          {!open && <SubtreeRollup node={node} showRetired={showRetired} />}
           <LastSeen ts={node.last_heartbeat} />
         </div>
       </div>
-      {open && isRelay && <TreeLevel parent={node.instance_id} depth={depth + 1} tier={tier} />}
+      {open && isRelay && (
+        <TreeLevel parent={node.instance_id} depth={depth + 1} tier={tier} showRetired={showRetired} />
+      )}
     </div>
   );
 }
@@ -157,13 +191,15 @@ function TreeLevel({
   parent,
   depth,
   tier,
+  showRetired,
 }: {
   parent: string | undefined;
   depth: number;
   tier: string;
+  showRetired: boolean;
 }) {
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useLevel(parent, tier, true);
+    useLevel(parent, tier, showRetired, true);
 
   const nodes = data?.pages.flatMap((p) => p.items) ?? [];
 
@@ -192,7 +228,7 @@ function TreeLevel({
   return (
     <div>
       {nodes.map((n) => (
-        <TreeNode key={n.id} node={n} depth={depth} tier={tier} />
+        <TreeNode key={n.id} node={n} depth={depth} tier={tier} showRetired={showRetired} />
       ))}
       {hasNextPage && (
         <button
@@ -213,14 +249,16 @@ function TreeLevel({
 // relay expands one bounded level at a time. Never an O(fleet) render.
 export function FleetTree({ tier = "all", search = "" }: { tier?: string; search?: string }) {
   const needle = search.trim();
+  const [showRetired, setShowRetired] = useState(false);
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: ["fleet-tree-roots", tier, needle],
+      queryKey: ["fleet-tree-roots", tier, needle, showRetired],
       initialPageParam: 0,
       queryFn: ({ pageParam }) =>
         api.getTreeChildren({
           tier: tier === "all" ? undefined : tier,
           search: needle || undefined,
+          includeDecommissioned: showRetired,
           limit: PAGE_SIZE,
           offset: pageParam as number,
         }),
@@ -233,9 +271,35 @@ export function FleetTree({ tier = "all", search = "" }: { tier?: string; search
   const roots = data?.pages.flatMap((p) => p.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
-  if (isLoading) return <div className="text-slate-400">Loading fleet cascade…</div>;
+  const header = (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <Server className="w-4 h-4" />
+        <span>
+          {isLoading
+            ? "Loading fleet cascade…"
+            : `${total.toLocaleString()} cascade root${total === 1 ? "" : "s"} · expand a relay to drill in`}
+        </span>
+      </div>
+      <button
+        onClick={() => setShowRetired((v) => !v)}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border ${
+          showRetired
+            ? "border-slate-500 bg-slate-700 text-white"
+            : "border-slate-700 text-slate-400 hover:text-white"
+        }`}
+        aria-pressed={showRetired}
+        title="Retired = decommissioned tombstones, hidden by default"
+      >
+        <Archive className="w-3.5 h-3.5" />
+        {showRetired ? "Hide retired" : "Show retired"}
+      </button>
+    </div>
+  );
+
+  let body: ReactNode;
   if (isError) {
-    return (
+    body = (
       <div className="card border-red-500/50 bg-red-900/20">
         <p className="text-red-400 font-medium">Failed to load fleet tree</p>
         <p className="text-sm text-slate-400 mt-1">
@@ -243,10 +307,10 @@ export function FleetTree({ tier = "all", search = "" }: { tier?: string; search
         </p>
       </div>
     );
-  }
-
-  if (roots.length === 0) {
-    return (
+  } else if (isLoading) {
+    body = <div className="card text-slate-400">Loading…</div>;
+  } else if (roots.length === 0) {
+    body = (
       <div className="card text-center py-16">
         <Network className="w-12 h-12 text-slate-600 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-white mb-2">
@@ -259,20 +323,12 @@ export function FleetTree({ tier = "all", search = "" }: { tier?: string; search
         </p>
       </div>
     );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Server className="w-4 h-4" />
-        <span>
-          {total.toLocaleString()} cascade root{total === 1 ? "" : "s"} · expand a relay to drill in
-        </span>
-      </div>
+  } else {
+    body = (
       <div className="card">
         <div className="space-y-0.5">
           {roots.map((n) => (
-            <TreeNode key={n.id} node={n} depth={0} tier={tier} />
+            <TreeNode key={n.id} node={n} depth={0} tier={tier} showRetired={showRetired} />
           ))}
         </div>
         {hasNextPage && (
@@ -287,6 +343,13 @@ export function FleetTree({ tier = "all", search = "" }: { tier?: string; search
           </div>
         )}
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {header}
+      {body}
     </div>
   );
 }
