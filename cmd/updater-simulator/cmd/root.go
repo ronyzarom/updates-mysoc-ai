@@ -58,6 +58,7 @@ func newRootCommand(opts *options) *cobra.Command {
 	root.AddCommand(newReconcileCommand(opts))
 	root.AddCommand(newRunCommand(opts))
 	root.AddCommand(newRelayCommand(opts))
+	root.AddCommand(newLoadgenCommand(opts))
 	return root
 }
 
@@ -365,7 +366,14 @@ relay.enabled: true (and relay.listen) in the configuration.`,
 			if err != nil {
 				return err
 			}
-			simulator.SetChildrenProvider(relay.ChildrenReport)
+			// Steady-state reporting is either the legacy full rollup or the
+			// change-only delta stream — one path, never both, so the server
+			// never double-counts a fleet that is transitioning.
+			if cfg.Relay.DeltaReporting {
+				simulator.SetDeltaProvider(relay.DeltaEnvelope, relay.AckUpstream)
+			} else {
+				simulator.SetChildrenProvider(relay.ChildrenReport)
+			}
 			simulator.SetGuardStatsProvider(relay.GuardStats)
 
 			ctx, stop := signal.NotifyContext(

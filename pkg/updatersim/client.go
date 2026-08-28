@@ -2,6 +2,7 @@ package updatersim
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -19,6 +20,10 @@ import (
 
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
+
+// gzipRequestThreshold is the JSON body size above which the client gzips the
+// request. Below it, gzip framing overhead outweighs the savings.
+const gzipRequestThreshold = 4096
 
 var (
 	// ErrChecksumMismatch indicates that downloaded bytes do not match metadata.
@@ -51,6 +56,13 @@ type HeartbeatResponse struct {
 	// RelayToken is issued by a relay parent on first contact; the child
 	// presents it on every subsequent request to that relay.
 	RelayToken string `json:"relay_token,omitempty"`
+	// AckCursor acknowledges the highest delta sequence the parent durably
+	// ingested (Fleet Scalability 1.12). The sender prunes acked, unchanged
+	// entries from its forwarding queue. Zero means "nothing acked".
+	AckCursor uint64 `json:"ack_cursor,omitempty"`
+	// HeartbeatIntervalSeconds, when non-zero, hints the interval the parent
+	// wants this child to heartbeat at (larger at scale). Advisory only.
+	HeartbeatIntervalSeconds int `json:"heartbeat_interval_seconds,omitempty"`
 }
 
 // UpdateCheckRequest is the current group-aware update-check request. ProductTier
@@ -442,12 +454,31 @@ func (c *Client) doJSON(
 	}
 
 	var body io.Reader
+	gzipped := false
 	if requestBody != nil {
 		data, err := json.Marshal(requestBody)
 		if err != nil {
 			return fmt.Errorf("encode request: %w", err)
 		}
-		body = bytes.NewReader(data)
+		// Compress large bodies (the cascade rollup heartbeat dominates and
+		// is highly compressible ~10x). Small bodies skip it — gzip framing
+		// would only add overhead. Receivers advertise no requirement; they
+		// simply honor Content-Encoding, and pre-1.12 receivers never see a
+		// gzipped body because they run older clients.
+		if len(data) >= gzipRequestThreshold {
+			var buf bytes.Buffer
+			zw := gzip.NewWriter(&buf)
+			if _, err := zw.Write(data); err != nil {
+				return fmt.Errorf("gzip request: %w", err)
+			}
+			if err := zw.Close(); err != nil {
+				return fmt.Errorf("gzip request: %w", err)
+			}
+			body = &buf
+			gzipped = true
+		} else {
+			body = bytes.NewReader(data)
+		}
 	}
 
 	request, err := http.NewRequestWithContext(ctx, method, target.String(), body)
@@ -456,6 +487,9 @@ func (c *Client) doJSON(
 	}
 	if requestBody != nil {
 		request.Header.Set("Content-Type", "application/json")
+		if gzipped {
+			request.Header.Set("Content-Encoding", "gzip")
+		}
 	}
 	request.Header.Set("Accept", "application/json")
 	c.addAuthHeaders(request)

@@ -166,6 +166,48 @@ type Heartbeat struct {
 	// RelayGuard carries the relay listener's self-protection counters
 	// (blocked/rate-limited/banned totals). Only relays populate it.
 	RelayGuard *RelayGuardStats `json:"relay_guard,omitempty"`
+
+	// Delta carries the change-only reporting streams (Fleet Scalability
+	// 1.12): per-customer summary deltas and per-node inventory deltas that
+	// steady-state heartbeats send instead of the full Children rollup. It is
+	// additive — a relay may send Delta, Children, or both during the
+	// transition, and pre-1.12 receivers simply ignore it.
+	Delta *DeltaEnvelope `json:"delta,omitempty"`
+}
+
+// FleetSummary is one customer's aggregate health, the unit of the delta
+// summary stream. Only summaries whose contents changed since the parent last
+// acked are carried, so the stream is O(changes) at every hop.
+type FleetSummary struct {
+	CustomerID       string         `json:"customer_id"`
+	CustomerName     string         `json:"customer_name,omitempty"`
+	ReporterID       string         `json:"reporter_id,omitempty"` // relay that owns this summary
+	Total            int            `json:"total"`
+	Online           int            `json:"online"`
+	Offline          int            `json:"offline"`
+	Degraded         int            `json:"degraded,omitempty"`
+	Decommissioned   int            `json:"decommissioned,omitempty"`
+	FailedUpdates    int            `json:"failed_updates"`
+	Versions         map[string]int `json:"versions,omitempty"` // "product@version" -> count
+	StatusReportedAt time.Time      `json:"status_reported_at"`
+}
+
+// InventoryChange is one changed leaf row in the delta inventory stream. Seq
+// is the monotonic sequence assigned by the sending relay; the parent acks up
+// to a cursor and the sender prunes acked entries.
+type InventoryChange struct {
+	Seq  uint64      `json:"seq"`
+	Node ChildReport `json:"node"`
+}
+
+// DeltaEnvelope batches the change-only streams for one heartbeat. Cursor is
+// the highest Seq included across both streams; the parent echoes it as
+// AckCursor in the heartbeat response and the sender prunes entries at or
+// below the acked cursor that have not changed since.
+type DeltaEnvelope struct {
+	Summaries []FleetSummary    `json:"summaries,omitempty"`
+	Inventory []InventoryChange `json:"inventory,omitempty"`
+	Cursor    uint64            `json:"cursor"`
 }
 
 // RelayGuardStats summarizes the relay listener's port-protection activity
@@ -181,14 +223,19 @@ type RelayGuardStats struct {
 // ChildReport is one node in a relay's fleet rollup. Parentage is implied by
 // nesting: each entry's parent is the node whose Children list contains it.
 type ChildReport struct {
-	InstanceID     string          `json:"instance_id"`
-	InstanceType   string          `json:"instance_type,omitempty"`
-	ProductTier    string          `json:"product_tier,omitempty"`
-	CustomerID     string          `json:"customer_id,omitempty"`
-	CustomerName   string          `json:"customer_name,omitempty"`
-	Hostname       string          `json:"hostname,omitempty"`
-	UpdaterVersion string          `json:"updater_version,omitempty"`
-	Products       []ProductStatus `json:"products,omitempty"`
+	InstanceID   string `json:"instance_id"`
+	InstanceType string `json:"instance_type,omitempty"`
+	ProductTier  string `json:"product_tier,omitempty"`
+	// ParentInstanceID is the node's declared parent. The nested full rollup
+	// leaves it empty (parentage is implied by nesting), but the flat delta
+	// inventory stream carries it so the server can reconstruct the tree
+	// without nesting.
+	ParentInstanceID string          `json:"parent_instance_id,omitempty"`
+	CustomerID       string          `json:"customer_id,omitempty"`
+	CustomerName     string          `json:"customer_name,omitempty"`
+	Hostname         string          `json:"hostname,omitempty"`
+	UpdaterVersion   string          `json:"updater_version,omitempty"`
+	Products         []ProductStatus `json:"products,omitempty"`
 	// System carries the child's host identity and measurements so cascaded
 	// nodes render OS/arch/uptime/metrics on the dashboard like direct ones.
 	System            *SystemMetrics `json:"system,omitempty"`

@@ -42,6 +42,11 @@ type Simulator struct {
 
 	// guardStatsFn supplies the relay listener's port-protection counters.
 	guardStatsFn func() *platformtypes.RelayGuardStats
+
+	// deltaFn drains the relay's change-only upward batch (Fleet Scalability
+	// 1.12); deltaAckFn prunes that queue once the parent acks the cursor.
+	deltaFn    func() *platformtypes.DeltaEnvelope
+	deltaAckFn func(uint64)
 }
 
 // SetChildrenProvider wires the relay's rollup into this node's heartbeats.
@@ -52,6 +57,16 @@ func (s *Simulator) SetChildrenProvider(provider func() []platformtypes.ChildRep
 // SetGuardStatsProvider wires the relay guard's counters into heartbeats.
 func (s *Simulator) SetGuardStatsProvider(provider func() *platformtypes.RelayGuardStats) {
 	s.guardStatsFn = provider
+}
+
+// SetDeltaProvider wires the relay's change-only delta stream into this node's
+// upward heartbeats, plus the ack callback that prunes the queue.
+func (s *Simulator) SetDeltaProvider(
+	drain func() *platformtypes.DeltaEnvelope,
+	ack func(uint64),
+) {
+	s.deltaFn = drain
+	s.deltaAckFn = ack
 }
 
 // NewSimulator loads durable state and constructs a simulator.
@@ -115,6 +130,11 @@ func (s *Simulator) SendHeartbeat(ctx context.Context) (*HeartbeatResponse, erro
 	response, err := s.client.SendHeartbeat(ctx, s.buildHeartbeat())
 	if err != nil {
 		return nil, fmt.Errorf("send heartbeat: %w", err)
+	}
+	// Only prune the delta queue once the parent confirms it durably ingested
+	// the batch; a failed send above leaves everything queued for retry.
+	if s.deltaAckFn != nil && response.AckCursor > 0 {
+		s.deltaAckFn(response.AckCursor)
 	}
 	if response.RelayToken != "" && response.RelayToken != s.state.RelayToken {
 		// A relay parent issued (or rotated) this node's token; persist it so
@@ -427,6 +447,10 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	if s.guardStatsFn != nil {
 		guardStats = s.guardStatsFn()
 	}
+	var delta *platformtypes.DeltaEnvelope
+	if s.deltaFn != nil {
+		delta = s.deltaFn()
+	}
 
 	// Report real host measurements when the platform supports collection.
 	// Anything not measured stays zero, which the dashboard renders as
@@ -465,6 +489,7 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 		LastUpdateAttempt: s.state.LastUpdateAttempt,
 		Children:          children,
 		RelayGuard:        guardStats,
+		Delta:             delta,
 	}
 }
 

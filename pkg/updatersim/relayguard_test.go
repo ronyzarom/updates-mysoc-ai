@@ -15,7 +15,7 @@ func (c *guardClock) advance(d time.Duration) { c.t = c.t.Add(d) }
 
 func newTestGuard() (*relayGuard, *guardClock) {
 	clock := &guardClock{t: time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)}
-	g := newRelayGuard()
+	g := newRelayGuard(0)
 	g.now = clock.now
 	return g, clock
 }
@@ -72,6 +72,58 @@ func TestGuardLearnedRateIsGenerous(t *testing.T) {
 	}
 	if allowed != int(guardLearnedBurst) {
 		t.Fatalf("learned burst: allowed %d, want %d", allowed, int(guardLearnedBurst))
+	}
+}
+
+func TestGuardNATScalingGivesBusyIPMoreBudget(t *testing.T) {
+	g, clock := newTestGuard()
+	addr := "203.0.113.45:5000"
+	g.noteAuthSuccess(addr)
+
+	// A NATed site with many enrolled leaves earns a proportionally larger
+	// learned bucket instead of being starved by the fixed per-IP limit.
+	children := 8
+	g.setChildren(addr, children)
+
+	// Let the scaled bucket refill to its (larger) ceiling.
+	clock.advance(time.Minute)
+
+	allowed := 0
+	for i := 0; i < int(guardLearnedBurst)*children*2; i++ {
+		if g.check(addr, false) == guardAllow {
+			allowed++
+		}
+	}
+	want := int(guardLearnedBurst) * children
+	if allowed != want {
+		t.Fatalf("NAT-scaled burst: allowed %d, want %d", allowed, want)
+	}
+
+	// A single-child (non-NAT) learned IP keeps the base ceiling.
+	solo := "203.0.113.46:5000"
+	g.noteAuthSuccess(solo)
+	g.setChildren(solo, 1)
+	clock.advance(time.Minute)
+	soloAllowed := 0
+	for i := 0; i < int(guardLearnedBurst)*4; i++ {
+		if g.check(solo, false) == guardAllow {
+			soloAllowed++
+		}
+	}
+	if soloAllowed != int(guardLearnedBurst) {
+		t.Fatalf("non-NAT learned burst: allowed %d, want %d", soloAllowed, int(guardLearnedBurst))
+	}
+}
+
+func TestGuardNATScaleCapped(t *testing.T) {
+	if got := natScale(0); got != 1 {
+		t.Fatalf("natScale(0) = %v, want 1", got)
+	}
+	if got := natScale(1); got != 1 {
+		t.Fatalf("natScale(1) = %v, want 1", got)
+	}
+	if got := natScale(guardNATScaleMax + 500); got != float64(guardNATScaleMax) {
+		t.Fatalf("natScale over cap = %v, want %d", got, guardNATScaleMax)
 	}
 }
 
@@ -142,7 +194,7 @@ func TestGuardFailureWindowResets(t *testing.T) {
 func TestGuardStateBounded(t *testing.T) {
 	g, clock := newTestGuard()
 
-	for i := 0; i < guardMaxIPState+500; i++ {
+	for i := 0; i < guardDefaultMaxIPState+500; i++ {
 		addr := "10.0." + string(rune('0'+(i/250)%10)) + "." + string(rune('0'+i%250)) + ":1"
 		_ = g.check(addr, true)
 		if i%1000 == 0 {
@@ -152,8 +204,8 @@ func TestGuardStateBounded(t *testing.T) {
 	g.mu.Lock()
 	n := len(g.ips)
 	g.mu.Unlock()
-	if n > guardMaxIPState {
-		t.Fatalf("ip state grew past the cap: %d > %d", n, guardMaxIPState)
+	if n > g.maxIPState {
+		t.Fatalf("ip state grew past the cap: %d > %d", n, g.maxIPState)
 	}
 }
 

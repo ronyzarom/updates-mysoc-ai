@@ -222,7 +222,7 @@ func TestGuardPermitsDecommissionFromUnknownSource(t *testing.T) {
 	// restart comes from an IP the guard has never seen and must still pass
 	// path policy (authentication then happens in the handler as usual),
 	// while other routes stay learned-only.
-	g := newRelayGuard()
+	g := newRelayGuard(0)
 	reached := ""
 	mw := g.middleware(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		reached = req.URL.Path

@@ -174,6 +174,64 @@ Full contract: `docs/RELAY-1.11.0-CONTRACT.md`. In short:
   hard delete stays an admin dashboard action. Direct (tier-1) nodes use the
   same endpoint on the updates server itself.
 
+### Scaling to 20k customers per operator (1.12.0+)
+
+Full design: the Fleet Scalability 1.12 plan. What an operator needs to know:
+
+- **Delta reporting.** A relay set with `relay.delta_reporting: true` stops
+  shipping the full O(fleet) rollup every cycle and instead sends **change-only
+  deltas**: a per-customer summary and only the leaf rows that changed since the
+  parent last acked. Steady-state upward heartbeats stay KB-sized whether a
+  relay fronts 50 customers or 20,000. A relay sends the full rollup *or*
+  deltas, never both, so the server never double-counts; both paths are
+  accepted, so a fleet can transition relay-by-relay.
+- **Child cap.** `relay.max_children` bounds the enrolled-child registry. A
+  mysoc relay fronting 20k customer relays sets this well above the 10k default
+  (e.g. `max_children: 25000`). The port guard's per-IP state cap is sized
+  automatically from `max_children` plus headroom, so the mysoc hop's ~20k
+  distinct customer-relay source IPs all stay learned rather than being evicted.
+- **NAT.** The guard's learned-tier rate bucket scales with the number of
+  children observed behind each source IP, so a customer site NATing thousands
+  of leaves behind one address is not starved, while a single compromised NAT is
+  still capped.
+- **Heartbeat interval hint.** `relay.child_heartbeat_interval` advertises a
+  preferred child cadence in the heartbeat response (see
+  `docs/RELAY-1.12.0-CONTRACT-ADDENDUM.md`). Advisory and opt-in; use it at the
+  mysoc hop to flatten the request rate from 20k customer relays.
+
+**Sizing guide (per hop, indicative):**
+
+| Hop | Children | Reporting | `max_children` | Notes |
+|---|---|---|---|---|
+| mysoc relay | up to 20k siemcore relays | `delta_reporting: true` | `25000` | set `child_heartbeat_interval: 5m` to flatten load |
+| siemcore relay | up to ~5k swf leaves | `delta_reporting: true` | default (10k) | one summary per customer, leaves as deltas |
+| swf leaf | — | n/a | — | no changes required |
+
+**Acceptance gates** (verify with the load rig below):
+
+- server heartbeat **p99 < 1s** at 20k customers;
+- dashboard home and customer directory render **< 2s** at 20k customers
+  (both are SQL-aggregated / paged, never O(fleet));
+- mysoc relay steady-state CPU/memory documented for the target fleet;
+- ingest lag bounded and measured.
+
+**Load rig.** `updater-simulator loadgen` synthesizes N customer subtrees and
+drives them at a target as delta-reporting heartbeats, printing per-cycle
+throughput and p50/p95/p99 latency. Cycle 1 enrolls the whole fleet; later
+cycles carry only the churn (the O(changes) steady state):
+
+```bash
+updater-simulator loadgen \
+  --target https://mysoc-relay.internal:8443 \
+  --customers 20000 --leaves 5 --cycles 3 --concurrency 128 \
+  --parent mysoc-op1 --insecure \
+  --license-env UPDATER_SIM_LICENSE_KEY
+```
+
+That run drives 20k customers / ~120k nodes; read the `p99` line per cycle
+against the gate above. Point `--target` at the updates server to measure the
+delta-ingest path directly, or at a mysoc relay to measure the full chain.
+
 ## 6. Operations
 
 - **Rotate a platform key**: dashboard → Operators → Rotate key. Update
@@ -199,3 +257,4 @@ Full contract: `docs/RELAY-1.11.0-CONTRACT.md`. In short:
 - [API Contract, Section 9 — Cascade Distribution](API-CONTRACT.md)
 - [Updater Guidelines, Section 14 — Cascaded Distribution](UPDATER-GUIDELINES.md)
 - [Updater Simulator](UPDATER-SIMULATOR.md)
+- [Relay 1.12.0 Contract Addendum — Heartbeat Interval Hint](RELAY-1.12.0-CONTRACT-ADDENDUM.md)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -651,12 +652,32 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// Ingest the cascaded fleet rollup (relays report their whole subtree).
 	reportedNodes := 0
 	if len(heartbeat.Children) > 0 {
-		n, err := instanceRepo.UpsertReportedChildren(r.Context(), heartbeat.InstanceID, licenseID, heartbeat.Children)
+		n, truncated, err := instanceRepo.UpsertReportedChildren(r.Context(), heartbeat.InstanceID, licenseID, heartbeat.Children)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid fleet rollup: %v", err))
 			return
 		}
 		reportedNodes = n
+		if truncated {
+			// A truncated rollup is ingested (partial fleet view beats a
+			// rejected one); surface it so an oversized subtree is visible.
+			log.Printf("rollup from %s truncated at %d nodes", heartbeat.InstanceID, reportedNodes)
+		}
+	}
+
+	// Ingest the change-only delta stream (Fleet Scalability 1.12). A relay
+	// sends deltas OR the full rollup above, never both, so this is additive
+	// and cannot double-count. The ack cursor tells the relay it may prune the
+	// acknowledged entries from its forwarding queue.
+	var ackCursor uint64
+	if heartbeat.Delta != nil {
+		n, err := instanceRepo.IngestDelta(r.Context(), heartbeat.InstanceID, licenseID, heartbeat.Delta)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid fleet delta: %v", err))
+			return
+		}
+		reportedNodes += n
+		ackCursor = heartbeat.Delta.Cursor
 	}
 
 	// Check for available updates
@@ -670,11 +691,15 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"status":         "ok",
 		"updates":        updates,
 		"reported_nodes": reportedNodes,
-	})
+	}
+	if ackCursor > 0 {
+		resp["ack_cursor"] = ackCursor
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleDecommission lets a directly-connected node announce its own clean
@@ -791,10 +816,14 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Record the check-in without impersonating a direct heartbeat: relays
 	// forward child checks upstream, so this must not clobber rollup state.
+	// At fleet scale the write is throttled to one per instance per interval
+	// (unless the reported version changed) — checks in between touch nothing.
 	instanceRepo := licensing.NewInstanceRepository(s.db)
 	clientIP := getClientIP(r)
-	if err := instanceRepo.TouchFromCheck(r.Context(), req.InstanceID, heartbeat, licenseID, clientIP); err != nil {
-		// Log but don't fail
+	if s.checkThrottle.shouldWrite(req.InstanceID, req.CurrentVersion) {
+		if err := instanceRepo.TouchFromCheck(r.Context(), req.InstanceID, heartbeat, licenseID, clientIP); err != nil {
+			// Log but don't fail
+		}
 	}
 
 	// The auto-update toggle gates PRODUCT updates only. The updater's own
@@ -825,12 +854,19 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		updateGroup = instance.UpdateGroup
 	}
 
+	// Memoize the release lookup per (product, channel, group) so a burst of
+	// identical checks costs one DB query, not one each. The version compare
+	// stays per-request.
 	releaseSvc := s.releaseService()
-	info, err := releaseSvc.GetLatestReleaseForGroup(r.Context(), product, channel, req.CurrentVersion, updateGroup)
+	cacheKey := product + "|" + channel + "|" + updateGroup
+	release, err := s.releaseCache.getOrLoad(cacheKey, func() (*types.Release, error) {
+		return releaseSvc.HighestReleaseForGroup(r.Context(), product, channel, updateGroup)
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to check for updates")
 		return
 	}
+	info := releaseSvc.ReleaseInfoFor(release, req.CurrentVersion)
 
 	if info != nil && info.UpdateAvailable {
 		// Build absolute download URL
@@ -937,18 +973,123 @@ func parseIntQueryParam(r *http.Request, name string, defaultVal, minVal, maxVal
 	return val
 }
 
+// instanceFilterFromQuery reads the shared filter/search/sort query params.
+func instanceFilterFromQuery(r *http.Request) licensing.InstanceListFilter {
+	q := r.URL.Query()
+	return licensing.InstanceListFilter{
+		Status:   q.Get("status"),
+		Tier:     q.Get("tier"),
+		Customer: q.Get("customer"),
+		Operator: q.Get("operator"),
+		Parent:   q.Get("parent"),
+		Search:   q.Get("search"),
+		Sort:     q.Get("sort"),
+		SortDir:  q.Get("dir"),
+	}
+}
+
 func (s *Server) handleListInstancesPaged(w http.ResponseWriter, r *http.Request) {
 	limit := parseIntQueryParam(r, "limit", 50, 1, 200)
 	offset := parseIntQueryParam(r, "offset", 0, 0, -1)
 
 	repo := licensing.NewInstanceRepository(s.db)
-	result, err := repo.ListPaged(r.Context(), limit, offset)
+	result, err := repo.ListPagedFiltered(r.Context(), instanceFilterFromQuery(r), limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// handleFleetStats returns SQL-aggregated fleet counts (same filters as the
+// paged list). No per-node rows leave the database.
+func (s *Server) handleFleetStats(w http.ResponseWriter, r *http.Request) {
+	repo := licensing.NewInstanceRepository(s.db)
+	stats, err := repo.FleetStatsSummary(r.Context(), instanceFilterFromQuery(r))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+// handleCustomerDirectory returns the SQL-aggregated, paged, exceptions-first
+// customer directory that replaces the full fleet tree at scale.
+func (s *Server) handleCustomerDirectory(w http.ResponseWriter, r *http.Request) {
+	limit := parseIntQueryParam(r, "limit", 50, 1, 200)
+	offset := parseIntQueryParam(r, "offset", 0, 0, -1)
+	search := r.URL.Query().Get("search")
+	sort := r.URL.Query().Get("sort")
+
+	repo := licensing.NewInstanceRepository(s.db)
+	items, total, err := repo.CustomerDirectory(r.Context(), search, sort, limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items":  items,
+		"limit":  limit,
+		"offset": offset,
+		"total":  total,
+	})
+}
+
+// handleSecurityStats returns the SQL-aggregated fleet security posture.
+func (s *Server) handleSecurityStats(w http.ResponseWriter, r *http.Request) {
+	repo := licensing.NewInstanceRepository(s.db)
+	stats, err := repo.SecurityStatsSummary(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+// handleSecurityPaged returns reporting nodes' security posture, paged and
+// worst-score-first.
+func (s *Server) handleSecurityPaged(w http.ResponseWriter, r *http.Request) {
+	limit := parseIntQueryParam(r, "limit", 50, 1, 200)
+	offset := parseIntQueryParam(r, "offset", 0, 0, -1)
+
+	repo := licensing.NewInstanceRepository(s.db)
+	rows, total, err := repo.ListSecurityPaged(r.Context(), limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items":  rows,
+		"limit":  limit,
+		"offset": offset,
+		"total":  total,
+	})
+}
+
+// handleInstanceParents resolves a node's ancestor chain server-side.
+func (s *Server) handleInstanceParents(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	repo := licensing.NewInstanceRepository(s.db)
+
+	// The path uses the UUID id like the other detail routes; resolve it to
+	// the instance_id the chain walk keys on.
+	node, err := repo.GetByID(r.Context(), id)
+	if errors.Is(err, licensing.ErrInstanceNotFound) {
+		writeError(w, http.StatusNotFound, "instance not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	chain, err := repo.ParentChain(r.Context(), node.InstanceID)
+	if err != nil && !errors.Is(err, licensing.ErrInstanceNotFound) {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"parents": chain})
 }
 
 func (s *Server) handleGetInstance(w http.ResponseWriter, r *http.Request) {

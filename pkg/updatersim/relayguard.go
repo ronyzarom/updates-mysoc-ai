@@ -35,10 +35,31 @@ const (
 	guardFailWindow    = 10 * time.Minute // auth failures counted within this window
 	guardFailThreshold = 5                // failures within the window that trigger a ban
 
-	guardLearnedTTL  = 24 * time.Hour // learned IPs expire without re-auth
-	guardMaxIPState  = 10000          // cap on tracked per-IP entries
-	guardMaxChildren = 500            // cap on enrolled children (anti instance_id flood)
+	guardLearnedTTL = 24 * time.Hour // learned IPs expire without re-auth
+
+	// guardDefaultMaxIPState is the fallback cap on tracked per-IP entries.
+	// A mysoc relay fronts up to 20k distinct customer-relay source IPs, so
+	// the effective cap is sized from relay.max_children (see newRelayGuard):
+	// a fixed 10k would evict legitimate learned sources at that hop.
+	guardDefaultMaxIPState = 10000
+	// guardIPStateHeadroom is the slack added above the learned-source count
+	// so transient unknown/scanner IPs do not force eviction of learned ones.
+	guardIPStateHeadroom = 4096
+
+	// guardNATScaleMax bounds how far a source IP's learned rate/burst is
+	// scaled up by the number of children enrolled behind it. A customer
+	// site NATs thousands of leaves behind one address; a fixed learned
+	// bucket would starve them. The relay reports enrolled-children-per-IP
+	// to the guard (setChildren), and the learned tier scales linearly up
+	// to this ceiling so a single compromised NAT still cannot mint
+	// unbounded traffic.
+	guardNATScaleMax = 100
 )
+
+// defaultRelayMaxChildren is the fallback bound on the enrolled-child registry
+// when relay.max_children is unset. It lives here (not in config) because it
+// sizes the same anti-flood surface as the guard's other bounds.
+const defaultRelayMaxChildren = 10000
 
 // guardBanLadder is the escalating ban duration per prior ban count.
 var guardBanLadder = []time.Duration{5 * time.Minute, 30 * time.Minute, 6 * time.Hour}
@@ -57,12 +78,20 @@ type guardIPState struct {
 	// allowlist
 	learnedAt time.Time
 
+	// children is the count of enrolled children the relay has observed
+	// behind this source IP (NAT awareness). Scales the learned-tier bucket.
+	children int
+
 	lastSeen time.Time
 }
 
 type relayGuard struct {
 	mu  sync.Mutex
 	ips map[string]*guardIPState
+
+	// maxIPState caps tracked per-IP entries; sized from relay.max_children
+	// so the mysoc hop's 20k distinct relay IPs all stay learned.
+	maxIPState int
 
 	blocked     uint64
 	rateLimited uint64
@@ -71,8 +100,13 @@ type relayGuard struct {
 	now func() time.Time // test seam
 }
 
-func newRelayGuard() *relayGuard {
-	return &relayGuard{ips: map[string]*guardIPState{}, now: time.Now}
+// newRelayGuard builds a guard whose per-IP state cap is sized to hold
+// maxIPState entries. A non-positive value falls back to the default.
+func newRelayGuard(maxIPState int) *relayGuard {
+	if maxIPState <= 0 {
+		maxIPState = guardDefaultMaxIPState
+	}
+	return &relayGuard{ips: map[string]*guardIPState{}, maxIPState: maxIPState, now: time.Now}
 }
 
 // remoteIP extracts the bare IP from an http.Request RemoteAddr.
@@ -91,7 +125,7 @@ func (g *relayGuard) state(ip string, now time.Time) *guardIPState {
 	if ok {
 		return st
 	}
-	if len(g.ips) >= guardMaxIPState {
+	if len(g.ips) >= g.maxIPState {
 		g.evictLocked(now)
 	}
 	// A fresh source starts with a full unknown-tier bucket so its first
@@ -114,11 +148,11 @@ func (g *relayGuard) evictLocked(now time.Time) {
 	}
 	// Hard fallback: still full means an active flood from many sources;
 	// drop arbitrary non-learned, non-banned entries to stay bounded.
-	if len(g.ips) >= guardMaxIPState {
+	if len(g.ips) >= g.maxIPState {
 		for ip, st := range g.ips {
 			if st.learnedAt.IsZero() && (st.banUntil.IsZero() || now.After(st.banUntil)) {
 				delete(g.ips, ip)
-				if len(g.ips) < guardMaxIPState {
+				if len(g.ips) < g.maxIPState {
 					break
 				}
 			}
@@ -140,6 +174,33 @@ func (g *relayGuard) noteAuthSuccess(remoteAddr string) {
 	if st.tokens < guardLearnedBurst {
 		st.tokens = guardLearnedBurst
 	}
+}
+
+// setChildren records how many children the relay currently has enrolled from
+// this source IP, so the learned-tier bucket can scale for NATed customer
+// sites (many leaves, one address). remoteAddr may be a bare IP or host:port.
+func (g *relayGuard) setChildren(remoteAddr string, n int) {
+	ip := remoteIP(remoteAddr)
+	now := g.now()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	st := g.state(ip, now)
+	if n < 0 {
+		n = 0
+	}
+	st.children = n
+}
+
+// natScale returns the multiplier for a source IP's learned-tier bucket given
+// the number of children behind it: at least 1, capped at guardNATScaleMax.
+func natScale(children int) float64 {
+	if children <= 1 {
+		return 1
+	}
+	if children > guardNATScaleMax {
+		children = guardNATScaleMax
+	}
+	return float64(children)
 }
 
 // noteAuthFailure counts a failed authentication and applies the ban ladder.
@@ -200,7 +261,11 @@ func (g *relayGuard) check(remoteAddr string, enrollPath bool) guardVerdict {
 
 	rate, burst := guardUnknownRate, guardUnknownBurst
 	if learned {
-		rate, burst = guardLearnedRate, guardLearnedBurst
+		// NAT-aware: a source fronting many enrolled children gets a
+		// proportionally larger learned bucket so a busy customer site is
+		// not starved by a fixed per-IP limit.
+		scale := natScale(st.children)
+		rate, burst = guardLearnedRate*scale, guardLearnedBurst*scale
 	}
 	elapsed := now.Sub(st.lastRefill).Seconds()
 	st.tokens += elapsed * rate
