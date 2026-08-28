@@ -215,6 +215,28 @@ func (s *Service) GetLatestReleaseForGroup(ctx context.Context, product, channel
 	return releaseInfo(release, currentVersion, updateAvailable), nil
 }
 
+// HighestReleaseForGroup returns the highest-version release for a product,
+// channel, and target group (nil when none) without comparing against a
+// caller version. This is the DB-touching part of the update check and is
+// safe to memoize per (product, channel, group) — the version comparison is
+// applied separately by ReleaseInfoFor.
+func (s *Service) HighestReleaseForGroup(ctx context.Context, product, channel, targetGroup string) (*types.Release, error) {
+	all, err := s.repo.GetAllByProductChannelAndGroup(ctx, product, channel, targetGroup)
+	if err != nil {
+		return nil, err
+	}
+	return findHighestVersion(all), nil
+}
+
+// ReleaseInfoFor builds the check response for a (cached) release against the
+// caller's current version. Pure and cheap — no I/O.
+func (s *Service) ReleaseInfoFor(release *types.Release, currentVersion string) *types.ReleaseInfo {
+	if release == nil {
+		return nil
+	}
+	return releaseInfo(release, currentVersion, isNewerVersion(currentVersion, release.Version))
+}
+
 func releaseInfo(release *types.Release, currentVersion string, updateAvailable bool) *types.ReleaseInfo {
 	return &types.ReleaseInfo{
 		Product:         release.ProductName,

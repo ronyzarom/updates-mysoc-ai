@@ -82,6 +82,79 @@ export interface InstancesPagedResponse {
   total: number;
 }
 
+// Server-side filter/search/sort for the paged instance views. All fields are
+// optional; empty values are ignored by the server.
+export interface InstanceQuery {
+  status?: string;
+  tier?: string;
+  customer?: string;
+  operator?: string;
+  parent?: string;
+  search?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
+}
+
+// SQL-aggregated fleet summary (GET /api/v1/instances/stats). Computed in the
+// database — no per-node rows are shipped to the client.
+export interface FleetStats {
+  total: number;
+  online: number;
+  offline: number;
+  degraded: number;
+  decommissioned: number;
+  failed_updates: number;
+  by_tier: Record<string, number>;
+}
+
+// One customer's aggregated fleet health for the exceptions-first directory
+// (GET /api/v1/instances/customers).
+export interface CustomerSummaryRow {
+  customer_id: string;
+  customer_name: string;
+  total: number;
+  online: number;
+  offline: number;
+  failed: number;
+}
+
+export interface CustomerDirectoryResponse {
+  items: CustomerSummaryRow[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
+// SQL-aggregated security posture (GET /api/v1/instances/security/stats).
+export interface SecurityStats {
+  reporting: number;
+  avg_score: number;
+  firewall_enabled: number;
+  ssh_hardened: number;
+  pending_updates: number;
+  security_updates: number;
+  reboot_required: number;
+}
+
+// One node's posture in the paged security view.
+export interface SecurityRow {
+  id: string;
+  instance_id: string;
+  hostname: string;
+  product_tier: string;
+  status: string;
+  security?: SecurityStatus;
+}
+
+export interface SecurityPagedResponse {
+  items: SecurityRow[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
 // Fleet tree (mysoc > siemcore > swf), grouped per customer/license.
 export interface InstanceTreeNode {
   id: string;
@@ -593,12 +666,82 @@ class ApiClient {
     );
   }
 
+  // buildInstanceQuery renders an InstanceQuery into a URLSearchParams string,
+  // dropping empty values so the server sees only active filters.
+  private buildInstanceQuery(q: InstanceQuery): string {
+    const params = new URLSearchParams();
+    if (q.status) params.set("status", q.status);
+    if (q.tier) params.set("tier", q.tier);
+    if (q.customer) params.set("customer", q.customer);
+    if (q.operator) params.set("operator", q.operator);
+    if (q.parent) params.set("parent", q.parent);
+    if (q.search) params.set("search", q.search);
+    if (q.sort) params.set("sort", q.sort);
+    if (q.dir) params.set("dir", q.dir);
+    if (q.limit != null) params.set("limit", String(q.limit));
+    if (q.offset != null) params.set("offset", String(q.offset));
+    const s = params.toString();
+    return s ? `?${s}` : "";
+  }
+
+  // Filtered/searched/sorted paged instances — the fleet-scale list query.
+  async getInstancesFiltered(q: InstanceQuery = {}): Promise<InstancesPagedResponse> {
+    return this.fetch<InstancesPagedResponse>(
+      `/api/v1/instances/paged${this.buildInstanceQuery(q)}`
+    );
+  }
+
+  // SQL-aggregated fleet summary, honoring the same filters as the list.
+  async getFleetStats(q: InstanceQuery = {}): Promise<FleetStats> {
+    return this.fetch<FleetStats>(
+      `/api/v1/instances/stats${this.buildInstanceQuery(q)}`
+    );
+  }
+
+  // SQL-aggregated fleet security posture.
+  async getSecurityStats(): Promise<SecurityStats> {
+    return this.fetch<SecurityStats>("/api/v1/instances/security/stats");
+  }
+
+  // Paged security posture (worst score first).
+  async getSecurityPaged(limit = 50, offset = 0): Promise<SecurityPagedResponse> {
+    return this.fetch<SecurityPagedResponse>(
+      `/api/v1/instances/security?limit=${limit}&offset=${offset}`
+    );
+  }
+
   async getInstanceTree(): Promise<InstanceTreeResponse> {
     return this.fetch<InstanceTreeResponse>("/api/v1/instances/tree");
   }
 
+  // Exceptions-first, paged customer directory (SQL-aggregated).
+  async getCustomerDirectory(params: {
+    search?: string;
+    sort?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<CustomerDirectoryResponse> {
+    const q = new URLSearchParams();
+    if (params.search) q.set("search", params.search);
+    if (params.sort) q.set("sort", params.sort);
+    if (params.limit != null) q.set("limit", String(params.limit));
+    if (params.offset != null) q.set("offset", String(params.offset));
+    const s = q.toString();
+    return this.fetch<CustomerDirectoryResponse>(
+      `/api/v1/instances/customers${s ? `?${s}` : ""}`
+    );
+  }
+
   async getInstance(id: string): Promise<Instance> {
     return this.fetch<Instance>(`/api/v1/instances/${id}`);
+  }
+
+  // Ancestor chain (nearest parent first), resolved server-side.
+  async getInstanceParents(id: string): Promise<Instance[]> {
+    const res = await this.fetch<{ parents: Instance[] }>(
+      `/api/v1/instances/${id}/parents`
+    );
+    return res.parents ?? [];
   }
 
   async deleteInstance(id: string): Promise<void> {

@@ -29,6 +29,12 @@ type Server struct {
 	ipACL       *security.IPAllowlistRepository
 	apiKeys     *security.APIKeyRepository
 	signingKey  ed25519.PrivateKey // nil = release signing disabled
+
+	// Check-plane relief (see checkplane.go): memoized release lookups and a
+	// per-instance write throttle keep the O(fleet) update-check path
+	// read-mostly at scale.
+	releaseCache  *releaseLookupCache
+	checkThrottle *checkWriteThrottle
 }
 
 // NewServer creates a new API server
@@ -46,6 +52,9 @@ func NewServer(cfg *config.Config, db *database.DB, store storage.Storage) *Serv
 		authHandler: authHandlers,
 		ipACL:       security.NewIPAllowlistRepository(db),
 		apiKeys:     security.NewAPIKeyRepository(db),
+
+		releaseCache:  newReleaseLookupCache(),
+		checkThrottle: newCheckWriteThrottle(),
 	}
 
 	if seed := cfg.Server.SigningKeySeed; seed != "" {
@@ -87,6 +96,9 @@ func (s *Server) setupRoutes() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
+	// Inflate gzipped request bodies (cascade rollup heartbeats) before any
+	// handler reads them.
+	r.Use(decompressRequest)
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
@@ -189,9 +201,19 @@ func (s *Server) setupRoutes() {
 			// Read endpoints - require an authenticated dashboard user.
 			r.With(auth.JWTMiddleware(s.authService)).Get("/", s.handleListInstances)
 			r.With(auth.JWTMiddleware(s.authService)).Get("/paged", s.handleListInstancesPaged)
+			// SQL-aggregated fleet summary for the dashboard headline cards.
+			r.With(auth.JWTMiddleware(s.authService)).Get("/stats", s.handleFleetStats)
+			// SQL-aggregated + paged security posture (exceptions first).
+			r.With(auth.JWTMiddleware(s.authService)).Get("/security", s.handleSecurityPaged)
+			r.With(auth.JWTMiddleware(s.authService)).Get("/security/stats", s.handleSecurityStats)
 			// Fleet as a per-customer tier tree (mysoc > siemcore > swf).
 			r.With(auth.JWTMiddleware(s.authService)).Get("/tree", s.handleInstanceTree)
+			// Exceptions-first, paged, SQL-aggregated customer directory
+			// (the scale replacement for rendering the whole tree).
+			r.With(auth.JWTMiddleware(s.authService)).Get("/customers", s.handleCustomerDirectory)
 			r.With(auth.JWTMiddleware(s.authService)).Get("/{id}", s.handleGetInstance)
+			// Ancestor chain resolved server-side (no full-fleet fetch).
+			r.With(auth.JWTMiddleware(s.authService)).Get("/{id}/parents", s.handleInstanceParents)
 			// Mutations require admin authorization.
 			r.With(s.adminAuth).Put("/{id}", s.handleUpdateInstance)
 			r.With(s.adminAuth).Delete("/{id}", s.handleDeleteInstance)

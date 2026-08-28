@@ -1,6 +1,7 @@
 package updatersim
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -34,14 +35,30 @@ import (
 //   - GET  /api/v1/releases/{p}/{v}/download — pull-through verified cache
 //   - GET  /health                     — liveness + child count
 type Relay struct {
-	config    *Config
-	upstream  *Client
-	logger    *slog.Logger
-	publicKey ed25519.PublicKey // nil = signature verification disabled
-	guard     *relayGuard       // port self-protection (see relayguard.go)
+	config      *Config
+	upstream    *Client
+	logger      *slog.Logger
+	publicKey   ed25519.PublicKey // nil = signature verification disabled
+	guard       *relayGuard       // port self-protection (see relayguard.go)
+	maxChildren int               // enrolled-child registry bound (relay.max_children)
 
 	mu       sync.Mutex
 	children map[string]*childState
+	// ipChildren counts enrolled children per source IP, kept incrementally
+	// so the guard's learned-tier bucket can scale for NATed customer sites
+	// without an O(children) scan on the hot path.
+	ipChildren map[string]int
+
+	// delta is the change-only upward forwarding queue (Fleet Scalability
+	// 1.12). Child heartbeats that carry material changes record into it, and
+	// child delta envelopes are folded in for store-and-forward; the relay's
+	// own upward heartbeat drains a bounded, acked batch. nil when the relay
+	// runs standalone (no simulator driving upward heartbeats), so the pure
+	// full-rollup path keeps working unchanged.
+	delta *deltaTracker
+	// lastSummary is the last per-customer summary emitted, so the relay only
+	// re-queues a summary when its aggregates actually changed.
+	lastSummary *platformtypes.FleetSummary
 
 	cacheMu sync.Mutex // serializes pull-through fetches
 }
@@ -59,6 +76,27 @@ type childState struct {
 	DecommissionedAt time.Time
 }
 
+// incIPChildLocked / decIPChildLocked maintain the per-source-IP enrolled
+// child count used for NAT-aware guard scaling. r.mu must be held.
+func (r *Relay) incIPChildLocked(ip string) int {
+	if ip == "" {
+		return 0
+	}
+	r.ipChildren[ip]++
+	return r.ipChildren[ip]
+}
+
+func (r *Relay) decIPChildLocked(ip string) {
+	if ip == "" {
+		return
+	}
+	if n := r.ipChildren[ip] - 1; n > 0 {
+		r.ipChildren[ip] = n
+	} else {
+		delete(r.ipChildren, ip)
+	}
+}
+
 // decommissionRetention bounds how long a decommissioned child stays in relay
 // state after the mark: the updates server row is the durable record, the
 // relay only needs to deliver the status via rollups for a while.
@@ -72,12 +110,23 @@ func NewRelay(cfg *Config, upstream *Client, logger *slog.Logger) (*Relay, error
 	if logger == nil {
 		logger = slog.Default()
 	}
+	maxChildren := cfg.Relay.MaxChildren
+	if maxChildren <= 0 {
+		maxChildren = defaultRelayMaxChildren
+	}
+	// Size the guard's per-IP state to hold one learned entry per potential
+	// child (each customer relay is a distinct source IP at the mysoc hop),
+	// plus headroom for transient unknown sources.
+	guardIPCap := maxChildren + guardIPStateHeadroom
 	relay := &Relay{
-		config:   cfg,
-		upstream: upstream,
-		logger:   logger,
-		guard:    newRelayGuard(),
-		children: map[string]*childState{},
+		config:      cfg,
+		upstream:    upstream,
+		logger:      logger,
+		guard:       newRelayGuard(guardIPCap),
+		maxChildren: maxChildren,
+		children:    map[string]*childState{},
+		ipChildren:  map[string]int{},
+		delta:       newDeltaTracker(defaultDeltaBatch),
 	}
 	if pubHex := strings.TrimSpace(cfg.Signing.PublicKey); pubHex != "" {
 		pub, err := signing.ParsePublicKeyHex(pubHex)
@@ -91,6 +140,40 @@ func NewRelay(cfg *Config, upstream *Client, logger *slog.Logger) (*Relay, error
 	}
 	relay.loadTombstones()
 	return relay, nil
+}
+
+// relayGzipDecode inflates gzipped child request bodies (a child relay's
+// upward rollup heartbeat can be large and is highly compressible). It sits
+// inside the guard so banned/rate-limited sources are rejected before any
+// decompression work. The per-handler body limit still applies to the
+// inflated stream, bounding decompression.
+func relayGzipDecode(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Header.Get("Content-Encoding") == "gzip" && req.Body != nil {
+			zr, err := gzip.NewReader(req.Body)
+			if err != nil {
+				relayError(w, http.StatusBadRequest, "invalid gzip request body")
+				return
+			}
+			orig := req.Body
+			req.Body = &relayGzipBody{zr: zr, orig: orig}
+			req.Header.Del("Content-Encoding")
+			req.Header.Del("Content-Length")
+			req.ContentLength = -1
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
+type relayGzipBody struct {
+	zr   *gzip.Reader
+	orig io.ReadCloser
+}
+
+func (g *relayGzipBody) Read(p []byte) (int, error) { return g.zr.Read(p) }
+func (g *relayGzipBody) Close() error {
+	_ = g.zr.Close()
+	return g.orig.Close()
 }
 
 // Serve runs the relay listener until the context is canceled.
@@ -115,7 +198,7 @@ func (r *Relay) Serve(ctx context.Context) error {
 	// learned-source restriction are applied before any handler runs.
 	server := &http.Server{
 		Addr:              r.config.Relay.Listen,
-		Handler:           r.guard.middleware(mux),
+		Handler:           r.guard.middleware(relayGzipDecode(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
@@ -161,6 +244,7 @@ func (r *Relay) ChildrenReport() []platformtypes.ChildReport {
 		// status upward; the server row is the durable record.
 		if child.Decommissioned && now.Sub(child.DecommissionedAt) > decommissionRetention {
 			delete(r.children, id)
+			r.decIPChildLocked(child.SourceIP)
 			pruned = true
 			continue
 		}
@@ -247,7 +331,7 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 	case !known:
 		// Bound the child map: an internet-reachable listener must not let
 		// arbitrary instance_ids balloon relay memory.
-		if len(r.children) >= guardMaxChildren {
+		if len(r.children) >= r.maxChildren {
 			r.mu.Unlock()
 			r.logger.Warn("relay children capacity reached; rejecting new enrollment",
 				"instance_id", heartbeat.InstanceID, "remote", req.RemoteAddr)
@@ -267,9 +351,23 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 		relayError(w, http.StatusUnauthorized, "relay token mismatch for this instance_id")
 		return
 	}
+	// Capture prior state before overwriting so we can tell whether this
+	// heartbeat is a material change worth pushing as an inventory delta.
+	prevVersion := primaryVersion(child.Heartbeat)
+	prevAttempt := child.Heartbeat.LastUpdateAttempt
 	child.Heartbeat = heartbeat
 	child.LastSeen = time.Now()
-	child.SourceIP = remoteIP(req.RemoteAddr)
+	newIP := remoteIP(req.RemoteAddr)
+	oldIP := child.SourceIP
+	child.SourceIP = newIP
+	// Keep the per-IP enrolled-child count current for NAT-aware guard
+	// scaling: a new child (oldIP=="") increments; a child that reappeared
+	// behind a different NAT address moves the count.
+	if oldIP != newIP {
+		r.decIPChildLocked(oldIP)
+		r.incIPChildLocked(newIP)
+	}
+	ipCount := r.ipChildren[newIP]
 	// A genuine heartbeat contradicts a decommission mark: revive (honest
 	// revival — reinstall without --purge, or a false mark from a leaked
 	// credential, which this makes visible).
@@ -279,8 +377,35 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 	if revived {
 		r.saveTombstonesLocked()
 	}
+	// A heartbeat is a material inventory change only on enrollment, revival,
+	// a version change, or a new update attempt — not every 60s tick. This is
+	// what keeps the upward delta stream O(changes) rather than O(fleet).
+	changed := !known || revived ||
+		primaryVersion(heartbeat) != prevVersion ||
+		attemptChanged(prevAttempt, heartbeat.LastUpdateAttempt)
+	var changedReport platformtypes.ChildReport
+	if changed {
+		changedReport = childReport(heartbeat, "online", child.LastSeen, newIP)
+	}
+	childDelta := heartbeat.Delta
 	r.mu.Unlock()
 	r.guard.noteAuthSuccess(req.RemoteAddr)
+	r.guard.setChildren(newIP, ipCount)
+
+	// Delta bookkeeping runs off the relay lock (the tracker holds its own).
+	// Record the direct child's change, then fold in the child's forwarded
+	// envelope so a whole subtree's changes propagate one hop further. We ack
+	// the child's cursor because ingest has durably taken ownership.
+	ackCursor := uint64(0)
+	if r.delta != nil {
+		if changed {
+			r.delta.recordNode(changedReport)
+		}
+		if childDelta != nil {
+			r.delta.ingest(childDelta)
+			ackCursor = childDelta.Cursor
+		}
+	}
 
 	if issuedToken != "" {
 		r.logger.Info("child enrolled at relay",
@@ -294,7 +419,7 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 			"instance_id", heartbeat.InstanceID, "remote", req.RemoteAddr)
 	}
 
-	relayJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"status":      "ok",
 		"updates":     []interface{}{},
 		"relay_token": issuedToken,
@@ -302,7 +427,58 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 		// it knows so a bootstrap needs only the relay host. Static values;
 		// clients adopt once and never mutate on later responses.
 		"identity": r.identityObject(),
-	})
+	}
+	// Acknowledge the child's forwarded delta so it can prune its queue, and
+	// advertise the interval hint when the operator configured one.
+	if ackCursor > 0 {
+		resp["ack_cursor"] = ackCursor
+	}
+	if hint := r.config.Relay.ChildHeartbeatInterval.Duration; hint > 0 {
+		resp["heartbeat_interval_seconds"] = int(hint.Seconds())
+	}
+	relayJSON(w, http.StatusOK, resp)
+}
+
+// primaryVersion returns the version of a heartbeat's first product, the field
+// the inventory delta keys "did this node change" on. Empty when unknown.
+func primaryVersion(hb platformtypes.Heartbeat) string {
+	if len(hb.Products) == 0 {
+		return ""
+	}
+	return hb.Products[0].Version
+}
+
+// attemptChanged reports whether the last update attempt differs materially
+// (a new attempt at a different version, or a success/failure flip).
+func attemptChanged(prev, next *platformtypes.UpdateAttempt) bool {
+	if prev == nil || next == nil {
+		return prev != next
+	}
+	return prev.TargetVersion != next.TargetVersion ||
+		prev.Success != next.Success ||
+		!prev.Timestamp.Equal(next.Timestamp)
+}
+
+// childReport projects a heartbeat into a single ChildReport for the inventory
+// delta stream. It mirrors the shape ChildrenReport produces for one node.
+func childReport(hb platformtypes.Heartbeat, status string, lastSeen time.Time, sourceIP string) platformtypes.ChildReport {
+	system := hb.System
+	return platformtypes.ChildReport{
+		InstanceID:        hb.InstanceID,
+		InstanceType:      hb.InstanceType,
+		ProductTier:       hb.ProductTier,
+		ParentInstanceID:  hb.ParentInstanceID,
+		CustomerID:        hb.CustomerID,
+		CustomerName:      hb.CustomerName,
+		Hostname:          hb.Hostname,
+		UpdaterVersion:    hb.UpdaterVersion,
+		Products:          hb.Products,
+		System:            &system,
+		Status:            status,
+		LastSeen:          lastSeen,
+		LastUpdateAttempt: hb.LastUpdateAttempt,
+		SourceIP:          sourceIP,
+	}
 }
 
 // identityObject builds the relay-attested identity for enrollment responses:
@@ -351,7 +527,7 @@ func (r *Relay) handleChildDecommission(w http.ResponseWriter, req *http.Request
 		// the mark must still roll up. Bounded like enrollment — on a full
 		// relay the call still acks (best-effort goodbye), it just cannot
 		// be recorded.
-		if len(r.children) >= guardMaxChildren {
+		if len(r.children) >= r.maxChildren {
 			r.mu.Unlock()
 			r.logger.Warn("relay at children capacity; decommission mark dropped",
 				"instance_id", instanceID)
@@ -416,7 +592,7 @@ func (r *Relay) loadTombstones() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for id, at := range snapshot {
-		if now.Sub(at) > decommissionRetention || len(r.children) >= guardMaxChildren {
+		if now.Sub(at) > decommissionRetention || len(r.children) >= r.maxChildren {
 			continue
 		}
 		child, ok := r.children[id]
@@ -680,6 +856,96 @@ func (r *Relay) authorizeChild(w http.ResponseWriter, req *http.Request, instanc
 // GuardStats exposes the port-protection counters for the upward heartbeat.
 func (r *Relay) GuardStats() *platformtypes.RelayGuardStats {
 	return r.guard.Stats()
+}
+
+// DeltaEnvelope drains the next bounded, change-only batch for the relay's own
+// upward heartbeat (Fleet Scalability 1.12). It first refreshes the relay's
+// per-customer summary so an aggregate change (e.g. leaves crossing offline)
+// rides the same acked stream, then returns the sequenced batch. It returns
+// nil when nothing changed since the parent's last ack, so a steady-state
+// cascade heartbeat carries no rollup at all.
+func (r *Relay) DeltaEnvelope() *platformtypes.DeltaEnvelope {
+	if r.delta == nil {
+		return nil
+	}
+	r.refreshOwnSummary()
+	return r.delta.envelope()
+}
+
+// AckUpstream prunes the relay's forwarding queue up to the cursor the parent
+// acknowledged in its heartbeat response.
+func (r *Relay) AckUpstream(cursor uint64) {
+	if r.delta != nil {
+		r.delta.ack(cursor)
+	}
+}
+
+// refreshOwnSummary recomputes this relay's per-customer aggregate from its
+// direct children and, when it changed since the last emit, queues it on the
+// delta summary stream. Recomputation happens once per upward heartbeat cycle
+// (not per child heartbeat), so it stays O(children) per cycle rather than
+// O(children^2).
+func (r *Relay) refreshOwnSummary() {
+	offlineAfter := r.config.Relay.ChildOfflineAfter.Duration
+	now := time.Now()
+	summary := platformtypes.FleetSummary{
+		CustomerID:   strings.TrimSpace(r.config.Instance.CustomerID),
+		CustomerName: strings.TrimSpace(r.config.Instance.CustomerName),
+		ReporterID:   strings.TrimSpace(r.config.Instance.ID),
+		Versions:     map[string]int{},
+	}
+	r.mu.Lock()
+	for _, child := range r.children {
+		summary.Total++
+		switch {
+		case child.Decommissioned:
+			summary.Decommissioned++
+		case offlineAfter > 0 && now.Sub(child.LastSeen) > offlineAfter:
+			summary.Offline++
+		default:
+			summary.Online++
+		}
+		if a := child.Heartbeat.LastUpdateAttempt; a != nil && !a.Success {
+			summary.FailedUpdates++
+		}
+		for _, p := range child.Heartbeat.Products {
+			if p.Version != "" {
+				summary.Versions[p.Name+"@"+p.Version]++
+			}
+		}
+	}
+	changed := r.summaryChangedLocked(summary)
+	if changed {
+		snapshot := summary
+		r.lastSummary = &snapshot
+	}
+	r.mu.Unlock()
+
+	if changed {
+		summary.StatusReportedAt = now
+		r.delta.recordSummary(summary)
+	}
+}
+
+// summaryChangedLocked compares a freshly computed summary to the last emitted
+// one, ignoring the timestamp: only a real aggregate change re-queues it.
+// r.mu must be held.
+func (r *Relay) summaryChangedLocked(s platformtypes.FleetSummary) bool {
+	prev := r.lastSummary
+	if prev == nil {
+		return true
+	}
+	if prev.Total != s.Total || prev.Online != s.Online || prev.Offline != s.Offline ||
+		prev.Decommissioned != s.Decommissioned || prev.FailedUpdates != s.FailedUpdates ||
+		len(prev.Versions) != len(s.Versions) {
+		return true
+	}
+	for k, v := range s.Versions {
+		if prev.Versions[k] != v {
+			return true
+		}
+	}
+	return false
 }
 
 func newRelayToken() string {

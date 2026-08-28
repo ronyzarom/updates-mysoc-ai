@@ -152,6 +152,23 @@ type RelayConfig struct {
 	// ChildOfflineAfter marks a child offline in rollups when it has not
 	// heartbeated for this long (default 5m).
 	ChildOfflineAfter Duration `yaml:"child_offline_after,omitempty"`
+	// ChildHeartbeatInterval, when set, is advertised to children in the
+	// heartbeat response as an interval hint (Fleet Scalability 1.12): at
+	// scale a mysoc relay pushes its 20k customer relays to a longer interval
+	// to flatten the request rate. Advisory — children may honor or ignore
+	// it. Zero means "send no hint" (children keep their configured cadence).
+	ChildHeartbeatInterval Duration `yaml:"child_heartbeat_interval,omitempty"`
+	// DeltaReporting switches this relay's upward reporting from the full
+	// O(fleet) rollup to change-only summary+inventory deltas (Fleet
+	// Scalability 1.12). Off by default so a relay keeps the legacy full
+	// rollup that every server understands; a relay sends one path or the
+	// other, never both, so the server never double-counts.
+	DeltaReporting bool `yaml:"delta_reporting,omitempty"`
+	// MaxChildren bounds the enrolled-child registry — an internet-reachable
+	// listener must not let arbitrary instance_ids balloon relay memory. A
+	// mysoc relay fronting 20k customer relays sets this well above the
+	// default (default 10000). The guard's own per-IP bounds are separate.
+	MaxChildren int `yaml:"max_children,omitempty"`
 	// TLS configures the child-facing listener's certificate. The listener is
 	// always TLS; there is no plaintext mode.
 	TLS RelayTLSConfig `yaml:"tls,omitempty"`
@@ -342,6 +359,9 @@ func (c *Config) setDefaults() {
 		}
 		if c.Relay.ChildOfflineAfter.Duration == 0 {
 			c.Relay.ChildOfflineAfter.Duration = 5 * time.Minute
+		}
+		if c.Relay.MaxChildren == 0 {
+			c.Relay.MaxChildren = defaultRelayMaxChildren
 		}
 		if c.Relay.TLS.Dir == "" {
 			c.Relay.TLS.Dir = "relay-tls"

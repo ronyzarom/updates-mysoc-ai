@@ -21,15 +21,17 @@ import { ErrorState } from "@/components/ui";
 // The dashboard mirrors the licensing hierarchy: operators (one platform
 // key each) at the top, their cascaded fleet (mysoc > siemcore > swf) below.
 export default function DashboardPage() {
+  // Headline counts come from the SQL aggregate endpoint — the dashboard must
+  // never pull the whole fleet to count it (100k+ nodes at scale).
   const {
-    data: instances,
+    data: stats,
     isLoading: instancesLoading,
     isError: instancesError,
     error: instancesErrorObj,
     refetch: refetchInstances,
   } = useQuery({
-    queryKey: ["instances"],
-    queryFn: () => api.getInstances(),
+    queryKey: ["fleet-stats"],
+    queryFn: () => api.getFleetStats(),
     retry: false,
   });
 
@@ -45,12 +47,11 @@ export default function DashboardPage() {
     retry: false,
   });
 
-  const onlineCount = instances?.filter((i) => i.status === "online").length || 0;
-  const offlineCount = instances?.filter((i) => i.status === "offline").length || 0;
-  const degradedCount = instances?.filter((i) => i.status === "degraded").length || 0;
+  const onlineCount = stats?.online || 0;
+  const offlineCount = stats?.offline || 0;
+  const degradedCount = stats?.degraded || 0;
 
-  const tierCount = (tier: string) =>
-    instances?.filter((i) => (i.product_tier || "").toLowerCase() === tier).length || 0;
+  const tierCount = (tier: string) => stats?.by_tier?.[tier] || 0;
 
   const activeOperators = operators?.filter((o) => o.is_active).length || 0;
 

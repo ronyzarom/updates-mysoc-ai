@@ -45,11 +45,26 @@ export default function InstanceDetailPage() {
     retry: false,
   });
 
-  // The full fleet lets us resolve this node's parent chain and children by
-  // instance_id (self-reported hierarchy: mysoc > siemcore > swf).
-  const { data: allInstances } = useQuery({
-    queryKey: ["instances"],
-    queryFn: () => api.getInstances(),
+  // Hierarchy is resolved server-side, never by pulling the whole fleet:
+  // the ancestor chain via a dedicated endpoint, and direct children via a
+  // parent-filtered paged query (bounded — a relay can have many children).
+  const { data: ancestorChain } = useQuery({
+    queryKey: ["instance-parents", id],
+    queryFn: () => api.getInstanceParents(id),
+    enabled: Boolean(instance),
+  });
+
+  const CHILDREN_PAGE = 100;
+  const { data: childrenPage } = useQuery({
+    queryKey: ["instance-children", instance?.instance_id],
+    queryFn: () =>
+      api.getInstancesFiltered({
+        parent: instance!.instance_id,
+        sort: "last_heartbeat",
+        dir: "desc",
+        limit: CHILDREN_PAGE,
+      }),
+    enabled: Boolean(instance?.instance_id),
   });
 
   const [selectedGroup, setSelectedGroup] = useState<string>("");
@@ -218,22 +233,12 @@ export default function InstanceDetailPage() {
   const currentGroup = instance.update_group || "stable";
   const effectiveGroup = effectiveUpdateGroup(selectedGroup, instance.update_group);
 
-  // Resolve hierarchy relationships from the fleet snapshot.
-  const fleet = allInstances || [];
-  const byInstanceId = new Map(fleet.map((i) => [i.instance_id, i]));
-  const ancestors: Instance[] = [];
-  {
-    let cursor = instance.parent_instance_id;
-    const seen = new Set<string>([instance.instance_id]);
-    while (cursor && byInstanceId.has(cursor) && !seen.has(cursor)) {
-      seen.add(cursor);
-      const parent = byInstanceId.get(cursor)!;
-      ancestors.unshift(parent);
-      cursor = parent.parent_instance_id;
-    }
-  }
-  const children = fleet.filter((i) => i.parent_instance_id === instance.instance_id);
-  const parentKnown = instance.parent_instance_id ? byInstanceId.get(instance.parent_instance_id) : undefined;
+  // Server-resolved hierarchy. The parents endpoint returns nearest-first;
+  // the UI shows the chain root-first, so reverse it.
+  const ancestors: Instance[] = [...(ancestorChain || [])].reverse();
+  const children = childrenPage?.items || [];
+  const childrenTotal = childrenPage?.total ?? children.length;
+  const parentKnown = ancestorChain && ancestorChain.length > 0 ? ancestorChain[0] : undefined;
   const hasHierarchy = Boolean(instance.product_tier || instance.parent_instance_id || children.length > 0);
 
   return (
@@ -484,7 +489,10 @@ export default function InstanceDetailPage() {
                 )}
               </div>
               <div className="pt-2 border-t border-slate-700">
-                <p className="text-xs text-slate-400 mb-2">Children ({children.length})</p>
+                <p className="text-xs text-slate-400 mb-2">
+                  Children ({childrenTotal.toLocaleString()}
+                  {childrenTotal > children.length ? `, showing ${children.length}` : ""})
+                </p>
                 {children.length === 0 ? (
                   <p className="text-sm text-slate-500">No child nodes</p>
                 ) : (

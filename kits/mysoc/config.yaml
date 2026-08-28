@@ -35,6 +35,10 @@ relay:
   listen: ":18443"
   cache_dir: /var/lib/mysoc-updater/relay-cache
   child_offline_after: 5m
+  # A mysoc relay fronts every customer's siemcore relay directly. Sized for
+  # the 20k-customers-per-operator planning envelope (default is 10000). The
+  # guard's per-IP bounds are separate and NAT-aware.
+  max_children: 25000
   tls:
     # The relay self-provisions a long-lived self-signed certificate under
     # dir on first start; give its cert.pem to every child operator to pin
