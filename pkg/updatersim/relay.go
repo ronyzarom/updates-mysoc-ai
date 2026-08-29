@@ -363,7 +363,19 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 	case child.Token != "" && presented != child.Token:
 		r.mu.Unlock()
 		r.guard.noteAuthFailure(req.RemoteAddr)
-		relayError(w, http.StatusUnauthorized, "relay token mismatch for this instance_id")
+		// Distinguish "no token against a live binding" (a first-contact race:
+		// a second process read the credential before the enrolling one
+		// persisted the token — retryable after re-reading) from a genuine
+		// wrong-token mismatch (stale token or id reuse — investigate). Both
+		// stay 401; the code lets the client branch, and the log gives the
+		// forensic pair with the "child enrolled at relay" line.
+		reason := "relay_token_mismatch"
+		if presented == "" {
+			reason = "relay_token_absent"
+		}
+		r.logger.Warn("relay rejected child heartbeat: token check failed",
+			"instance_id", heartbeat.InstanceID, "remote", req.RemoteAddr, "reason", reason)
+		relayErrorCode(w, http.StatusUnauthorized, reason, "relay token mismatch for this instance_id")
 		return
 	}
 	// Capture prior state before overwriting so we can tell whether this
@@ -860,7 +872,13 @@ func (r *Relay) authorizeChild(w http.ResponseWriter, req *http.Request, instanc
 	if child, ok := r.children[instanceID]; ok && child.Token != "" && presented != child.Token {
 		r.mu.Unlock()
 		r.guard.noteAuthFailure(req.RemoteAddr)
-		relayError(w, http.StatusUnauthorized, "relay token mismatch for this instance_id")
+		reason := "relay_token_mismatch"
+		if presented == "" {
+			reason = "relay_token_absent"
+		}
+		r.logger.Warn("relay rejected child request: token check failed",
+			"instance_id", instanceID, "remote", req.RemoteAddr, "path", req.URL.Path, "reason", reason)
+		relayErrorCode(w, http.StatusUnauthorized, reason, "relay token mismatch for this instance_id")
 		return false
 	}
 	r.mu.Unlock()
@@ -979,4 +997,12 @@ func relayJSON(w http.ResponseWriter, status int, body interface{}) {
 
 func relayError(w http.ResponseWriter, status int, message string) {
 	relayJSON(w, status, map[string]string{"error": message})
+}
+
+// relayErrorCode is relayError plus a stable machine-readable "code" so a child
+// client can branch on the reason (e.g. retry a first-contact race) without
+// parsing the human message. Adding the field is backward-compatible: callers
+// that only read "error" are unaffected.
+func relayErrorCode(w http.ResponseWriter, status int, code, message string) {
+	relayJSON(w, status, map[string]string{"error": message, "code": code})
 }
