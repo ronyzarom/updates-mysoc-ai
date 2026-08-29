@@ -58,9 +58,10 @@ func heartbeatChild(t *testing.T, relay *Relay, instanceID, token string) map[st
 	return resp
 }
 
-// heartbeatChildCode sends one child heartbeat and returns the raw status code,
-// so tests can assert rejections (heartbeatChild fatals on non-200).
-func heartbeatChildCode(relay *Relay, instanceID, token string) int {
+// heartbeatChildRaw sends one child heartbeat and returns the raw status code
+// plus the decoded JSON body, so tests can assert rejections and their reason
+// code (heartbeatChild fatals on non-200).
+func heartbeatChildRaw(relay *Relay, instanceID, token string) (int, map[string]string) {
 	body, _ := json.Marshal(map[string]string{"instance_id": instanceID})
 	req := httptest.NewRequest("POST", "/api/v1/heartbeat", bytes.NewReader(body))
 	req.Header.Set("X-License-Key", "device-secret")
@@ -69,7 +70,27 @@ func heartbeatChildCode(relay *Relay, instanceID, token string) int {
 	}
 	rec := httptest.NewRecorder()
 	relay.handleChildHeartbeat(rec, req)
-	return rec.Code
+	var decoded map[string]string
+	_ = json.Unmarshal(rec.Body.Bytes(), &decoded)
+	return rec.Code, decoded
+}
+
+// decommissionChildRaw posts a decommission and returns the status code plus the
+// decoded JSON body, exercising the authorizeChild path with its reason code.
+func decommissionChildRaw(relay *Relay, instanceID, license, token string) (int, map[string]string) {
+	body, _ := json.Marshal(map[string]string{"instance_id": instanceID})
+	req := httptest.NewRequest("POST", "/api/v1/decommission", bytes.NewReader(body))
+	if license != "" {
+		req.Header.Set("X-License-Key", license)
+	}
+	if token != "" {
+		req.Header.Set("X-Relay-Token", token)
+	}
+	rec := httptest.NewRecorder()
+	relay.handleChildDecommission(rec, req)
+	var decoded map[string]string
+	_ = json.Unmarshal(rec.Body.Bytes(), &decoded)
+	return rec.Code, decoded
 }
 
 // decommissionChild posts a decommission and returns the response code.
@@ -214,14 +235,41 @@ func TestReenrollAfterDecommissionPurge(t *testing.T) {
 func TestLiveTokenMismatchStillRejected(t *testing.T) {
 	// A node that loses its token WITHOUT decommissioning still faces a live
 	// binding: presenting a wrong or empty token must be rejected (anti-hijack).
+	// The reject carries a distinguishable code so a client can tell the
+	// retryable first-contact race (absent token) from a genuine mismatch.
 	relay := newDecommissionTestRelay(t, t.TempDir(), true)
 	heartbeatChild(t, relay, "swf-node-1", "") // enroll: establishes a live token binding
 
-	if code := heartbeatChildCode(relay, "swf-node-1", "wrong-token"); code != 401 {
-		t.Fatalf("wrong token on a live binding must 401, got %d", code)
+	code, body := heartbeatChildRaw(relay, "swf-node-1", "wrong-token")
+	if code != 401 || body["code"] != "relay_token_mismatch" {
+		t.Fatalf("wrong token: got %d code=%q, want 401 relay_token_mismatch", code, body["code"])
 	}
-	if code := heartbeatChildCode(relay, "swf-node-1", ""); code != 401 {
-		t.Fatalf("empty token on a live binding must 401, got %d", code)
+	code, body = heartbeatChildRaw(relay, "swf-node-1", "")
+	if code != 401 || body["code"] != "relay_token_absent" {
+		t.Fatalf("empty token: got %d code=%q, want 401 relay_token_absent", code, body["code"])
+	}
+}
+
+func TestAuthorizeChildRejectCodes(t *testing.T) {
+	// The other child endpoints (via authorizeChild) carry the same reason
+	// codes: an absent token against a live binding is the retryable race,
+	// a wrong token is a genuine mismatch.
+	relay := newDecommissionTestRelay(t, t.TempDir(), true)
+	heartbeatChild(t, relay, "swf-node-1", "") // enroll
+
+	code, body := decommissionChildRaw(relay, "swf-node-1", "device-secret", "")
+	if code != 401 || body["code"] != "relay_token_absent" {
+		t.Fatalf("absent token: got %d code=%q, want 401 relay_token_absent", code, body["code"])
+	}
+	code, body = decommissionChildRaw(relay, "swf-node-1", "device-secret", "wrong-token")
+	if code != 401 || body["code"] != "relay_token_mismatch" {
+		t.Fatalf("wrong token: got %d code=%q, want 401 relay_token_mismatch", code, body["code"])
+	}
+	// The rejected calls must not have applied a decommission mark.
+	for _, rep := range relay.ChildrenReport() {
+		if rep.Status == "decommissioned" {
+			t.Fatalf("rejected call applied a mark: %+v", rep)
+		}
 	}
 }
 
