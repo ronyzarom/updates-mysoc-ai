@@ -58,6 +58,20 @@ func heartbeatChild(t *testing.T, relay *Relay, instanceID, token string) map[st
 	return resp
 }
 
+// heartbeatChildCode sends one child heartbeat and returns the raw status code,
+// so tests can assert rejections (heartbeatChild fatals on non-200).
+func heartbeatChildCode(relay *Relay, instanceID, token string) int {
+	body, _ := json.Marshal(map[string]string{"instance_id": instanceID})
+	req := httptest.NewRequest("POST", "/api/v1/heartbeat", bytes.NewReader(body))
+	req.Header.Set("X-License-Key", "device-secret")
+	if token != "" {
+		req.Header.Set("X-Relay-Token", token)
+	}
+	rec := httptest.NewRecorder()
+	relay.handleChildHeartbeat(rec, req)
+	return rec.Code
+}
+
 // decommissionChild posts a decommission and returns the response code.
 func decommissionChild(t *testing.T, relay *Relay, instanceID, license, token string) int {
 	t.Helper()
@@ -167,6 +181,47 @@ func TestHeartbeatRevivesDecommissionedChild(t *testing.T) {
 	reports := relay.ChildrenReport()
 	if len(reports) != 1 || reports[0].Status != "online" {
 		t.Fatalf("expected revival to online, got %+v", reports)
+	}
+}
+
+func TestReenrollAfterDecommissionPurge(t *testing.T) {
+	// A decommission followed by a client-state purge wipes the child's saved
+	// relay token. The reinstalled node must be able to reclaim its instance_id
+	// by presenting no token — the relay re-binds a fresh one and revives it,
+	// rather than locking it out with a token mismatch.
+	relay := newDecommissionTestRelay(t, t.TempDir(), true)
+	resp := heartbeatChild(t, relay, "swf-node-1", "")
+	token, _ := resp["relay_token"].(string)
+	if token == "" {
+		t.Fatal("enrollment did not issue a relay token")
+	}
+	if code := decommissionChild(t, relay, "swf-node-1", "device-secret", token); code != 200 {
+		t.Fatalf("decommission returned %d", code)
+	}
+
+	// Purge: the client lost its token and re-enrolls with none.
+	revived := heartbeatChild(t, relay, "swf-node-1", "")
+	newToken, _ := revived["relay_token"].(string)
+	if newToken == "" {
+		t.Fatal("re-enrollment after purge did not issue a fresh relay token")
+	}
+	reports := relay.ChildrenReport()
+	if len(reports) != 1 || reports[0].Status != "online" {
+		t.Fatalf("expected re-enrollment to revive to online, got %+v", reports)
+	}
+}
+
+func TestLiveTokenMismatchStillRejected(t *testing.T) {
+	// A node that loses its token WITHOUT decommissioning still faces a live
+	// binding: presenting a wrong or empty token must be rejected (anti-hijack).
+	relay := newDecommissionTestRelay(t, t.TempDir(), true)
+	heartbeatChild(t, relay, "swf-node-1", "") // enroll: establishes a live token binding
+
+	if code := heartbeatChildCode(relay, "swf-node-1", "wrong-token"); code != 401 {
+		t.Fatalf("wrong token on a live binding must 401, got %d", code)
+	}
+	if code := heartbeatChildCode(relay, "swf-node-1", ""); code != 401 {
+		t.Fatalf("empty token on a live binding must 401, got %d", code)
 	}
 }
 
