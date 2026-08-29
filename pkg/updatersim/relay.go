@@ -305,7 +305,10 @@ func (r *Relay) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 // handleChildHeartbeat enrolls or refreshes a child. The first contact issues
 // a relay token; later contacts must present it (trust on first contact — a
-// relay restart re-adopts the token the child presents).
+// relay restart re-adopts the token the child presents). A decommissioned
+// child re-binds its token on the next honest heartbeat, so a purged reinstall
+// can reclaim its instance_id; a live (non-decommissioned) binding still
+// requires an exact token match.
 func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 	var heartbeat platformtypes.Heartbeat
 	if err := json.NewDecoder(io.LimitReader(req.Body, 4<<20)).Decode(&heartbeat); err != nil {
@@ -345,6 +348,18 @@ func (r *Relay) handleChildHeartbeat(w http.ResponseWriter, req *http.Request) {
 		}
 		child = &childState{Token: token}
 		r.children[heartbeat.InstanceID] = child
+	case child.Decommissioned:
+		// Honest revival: a heartbeat contradicts the mark. A purge may have
+		// wiped the child's saved relay token, so re-bind here (adopt the
+		// presented token, or issue a fresh one) instead of locking the node
+		// out of its own instance_id. Live, non-decommissioned bindings stay
+		// strict via the mismatch case below.
+		token := presented
+		if token == "" {
+			token = newRelayToken()
+			issuedToken = token
+		}
+		child.Token = token
 	case child.Token != "" && presented != child.Token:
 		r.mu.Unlock()
 		r.guard.noteAuthFailure(req.RemoteAddr)
