@@ -13,6 +13,7 @@ import {
   Tag,
   Radio,
   KeyRound,
+  Archive,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
@@ -98,19 +99,43 @@ function nodeVisible(node: InstanceTreeNode, tierFilter: string, needle: string)
   return matchesTier(node, tierFilter) && matchesSearch(node, needle);
 }
 
+// Retired = decommissioned tombstone: kept for audit but excluded from alarms.
+// The cascade tree hides them by default so stale test/replaced nodes don't read
+// as live "offline" rows; the Show retired toggle brings them back.
+function isRetired(node: InstanceTreeNode): boolean {
+  return (node.status || "").toLowerCase() === "decommissioned";
+}
+
+// nodeRenderable folds the retired filter into the tier/search visibility so a
+// single predicate drives every level of the tree.
+function nodeRenderable(
+  node: InstanceTreeNode,
+  tierFilter: string,
+  needle: string,
+  showRetired: boolean
+): boolean {
+  return nodeVisible(node, tierFilter, needle) && (showRetired || !isRetired(node));
+}
+
 function TreeNodeRow({
   node,
   depth,
   tierFilter,
   search,
+  showRetired,
 }: {
   node: InstanceTreeNode;
   depth: number;
   tierFilter: string;
   search: string;
+  showRetired: boolean;
 }) {
   const [open, setOpen] = useState(true);
-  const hasChildren = node.children.length > 0;
+  const retired = isRetired(node);
+  const visibleChildren = node.children.filter((c) =>
+    nodeRenderable(c, tierFilter, search, showRetired)
+  );
+  const hasChildren = visibleChildren.length > 0;
   const highlighted = tierFilter !== "all" && (node.product_tier || "").toLowerCase() === tierFilter;
   // A relay serves updates to the nodes nested under it.
   const isRelay = hasChildren || (node.product_tier === "mysoc" || node.product_tier === "siemcore");
@@ -153,7 +178,7 @@ function TreeNodeRow({
         {isRelay && hasChildren && (
           <span
             className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
-            title={`Relay: serves updates to ${node.children.length} child node${node.children.length === 1 ? "" : "s"}`}
+            title={`Relay: serves updates to ${visibleChildren.length} child node${visibleChildren.length === 1 ? "" : "s"}`}
           >
             <Radio className="w-3 h-3" />
             relay
@@ -176,21 +201,29 @@ function TreeNodeRow({
             orphan
           </span>
         )}
+        {retired && (
+          <span
+            className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-600/30 text-slate-400 border border-slate-600/40"
+            title="Retired: decommissioned, excluded from alarms; kept for audit"
+          >
+            <Archive className="w-3 h-3" />
+            retired
+          </span>
+        )}
         <LastSeen node={node} />
       </div>
       {hasChildren && open && (
         <div>
-          {node.children
-            .filter((c) => nodeVisible(c, tierFilter, search))
-            .map((child) => (
-              <TreeNodeRow
-                key={child.id}
-                node={child}
-                depth={depth + 1}
-                tierFilter={tierFilter}
-                search={search}
-              />
-            ))}
+          {visibleChildren.map((child) => (
+            <TreeNodeRow
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              tierFilter={tierFilter}
+              search={search}
+              showRetired={showRetired}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -230,6 +263,7 @@ export function InstanceTree({
     queryFn: () => api.getInstanceTree(),
   });
 
+  const [showRetired, setShowRetired] = useState(false);
   const needle = search.trim().toLowerCase();
 
   if (isLoading) {
@@ -285,6 +319,21 @@ export function InstanceTree({
 
   return (
     <div className="space-y-5">
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowRetired((v) => !v)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border ${
+            showRetired
+              ? "border-slate-500 bg-slate-700 text-white"
+              : "border-slate-700 text-slate-400 hover:text-white"
+          }`}
+          aria-pressed={showRetired}
+          title="Retired = decommissioned tombstones, hidden by default"
+        >
+          <Archive className="w-3.5 h-3.5" />
+          {showRetired ? "Hide retired" : "Show retired"}
+        </button>
+      </div>
       {operators.map((op, opIdx) => (
         <div key={op.operator_id || `unassigned-${opIdx}`} className="card">
           {!hideOperatorHeader && (
@@ -311,7 +360,7 @@ export function InstanceTree({
                 Platform (mysoc)
               </p>
               {op.platform_roots
-                .filter((r) => nodeVisible(r, tierFilter, needle))
+                .filter((r) => nodeRenderable(r, tierFilter, needle, showRetired))
                 .map((root) => (
                   <TreeNodeRow
                     key={root.id}
@@ -319,6 +368,7 @@ export function InstanceTree({
                     depth={0}
                     tierFilter={tierFilter}
                     search={needle}
+                    showRetired={showRetired}
                   />
                 ))}
             </div>
@@ -360,25 +410,34 @@ export function InstanceTree({
                       {customer.legacy && customer.license_key ? ` · ${customer.license_key}` : ""}
                     </span>
                   </div>
-                  {customer.roots.length === 0 ? (
-                    <p className="text-xs text-slate-500 px-2 py-1">
-                      No instances reported yet.
-                    </p>
-                  ) : (
-                    <div className="space-y-0.5">
-                      {customer.roots
-                        .filter((r) => nodeVisible(r, tierFilter, needle))
-                        .map((root) => (
+                  {(() => {
+                    const visibleRoots = customer.roots.filter((r) =>
+                      nodeRenderable(r, tierFilter, needle, showRetired)
+                    );
+                    if (visibleRoots.length === 0) {
+                      return (
+                        <p className="text-xs text-slate-500 px-2 py-1">
+                          {customer.roots.length === 0
+                            ? "No instances reported yet."
+                            : "Only retired nodes — use Show retired to view."}
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="space-y-0.5">
+                        {visibleRoots.map((root) => (
                           <TreeNodeRow
                             key={root.id}
                             node={root}
                             depth={0}
                             tierFilter={tierFilter}
                             search={needle}
+                            showRetired={showRetired}
                           />
                         ))}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
           </div>
