@@ -1,8 +1,10 @@
 # Relay 1.15.0 Contract Addendum — Product Delivery Telemetry (v1)
 
-Status: **authored by the updates/relay team**, for countersign by the
-SWF/updater team (their `UPDATER-TELEMETRY-CONTRACT-ADDENDUM`) before the
-child-facing side ships. This addendum extends the
+Status: **countersigned** — the updates/relay team and the SWF/updater team
+aligned on the field set and constraints on **2026-09-05**. This is the
+carrier/renderer side of the SWF-side *"Updater contract addendum — SWF
+delivery telemetry on the heartbeat"*; the two documents describe the same wire
+object from the producer and carrier ends. This addendum extends the
 [Relay 1.11.0 Contract](RELAY-1.11.0-CONTRACT.md) with one **additive** object
 carried inside an existing heartbeat field. First consumer: the Secure SWF
 Updater (2.2.0.15), which reads SWF's `status.ini` (`format_version = 2`) and
@@ -49,21 +51,29 @@ A product entry in `heartbeat.products[]` MAY carry one additional object,
 }
 ```
 
-Fields (all optional; numeric-first, no log content):
+Fields (all optional; numeric-first, no log content). The **status.ini v2 key**
+column is the producer-side source of each value, per the SWF-side addendum:
 
-| Field | Type | Meaning |
-|---|---|---|
-| `ready` | bool | SWF reports itself ready to deliver. |
-| `connection` | string | `connected` or `disconnected` to the downstream collector. |
-| `sent` | integer | Events sent to the collector. |
-| `seen` | integer | Events observed at intake. |
-| `admitted` | integer | Events admitted past filtering. |
-| `delivery_eps_milli` | integer | Delivery rate in events/sec × 1000 (integer transport of a fractional EPS; `2500` = 2.5 eps). |
-| `last_write_utc` | RFC 3339 UTC | Last time SWF wrote an event downstream. |
-| `spool_events` | integer | Events currently spooled (backpressure/outage). |
-| `spool_bytes` | integer | Bytes currently spooled. |
-| `status_utc` | RFC 3339 UTC | SWF's own snapshot time for these counters (see freshness). |
-| `last_error` | string | Last delivery error, already redacted and length-bounded by the agent. |
+| Field | Type | status.ini v2 key | Meaning |
+|---|---|---|---|
+| `ready` | bool | `ready` | SWF reports itself ready to deliver. |
+| `connection` | string | `connection_state` | `connected` or `disconnected` to the downstream collector; omitted when empty. |
+| `sent` | integer (uint64) | `sent` | Cumulative socket-write count to the collector. **A socket write is not an ingestion acknowledgement** — the name says exactly what it measures. |
+| `seen` | integer (uint64) | `seen` | Events observed at intake. |
+| `admitted` | integer (uint64) | `admitted` | Events admitted past rate limits / filtering. |
+| `delivery_eps_milli` | integer (uint64) | `delivery_rate_milli_eps` | Delivery rate in events/sec × 1000 (integer transport of a fractional EPS; `2500` = 2.5 eps). |
+| `last_write_utc` | RFC 3339 UTC | `last_socket_write` | Last time SWF wrote an event downstream; omitted when empty. |
+| `spool_events` | integer (uint64) | `queue_count` | Events currently spooled (backpressure/outage). |
+| `spool_bytes` | integer (uint64) | `spool_physical_bytes` | Spool physical size in bytes. |
+| `status_utc` | RFC 3339 UTC | `status_timestamp` | SWF's own snapshot time for these counters (see freshness); omitted when empty. |
+| `last_error` | string (≤ 512 bytes) | `last_error` | Last delivery error, already credential-redacted and length-bounded (≤ 512 bytes) by the agent; omitted when empty. |
+
+The whole `telemetry` object is bounded (**< 1 KiB** worst case) and rides
+inside the existing heartbeat payload bound.
+
+The carrier transports the wire integers faithfully; this repo types the
+counters as Go `int64` (matching every other counter in `pkg/types`), which is
+wire-compatible with the contract's `uint64` for all realistic event counts.
 
 Counters are monotonic since SWF start unless the addendum on the agent side
 documents a windowed reset; the dashboard treats them as levels, not rates,
@@ -87,9 +97,13 @@ empty object and never empty strings — when any of these hold:
 - `status.ini` is missing, unreadable, or unparsable;
 - the status file is not `format_version = 2`.
 
-This mirrors the 1.11.0 identity-omission convention. Telemetry collection is
-**fail-open**: it MUST never fail, delay, or block a heartbeat. A node that
-sends no `telemetry` is indistinguishable on the wire from a pre-2.2.0.15 agent.
+This mirrors the 1.11.0 identity-omission convention. Individual **empty-string
+fields are omitted one by one** (partial data is allowed — send the numeric
+fields you have), but a wholly unavailable source omits the whole key. A
+consumer MUST treat a missing key as **"not reported"**, never as "not
+delivering". Telemetry collection is **fail-open**: it MUST never fail, delay,
+or block a heartbeat. A node that sends no `telemetry` is indistinguishable on
+the wire from a pre-2.2.0.15 agent.
 
 ## Relay obligations (normative)
 
@@ -107,11 +121,17 @@ sends no `telemetry` is indistinguishable on the wire from a pre-2.2.0.15 agent.
 ## Server obligations (normative)
 
 4. The server stores the telemetry as part of the instance's
-   `last_heartbeat_data`. No new column or migration is required.
+   `last_heartbeat_data`. No new column or migration is required. **The pipeline
+   is not pass-through**: each hop unmarshals into the Go `Heartbeat` structs and
+   re-marshals, so `last_heartbeat_data` holds the **re-encoded typed struct,
+   not the producer's original bytes** — which is exactly why `ProductStatus`
+   must carry a typed `Telemetry` field (see Compatibility).
 5. Rendering is additive: a server/dashboard that does not understand
-   `telemetry` ignores it. A dashboard that does SHOULD surface a
-   delivering / silent / stopped signal from `connection`, `status_utc`, and
-   the product `status`.
+   `telemetry` ignores it. **First target — the instance detail page** (the
+   fleet list/tree queries deliberately omit `last_heartbeat_data`): it derives
+   a **delivering / silent / stopped** signal from the product `status`,
+   `telemetry.connection`, `telemetry.sent`, and `telemetry.status_utc`
+   freshness. A fleet-list badge is explicitly **later, separate work**.
 
 ## Client obligations (normative)
 
@@ -153,6 +173,12 @@ storage and display.
 
 ## Changelog
 
+- **v1.1 (2026-09-05)** — countersigned with the SWF-side addendum: added the
+  `status.ini v2` source-key column, the `last_error` ≤ 512-byte bound and
+  `< 1 KiB` object bound, explicit per-field empty-string omission and
+  "missing = not reported" rule, the `last_heartbeat_data` re-encode note, and
+  the instance-detail-first rendering scope (fleet badge deferred). No wire or
+  code change from v1 — the shipped 1.15.0.1 carriers already conform.
 - **v1** — introduces the additive `products[].telemetry` object (SWF delivery
   counters), its omission semantics, `status_utc` freshness rule, and the soft
   deploy-ordering note for the decode/re-encode cascade path.

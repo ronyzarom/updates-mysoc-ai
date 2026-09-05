@@ -143,16 +143,35 @@ position) to make "is SWF actually sending logs?" visible on the dashboard:
 ]
 ```
 
+Each field maps to a `status.ini` (`format_version = 2`) key on your side:
+
+| Heartbeat field | `status.ini` v2 key |
+|---|---|
+| `ready` | `ready` |
+| `connection` | `connection_state` |
+| `sent` | `sent` |
+| `seen` | `seen` |
+| `admitted` | `admitted` |
+| `delivery_eps_milli` | `delivery_rate_milli_eps` |
+| `last_write_utc` | `last_socket_write` |
+| `spool_events` | `queue_count` |
+| `spool_bytes` | `spool_physical_bytes` |
+| `status_utc` | `status_timestamp` |
+| `last_error` | `last_error` |
+
 Rules (full contract: [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md)):
 
 - Fail-open. Telemetry must never delay or fail a heartbeat.
 - Omit the `telemetry` key **entirely** (never an empty object, never empty
   strings) when SWF is absent, its status file is missing/unparsable, or is not
-  `format_version = 2`.
+  `format_version = 2`. Individual empty-string fields are omitted one by one;
+  partial numeric data is fine. The whole object stays **< 1 KiB**.
+- `sent` counts socket writes, **not** ingestion acknowledgements.
 - `delivery_eps_milli` is events/sec × 1000 (integer transport of a fractional
   EPS). `last_write_utc` / `status_utc` are RFC 3339 UTC; the dashboard uses
   `status_utc` to tell "delivering" from "silent" even while `connected`.
-- `last_error` is redacted and length-bounded on your side — no log content.
+- `last_error` is credential-redacted and length-bounded (**≤ 512 bytes**) on
+  your side — no log content.
 - Roll a cascade updater and updates server at 1.15.0+ before or with this so
   the object is not dropped by an older relay hop on the way up.
 
