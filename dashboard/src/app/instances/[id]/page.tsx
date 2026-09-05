@@ -162,6 +162,40 @@ export default function InstanceDetailPage() {
     return `${minutes}m`;
   };
 
+  // delivery_eps_milli is events/sec × 1000; render the fractional rate.
+  const formatEps = (milli?: number) => {
+    if (milli === undefined || milli === null) return "—";
+    return `${(milli / 1000).toFixed(1)}/s`;
+  };
+
+  // Telemetry is only meaningful for a small window; treat a snapshot older than
+  // the offline threshold as stale (SWF frozen while the updater keeps
+  // heartbeating). Matches the 5-minute "reads as offline" rule.
+  const TELEMETRY_STALE_MS = 5 * 60 * 1000;
+
+  // Derive the at-a-glance delivery state for a product's telemetry:
+  //   stopped   — the product itself is not running
+  //   silent    — connected but the snapshot is stale, or disconnected
+  //   delivering — connected with a fresh snapshot
+  const deliveryState = (
+    productStatus: string | undefined,
+    tel: NonNullable<Instance["last_heartbeat_data"]>["products"][number]["telemetry"],
+  ): { label: string; className: string } | null => {
+    if (!tel) return null;
+    if (productStatus && productStatus !== "running" && productStatus !== "updating") {
+      return { label: "stopped", className: "bg-red-500/20 text-red-400" };
+    }
+    const snap = tel.status_utc ? new Date(tel.status_utc).getTime() : NaN;
+    const stale = isNaN(snap) || Date.now() - snap > TELEMETRY_STALE_MS;
+    if (tel.connection === "disconnected" || stale) {
+      return { label: "silent", className: "bg-amber-500/20 text-amber-400" };
+    }
+    if (tel.connection === "connected") {
+      return { label: "delivering", className: "bg-emerald-500/20 text-emerald-400" };
+    }
+    return { label: "unknown", className: "bg-slate-500/20 text-slate-400" };
+  };
+
   if (isLoading) {
     return <LoadingState label="Loading instance..." />;
   }
@@ -774,26 +808,95 @@ export default function InstanceDetailPage() {
             </h2>
 
             <div className="space-y-3">
-              {heartbeat.products.map((product) => (
+              {heartbeat.products.map((product) => {
+                const tel = product.telemetry;
+                const delivery = deliveryState(product.status, tel);
+                return (
                 <div
                   key={product.name}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50"
+                  className="p-3 rounded-lg bg-slate-800/50"
                 >
-                  <div>
-                    <p className="text-white font-medium">{product.name}</p>
-                    <p className="text-sm text-slate-400">v{product.version}</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-medium">{product.name}</p>
+                      <p className="text-sm text-slate-400">v{product.version}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {delivery && (
+                        <span
+                          className={`text-xs px-2 py-1 rounded ${delivery.className}`}
+                          title="Delivery health from the agent's telemetry (connection + snapshot freshness)"
+                        >
+                          {delivery.label}
+                        </span>
+                      )}
+                      {product.health_status && (
+                        <span className="text-xs px-2 py-1 rounded bg-slate-600/30 text-slate-300">
+                          {product.health_status}
+                        </span>
+                      )}
+                      <span
+                        className={`text-xs px-2 py-1 rounded ${
+                          product.status === "running"
+                            ? "bg-emerald-500/20 text-emerald-400"
+                            : "bg-red-500/20 text-red-400"
+                        }`}
+                      >
+                        {product.status || "unknown"}
+                      </span>
+                    </div>
                   </div>
-                  <span
-                    className={`text-xs px-2 py-1 rounded ${
-                      product.status === "running"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-red-500/20 text-red-400"
-                    }`}
-                  >
-                    {product.status || "unknown"}
-                  </span>
+
+                  {tel && (
+                    <div className="mt-3 pt-3 border-t border-slate-700/50 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Connection</span>
+                        <span
+                          className={
+                            tel.connection === "connected"
+                              ? "text-emerald-400"
+                              : "text-amber-400"
+                          }
+                        >
+                          {tel.connection || "unknown"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Rate</span>
+                        <span className="text-white">{formatEps(tel.delivery_eps_milli)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Sent</span>
+                        <span className="text-white">
+                          {(tel.sent ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Spool</span>
+                        <span className="text-white">
+                          {(tel.spool_events ?? 0).toLocaleString()}
+                          {tel.spool_bytes ? ` · ${formatBytes(tel.spool_bytes)}` : ""}
+                        </span>
+                      </div>
+                      {tel.status_utc && (
+                        <div className="flex items-center justify-between col-span-2">
+                          <span className="text-slate-400">Reported</span>
+                          <span className="text-white">
+                            {formatDistanceToNow(new Date(tel.status_utc), { addSuffix: true })}
+                          </span>
+                        </div>
+                      )}
+                      {tel.last_error && (
+                        <div className="col-span-2">
+                          <span className="text-slate-400">Last error</span>
+                          <p className="text-red-400 mt-1 break-words">{tel.last_error}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

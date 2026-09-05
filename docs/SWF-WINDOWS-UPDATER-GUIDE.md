@@ -19,11 +19,24 @@ egress, no extra firewall rules beyond reaching the SIEMCore server.
 - Base URL: `https://<siemcore-server-address>:18443` (the siemcore team
   confirms the address and port; `18443` is the kit default).
 - Transport is **TLS-only as of relay 1.9.0** — plain HTTP connections are
-  refused. The relay serves a self-signed certificate; the siemcore operator
-  gives you its `cert.pem` (from the relay's `relay-tls` directory) and your
-  agent pins it as the sole trust root for this base URL. Do not fall back to
-  the Windows system store for this connection, and never disable
-  verification.
+  refused. There are two server-side trust modes; the siemcore operator tells
+  you which one their host uses:
+  - **Publicly trusted certificate (recommended, fleet default).** The relay
+    serves the same publicly trusted `*.siemcore.ai` certificate the host's
+    web UI on `:443` presents. Your agent validates it against the **Windows
+    system trust store** with hostname + expiry checks — exactly like a
+    browser, **no pinning and no CA file needed**. This is the target state
+    for the whole SiemCore fleet.
+  - **Self-signed + pin (fallback for internal/private names only).** When the
+    relay cannot have a public certificate, it self-provisions a self-signed
+    one; the operator gives you its `cert.pem` (from the relay's `relay-tls`
+    directory) and your agent pins it as the sole trust root for this base URL.
+  In **both** modes: never disable verification. Make the trust anchor a
+  config value (system-trust vs. a pinned CA file) so an operator can migrate
+  a host from self-signed to public trust — or rotate either — **without
+  reinstalling your agent**. When a host switches from self-signed to a public
+  certificate, the previously pinned `cert.pem` stops matching; drop the pin
+  (switch that node to system trust) at the same maintenance window.
 - Your node appears on the central dashboard automatically through the
   relay's fleet rollup — you do not register anywhere.
 
@@ -108,6 +121,40 @@ Telemetry rules (the dashboard renders only what was measured):
   operator's platform license upstream; the dashboard knows this.
 - After an install attempt, include it in the next heartbeat as
   `"last_update_attempt": {"from_version":"2.2.0","target_version":"2.3.0","success":true,"error":"","timestamp":"…"}`.
+
+Delivery telemetry (optional, added cascade 1.15.0): attach a `telemetry`
+object to your **own** product entry (matched by `name: "swf"`, not array
+position) to make "is SWF actually sending logs?" visible on the dashboard:
+
+```json
+"products": [
+  {
+    "name": "swf", "version": "2.2.0", "channel": "stable", "status": "running",
+    "telemetry": {
+      "ready": true, "connection": "connected",
+      "sent": 14820, "seen": 14821, "admitted": 14820,
+      "delivery_eps_milli": 2500,
+      "last_write_utc": "2026-08-20T04:29:58Z",
+      "spool_events": 0, "spool_bytes": 0,
+      "status_utc": "2026-08-20T04:29:59Z",
+      "last_error": ""
+    }
+  }
+]
+```
+
+Rules (full contract: [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md)):
+
+- Fail-open. Telemetry must never delay or fail a heartbeat.
+- Omit the `telemetry` key **entirely** (never an empty object, never empty
+  strings) when SWF is absent, its status file is missing/unparsable, or is not
+  `format_version = 2`.
+- `delivery_eps_milli` is events/sec × 1000 (integer transport of a fractional
+  EPS). `last_write_utc` / `status_utc` are RFC 3339 UTC; the dashboard uses
+  `status_utc` to tell "delivering" from "silent" even while `connected`.
+- `last_error` is redacted and length-bounded on your side — no log content.
+- Roll a cascade updater and updates server at 1.15.0+ before or with this so
+  the object is not dropped by an older relay hop on the way up.
 
 ### 3.2 Update check — `POST /api/v1/updates/swf/check`
 
@@ -296,9 +343,12 @@ curl -s --cacert relay-ca.pem -X POST https://SIEMCORE-ADDRESS:18443/api/v1/hear
   -d "{\"instance_id\":\"swf-pilot-test\",\"product_tier\":\"swf\",\"hostname\":\"%COMPUTERNAME%\"}"
 ```
 
-(`relay-ca.pem` is the relay's `cert.pem` provided by the siemcore team. A
-certificate error here means the relay regenerated its material or you were
-given the wrong file — re-fetch it from the operator; do not bypass it.)
+(In **public-cert mode** — the fleet default — drop `--cacert relay-ca.pem`
+entirely: `curl` validates against the system store just like `:443`. Only in
+**self-signed mode** is `relay-ca.pem` the relay's `cert.pem` provided by the
+siemcore team; a certificate error there means the relay regenerated its
+material or you were given the wrong file — re-fetch it from the operator; do
+not bypass it.)
 
 The heartbeat reply's `relay_token` proves enrollment works; the node will
 show on the dashboard within a heartbeat cycle. (Delete the test node from
@@ -331,11 +381,13 @@ Other confirmed limits and rules:
 - Never skip signature verification because a previous attempt verified the
   same version.
 - Transport: **TLS-only since relay 1.9.0** (the earlier pilot-only plain
-  HTTP no longer exists). Base URL is `https://`, trust anchored exclusively
-  in the relay CA file from config. The relay speaks TLS 1.2+. If the
-  siemcore operator adds hostnames/IPs to the relay's certificate, the
-  certificate changes — plan for the CA file to be replaceable in your
-  agent's config without reinstalling.
+  HTTP no longer exists). Base URL is `https://`; the relay speaks TLS 1.2+.
+  Trust is anchored either in the **Windows system store** (public-cert mode,
+  the fleet default — no CA file) or in a **pinned relay CA file** from config
+  (self-signed fallback). Whichever mode a host uses, plan for the trust
+  anchor to be **replaceable in your agent's config without reinstalling**:
+  the operator may add hostnames/IPs to a self-signed cert (it regenerates),
+  rotate a public cert, or migrate a host from self-signed to public trust.
 - Your agent's own self-update can ride the same protocol later (product
   `updater-windows-amd64` is reserved for that, mirroring how the Linux
   updaters already update themselves) — out of scope for the pilot.

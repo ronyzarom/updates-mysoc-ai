@@ -5,6 +5,42 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ---
 
+## 1.15.0 — Product delivery telemetry (SWF)
+
+Makes "**is SWF actually sending logs?**" answerable from a node's
+fleet-dashboard entry. Additive, agent-authored, pure visibility — no command
+channel, no host metrics.
+
+### New
+
+- **`products[].telemetry`** — optional delivery-counter object on each product
+  in a heartbeat (`ProductTelemetry`: `ready`, `connection`, `sent`, `seen`,
+  `admitted`, `delivery_eps_milli`, `last_write_utc`, `spool_events`,
+  `spool_bytes`, `status_utc`, `last_error`). First producer: the Secure SWF
+  Updater 2.2.0.15 (reads SWF `status.ini` `format_version = 2`, fail-open,
+  omits the key when unavailable). Types in `pkg/types/types.go`; contract in
+  [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md) and
+  API-CONTRACT §7.3.
+- **Rollup preserved** — relays copy the child `products[]` slice into their
+  upward rollup, so telemetry rides the cascade with no relay logic change.
+  Stored in `last_heartbeat_data` (JSONB); **no migration**.
+- **Dashboard** — instance detail Products card shows a delivering / silent /
+  stopped signal (from `connection`, `status_utc` freshness, and product
+  `status`) plus rate, sent, spool, and `last_error`; `health_status` now
+  renders too.
+
+### Deploy ordering (important)
+
+Each relay hop decodes the heartbeat into typed Go structs and re-encodes it, so
+a relay or server **older than 1.15.0 silently drops** `telemetry` on the way
+up (no error — the panel just stays empty). Roll the **updates server**, the
+**mysoc-updater**, and the **siemcore-cascade-updater** to 1.15.0+ **before or
+together with** the SWF 2.2.0.15 fleet rollout so the data is visible as soon as
+SWF starts sending it. Any mixed combination is safe; an old hop only hides the
+panel.
+
+---
+
 ## 1.7.0 — Operator / Reseller / Customer license ownership
 
 **Build:** 1.7.0.3 · **Status:** candidate, pending deployment

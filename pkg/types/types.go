@@ -267,6 +267,35 @@ type ProductStatus struct {
 	PID            int       `json:"pid,omitempty"`
 	HealthEndpoint string    `json:"health_endpoint,omitempty"`
 	HealthStatus   string    `json:"health_status,omitempty"`
+	// Telemetry carries product delivery counters (SWF status.ini, cascade
+	// 1.15.0). Additive and agent-authored: it is omitted entirely when the
+	// product has no delivery source, and nothing in the cascade acts on it
+	// beyond forwarding, storage, and display. See
+	// docs/RELAY-1.15.0-CONTRACT-ADDENDUM.md.
+	Telemetry *ProductTelemetry `json:"telemetry,omitempty"`
+}
+
+// ProductTelemetry is a product's self-reported delivery health, attached by
+// the agent to the product entry it owns (matched by name, not position). All
+// fields are optional; the whole object is omitted when the source is absent,
+// unreadable, or the wrong format version (never an empty object or empty
+// strings). It is pure visibility — no component gates a heartbeat on it.
+type ProductTelemetry struct {
+	Ready            bool      `json:"ready,omitempty"`
+	Connection       string    `json:"connection,omitempty"` // connected, disconnected
+	Sent             int64     `json:"sent,omitempty"`
+	Seen             int64     `json:"seen,omitempty"`
+	Admitted         int64     `json:"admitted,omitempty"`
+	DeliveryEPSMilli int64     `json:"delivery_eps_milli,omitempty"` // events/sec × 1000
+	LastWriteUTC     time.Time `json:"last_write_utc,omitempty"`
+	SpoolEvents      int64     `json:"spool_events,omitempty"`
+	SpoolBytes       int64     `json:"spool_bytes,omitempty"`
+	// StatusUTC is the agent's own snapshot time for these counters, distinct
+	// from the cascade heartbeat time, so a consumer can tell "delivering"
+	// from "silent" even while the connection reads connected.
+	StatusUTC time.Time `json:"status_utc,omitempty"`
+	// LastError is redacted and length-bounded by the agent; never log content.
+	LastError string `json:"last_error,omitempty"`
 }
 
 // SystemMetrics reports system resource usage

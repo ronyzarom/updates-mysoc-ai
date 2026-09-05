@@ -293,6 +293,26 @@ export interface ProductStatus {
   version: string;
   status: string;
   health_status?: string;
+  // Delivery counters attached by the agent (SWF status.ini, cascade 1.15.0).
+  // Omitted entirely when the product has no delivery source. Pure visibility.
+  telemetry?: ProductTelemetry;
+}
+
+// Product delivery health, self-reported by the agent. All fields optional; the
+// whole object is absent when unavailable. `status_utc` is the agent's snapshot
+// time (distinct from the heartbeat) used to tell "delivering" from "silent".
+export interface ProductTelemetry {
+  ready?: boolean;
+  connection?: string; // connected, disconnected
+  sent?: number;
+  seen?: number;
+  admitted?: number;
+  delivery_eps_milli?: number; // events/sec × 1000
+  last_write_utc?: string;
+  spool_events?: number;
+  spool_bytes?: number;
+  status_utc?: string;
+  last_error?: string;
 }
 
 export interface SystemMetrics {
