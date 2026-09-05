@@ -116,10 +116,19 @@ installs stay simulated. Opt out with `self_update: { disabled: true }`.
 - Inbound from swf agents on the relay port (`:18443` — the ONE relay port
   cascade-wide, also avoiding the app's own `:8443` on v3 siemcore hosts).
   The listener protects its own port (1.10.0+; see "Naming and ports"), so
-  it can be opened broadly. It is TLS-only (1.9.0+): it self-provisions a
-  certificate under `relay.tls.dir` on first start. Give that directory's
-  `cert.pem` to the swf team so their agents pin it, and list every address
-  swf agents use to reach this host in `relay.tls.hosts`.
+  it can be opened broadly. It is TLS-only (1.9.0+) with two trust modes:
+  - **Publicly trusted cert (recommended, fleet default).** Serve the host's
+    `*.siemcore.ai` wildcard so swf agents (and any syslog/firewall client)
+    validate against the system trust store with **no pinning**. Wire it at
+    install time with `--relay-cert-file`/`--relay-key-file`, or rotate later
+    with `./provision-relay-tls.sh --crt <fullchain> --key <privkey>`
+    (validates, installs atomically to `/etc/siemcore-cascade-updater/tls`,
+    restarts, verifies served fingerprint parity + `/health`).
+  - **Self-signed + pin (fallback for internal/private names).** Leave
+    `relay.tls.cert_file`/`key_file` unset and the relay self-provisions a
+    certificate under `relay.tls.dir` on first start; give that directory's
+    `cert.pem` to the swf team so their agents pin it, and list every address
+    swf agents use to reach this host in `relay.tls.hosts`.
 
 ## Security properties
 

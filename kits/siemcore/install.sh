@@ -35,6 +35,11 @@ Options:
   --current-version V    required with --update
   --ca-file PATH         the relay's cert.pem to pin; omit when the relay
                          serves a publicly trusted certificate
+  --relay-cert-file PATH publicly trusted fullchain PEM this relay SERVES to
+                         its children on :18443 (recommended; installed to
+                         /etc/NAME/tls/fullchain.pem). Requires --relay-key-file.
+  --relay-key-file PATH  private key for --relay-cert-file (installed to
+                         /etc/NAME/tls/privkey.pem, mode 0640 root:NAME).
   -h, --help             this text
 
 Missing required values are prompted for interactively on a terminal.
@@ -43,6 +48,7 @@ EOF
 
 MODE="" LICENSE_KEY="" PARENT_URL="" INSTANCE_ID="" PARENT_ID=""
 CUSTOMER_ID="" CUSTOMER_NAME="" SIGNING_KEY="" CURRENT_VERSION="" CA_FILE=""
+RELAY_CERT_FILE="" RELAY_KEY_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)  MODE=clean ;;
@@ -56,13 +62,20 @@ while [[ $# -gt 0 ]]; do
         --signing-key)     SIGNING_KEY="${2:?--signing-key needs a value}"; shift ;;
         --current-version) CURRENT_VERSION="${2:?--current-version needs a value}"; shift ;;
         --ca-file)         CA_FILE="${2:?--ca-file needs a value}"; shift ;;
+        --relay-cert-file) RELAY_CERT_FILE="${2:?--relay-cert-file needs a value}"; shift ;;
+        --relay-key-file)  RELAY_KEY_FILE="${2:?--relay-key-file needs a value}"; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "unknown flag: $1" >&2; usage; exit 1 ;;
     esac
     shift
 done
-if [[ -z "$MODE" && ( -n "$LICENSE_KEY$PARENT_URL$INSTANCE_ID$PARENT_ID$CUSTOMER_ID$CUSTOMER_NAME$SIGNING_KEY$CURRENT_VERSION$CA_FILE" ) ]]; then
+if [[ -z "$MODE" && ( -n "$LICENSE_KEY$PARENT_URL$INSTANCE_ID$PARENT_ID$CUSTOMER_ID$CUSTOMER_NAME$SIGNING_KEY$CURRENT_VERSION$CA_FILE$RELAY_CERT_FILE$RELAY_KEY_FILE" ) ]]; then
     echo "config flags require a mode: --clean or --update" >&2
+    exit 1
+fi
+if { [[ -n "$RELAY_CERT_FILE" ]] && [[ -z "$RELAY_KEY_FILE" ]]; } || \
+   { [[ -z "$RELAY_CERT_FILE" ]] && [[ -n "$RELAY_KEY_FILE" ]]; }; then
+    echo "--relay-cert-file and --relay-key-file must be given together" >&2
     exit 1
 fi
 
@@ -114,6 +127,25 @@ render_config() {
         install -m 0644 -o root -g $NAME "$CA_FILE" /etc/$NAME/mysoc-relay-ca.pem
     fi
 
+    # Operator-supplied PUBLIC relay cert this node SERVES to its children.
+    # Installed to /etc/NAME/tls so the service user (group NAME) can read the
+    # key; the config's relay.tls.cert_file/key_file lines are uncommented
+    # below. Validate the keypair matches before wiring it in.
+    if [[ -n "$RELAY_CERT_FILE" ]]; then
+        [[ -f "$RELAY_CERT_FILE" ]] || { echo "--relay-cert-file not found: $RELAY_CERT_FILE" >&2; exit 1; }
+        [[ -f "$RELAY_KEY_FILE"  ]] || { echo "--relay-key-file not found: $RELAY_KEY_FILE" >&2; exit 1; }
+        cpub=$(openssl x509 -in "$RELAY_CERT_FILE" -noout -pubkey 2>/dev/null | openssl md5 2>/dev/null)
+        kpub=$(openssl pkey -in "$RELAY_KEY_FILE" -pubout 2>/dev/null | openssl md5 2>/dev/null)
+        if [[ -z "$cpub" || "$cpub" != "$kpub" ]]; then
+            echo "--relay-key-file does not match --relay-cert-file (public keys differ)" >&2
+            exit 1
+        fi
+        install -d -m 0755 -o root -g root /etc/$NAME/tls
+        install -m 0644 -o root -g $NAME "$RELAY_CERT_FILE" /etc/$NAME/tls/fullchain.pem
+        install -m 0640 -o root -g $NAME "$RELAY_KEY_FILE"  /etc/$NAME/tls/privkey.pem
+        echo "    relay TLS cert installed: /etc/$NAME/tls/{fullchain,privkey}.pem (public trust)"
+    fi
+
     local target=/etc/$NAME/config.yaml tmp
     if [[ -f "$target" ]]; then
         cp -p "$target" "$target.bak-$(date -u +%Y%m%d-%H%M%S)"
@@ -136,6 +168,17 @@ render_config() {
         sed -i.sedbak "s|^  ca_file: mysoc-relay-ca.pem|  # ca_file: (not set — relay serves a publicly trusted certificate)|" "$tmp"
     fi
     rm -f "$tmp.sedbak"
+
+    # Activate the operator relay cert this node SERVES: uncomment the
+    # relay.tls.cert_file/key_file lines so the relay serves them verbatim
+    # (no self-signing). Children then omit server.ca_file and use system trust.
+    if [[ -n "$RELAY_CERT_FILE" ]]; then
+        sed -i.sedbak \
+            -e "s|^    # cert_file: /etc/siemcore-cascade-updater/tls/fullchain.pem|    cert_file: /etc/$NAME/tls/fullchain.pem|" \
+            -e "s|^    # key_file: /etc/siemcore-cascade-updater/tls/privkey.pem|    key_file: /etc/$NAME/tls/privkey.pem|" \
+            "$tmp"
+        rm -f "$tmp.sedbak"
+    fi
     install -m 0640 -o root -g $NAME "$tmp" "$target"
     rm -f "$tmp"
 

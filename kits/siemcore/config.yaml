@@ -47,15 +47,27 @@ relay:
   cache_dir: /var/lib/siemcore-cascade-updater/relay-cache
   child_offline_after: 5m
   tls:
-    # The relay self-provisions a long-lived self-signed certificate under
-    # dir on first start; give its cert.pem to the swf team so their agents
-    # can pin it. List every DNS name / IP swf agents use to reach this
-    # host — changing the list regenerates the certificate.
+    # RECOMMENDED (fleet standard): serve a PUBLICLY TRUSTED certificate so
+    # SWF agents (and any firewall/syslog client) validate against the system
+    # trust store with ZERO per-agent pinning — the same wildcard the host's
+    # :443 already presents. Set BOTH paths below (uncomment them); when set,
+    # the relay serves them verbatim (no self-signing) and children OMIT
+    # server.ca_file. install.sh --relay-cert-file/--relay-key-file wires
+    # these for a fresh install; rotate later with
+    # kits/siemcore/provision-relay-tls.sh (validates, installs atomically to
+    # /etc/siemcore-cascade-updater/tls, restarts the service). The paths
+    # must exist BEFORE the service starts or ListenAndServeTLS fails.
+    # cert_file: /etc/siemcore-cascade-updater/tls/fullchain.pem
+    # key_file: /etc/siemcore-cascade-updater/tls/privkey.pem
+    #
+    # FALLBACK (internal/private names with no public cert): leave cert_file/
+    # key_file unset and the relay self-provisions a long-lived self-signed
+    # certificate under `dir` on first start (always works out of the box);
+    # give its cert.pem to the swf team so their agents pin it, and list every
+    # DNS name / IP swf agents use to reach this host (changing the list
+    # regenerates the certificate).
     hosts: []          # e.g. ["siemcore01.customer.internal", "10.0.2.30"]
     dir: /var/lib/siemcore-cascade-updater/relay-tls
-    # Or provide your own PEM material instead (set both):
-    # cert_file: /etc/siemcore-cascade-updater/relay.crt
-    # key_file: /etc/siemcore-cascade-updater/relay.key
 
 heartbeat:
   interval: 60s
