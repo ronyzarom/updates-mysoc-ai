@@ -64,14 +64,27 @@ build_binaries() {
     log_info "Building binaries for Linux (amd64)..."
     
     cd "$PROJECT_ROOT"
-    
+
+    # Stamp version metadata into the binaries (matches the Makefile), so the
+    # deployed server reports its real version at /health and --version. Without
+    # this the build is unstamped and traceability is lost.
+    local version commit build_time ldflags
+    version="$(tr -d '[:space:]' < VERSION)"
+    commit="$(git describe --always --dirty 2>/dev/null || echo unknown)"
+    build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    ldflags="-s -w -X main.Version=${version} -X main.GitCommit=${commit} -X main.BuildTime=${build_time}"
+
+    if [[ "$commit" == *-dirty ]]; then
+        log_warn "Working tree is dirty (${commit}) — diagnostic build only, must not be deployed to production."
+    fi
+
     # Build update-server
-    log_info "Building update-server..."
-    GOOS=linux GOARCH=amd64 go build -o bin/update-server-linux-amd64 ./cmd/update-server
+    log_info "Building update-server (${version}, ${commit})..."
+    GOOS=linux GOARCH=amd64 go build -ldflags "$ldflags" -o bin/update-server-linux-amd64 ./cmd/update-server
     
     # Build mysoc-updater
-    log_info "Building mysoc-updater..."
-    GOOS=linux GOARCH=amd64 go build -o bin/mysoc-updater-linux-amd64 ./cmd/mysoc-updater
+    log_info "Building mysoc-updater (${version}, ${commit})..."
+    GOOS=linux GOARCH=amd64 go build -ldflags "$ldflags" -o bin/mysoc-updater-linux-amd64 ./cmd/mysoc-updater
     
     log_success "Binaries built successfully"
     ls -lh bin/
@@ -90,12 +103,14 @@ prepare_remote() {
 deploy_binaries() {
     log_info "Deploying binaries to server..."
     
-    # Upload binaries
-    scp_cmd "$PROJECT_ROOT/bin/update-server-linux-amd64" "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/bin/update-server"
-    scp_cmd "$PROJECT_ROOT/bin/mysoc-updater-linux-amd64" "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/bin/mysoc-updater"
-    
-    # Make executable
-    ssh_cmd "chmod +x $REMOTE_DIR/bin/*"
+    # scp cannot overwrite a running executable (ETXTBSY). Upload to temp paths,
+    # then mv into place: mv replaces the directory entry atomically while the
+    # old process keeps running on the old inode. restart_services then execs
+    # the new binary, keeping downtime to a single restart.
+    scp_cmd "$PROJECT_ROOT/bin/update-server-linux-amd64" "$SERVER_USER@$SERVER_IP:/tmp/update-server.new"
+    scp_cmd "$PROJECT_ROOT/bin/mysoc-updater-linux-amd64" "$SERVER_USER@$SERVER_IP:/tmp/mysoc-updater.new"
+
+    ssh_cmd "mv /tmp/update-server.new $REMOTE_DIR/bin/update-server && mv /tmp/mysoc-updater.new $REMOTE_DIR/bin/mysoc-updater && chmod +x $REMOTE_DIR/bin/update-server $REMOTE_DIR/bin/mysoc-updater"
     
     log_success "Binaries deployed"
 }
