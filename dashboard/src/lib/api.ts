@@ -313,6 +313,13 @@ export interface ProductTelemetry {
   spool_bytes?: number;
   status_utc?: string;
   last_error?: string;
+  // Where SWF is configured to deliver (cascade 1.16.0). Read-only visibility
+  // on the DevOps channel, never a control surface. All omitted when unset.
+  target_endpoint?: string; // configured host:port
+  target_resolved_ip?: string;
+  target_tls?: boolean; // omitted when false (reads as "not reported")
+  target_sni?: string;
+  last_connect_ok_utc?: string;
 }
 
 export interface SystemMetrics {

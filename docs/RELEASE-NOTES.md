@@ -5,6 +5,50 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ---
 
+## 1.16.0 — Delivery destination telemetry (SWF)
+
+**Build:** 1.16.0.1 · **Status:** candidate, local validation only — not deployed
+
+When a node reads **silent** or **stopped**, the detail page now also says
+**where** SWF is trying to deliver, so "right collector, blocked by the
+customer firewall" and "wrong host:port" stop looking identical. Additive,
+read-only, no control surface; the SOC channel still owns configuration
+(see the reconciliation note in the addendum).
+
+### New
+
+- **Destination fields inside `products[].telemetry`** — `target_endpoint`
+  (`host:port`), `target_resolved_ip`, `target_tls`, `target_sni`,
+  `last_connect_ok_utc`. Each is omitted individually when unset;
+  `target_tls` is omitted when false (read "TLS off" only when
+  `target_endpoint` is present). Types in `pkg/types/types.go`; contract in
+  [Relay 1.16.0 Contract Addendum](RELAY-1.16.0-CONTRACT-ADDENDUM.md)
+  (proposed for SWF-team countersign) and API-CONTRACT §7.3.
+- **Dashboard** — Products→swf telemetry block gains **Destination**
+  (endpoint + resolved IP), **TLS** (`on · sni` / `off`) and **Last connect
+  OK** rows, rendered only when reported. The delivering / silent / stopped
+  signal is unchanged.
+
+### Fixed
+
+- **Telemetry timestamps no longer re-encode as the Go zero time.** 1.15.0
+  typed `last_write_utc` / `status_utc` as `time.Time`, which `omitempty`
+  never omits — an agent that left them out could reappear downstream as
+  `0001-01-01T00:00:00Z` ("about 2000 years ago"). All three telemetry
+  timestamps are now nullable so an omitted value stays omitted through every
+  hop. The dashboard also treats a `0001-01-01…` telemetry timestamp as absent,
+  covering a 1.15.0 relay left mid-cascade. Wire format when present is
+  unchanged.
+
+### Deploy ordering
+
+Same soft rule as 1.15.0: a relay or server older than 1.16.0 silently drops
+the five new fields (the 1.15.0 counters still arrive). Roll the **updates
+server**, **mysoc-updater**, and **siemcore-cascade-updater** to 1.16.0+ before
+or together with the destination-capable SWF updater. Any mix is safe.
+
+---
+
 ## 1.15.0 — Product delivery telemetry (SWF)
 
 Makes "**is SWF actually sending logs?**" answerable from a node's

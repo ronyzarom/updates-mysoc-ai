@@ -173,6 +173,12 @@ export default function InstanceDetailPage() {
   // heartbeating). Matches the 5-minute "reads as offline" rule.
   const TELEMETRY_STALE_MS = 5 * 60 * 1000;
 
+  // A telemetry timestamp the agent omitted can arrive as Go's zero time
+  // ("0001-01-01T00:00:00Z") when a 1.15.0 relay re-encodes it; treat that as
+  // absent rather than rendering "about 2000 years ago".
+  const telTime = (s: string | undefined): string | undefined =>
+    s && !s.startsWith("0001-01-01") ? s : undefined;
+
   // Derive the at-a-glance delivery state for a product's telemetry:
   //   stopped   — the product itself is not running
   //   silent    — connected but the snapshot is stale, or disconnected
@@ -185,7 +191,8 @@ export default function InstanceDetailPage() {
     if (productStatus && productStatus !== "running" && productStatus !== "updating") {
       return { label: "stopped", className: "bg-red-500/20 text-red-400" };
     }
-    const snap = tel.status_utc ? new Date(tel.status_utc).getTime() : NaN;
+    const statusUTC = telTime(tel.status_utc);
+    const snap = statusUTC ? new Date(statusUTC).getTime() : NaN;
     const stale = isNaN(snap) || Date.now() - snap > TELEMETRY_STALE_MS;
     if (tel.connection === "disconnected" || stale) {
       return { label: "silent", className: "bg-amber-500/20 text-amber-400" };
@@ -878,11 +885,46 @@ export default function InstanceDetailPage() {
                           {tel.spool_bytes ? ` · ${formatBytes(tel.spool_bytes)}` : ""}
                         </span>
                       </div>
-                      {tel.status_utc && (
+                      {telTime(tel.status_utc) && (
                         <div className="flex items-center justify-between col-span-2">
                           <span className="text-slate-400">Reported</span>
                           <span className="text-white">
-                            {formatDistanceToNow(new Date(tel.status_utc), { addSuffix: true })}
+                            {formatDistanceToNow(new Date(telTime(tel.status_utc)!), { addSuffix: true })}
+                          </span>
+                        </div>
+                      )}
+                      {/* Destination (1.16.0): where the agent is configured to
+                          deliver. Read-only — lets an operator tell "right
+                          collector, blocked" from "wrong host:port" while the
+                          SOC channel is dark. Rendered only when reported. */}
+                      {tel.target_endpoint && (
+                        <div className="flex items-center justify-between col-span-2">
+                          <span className="text-slate-400">Destination</span>
+                          <span
+                            className="text-white font-mono text-right break-all"
+                            title="Configured delivery target (host:port) and its DNS-resolved address"
+                          >
+                            {tel.target_endpoint}
+                            {tel.target_resolved_ip && (
+                              <span className="text-slate-400"> ({tel.target_resolved_ip})</span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {tel.target_endpoint && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">TLS</span>
+                          <span className={tel.target_tls ? "text-emerald-400" : "text-slate-300"}>
+                            {tel.target_tls ? "on" : "off"}
+                            {tel.target_tls && tel.target_sni ? ` · ${tel.target_sni}` : ""}
+                          </span>
+                        </div>
+                      )}
+                      {telTime(tel.last_connect_ok_utc) && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Last connect OK</span>
+                          <span className="text-white">
+                            {formatDistanceToNow(new Date(telTime(tel.last_connect_ok_utc)!), { addSuffix: true })}
                           </span>
                         </div>
                       )}

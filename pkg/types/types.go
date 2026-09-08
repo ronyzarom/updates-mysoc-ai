@@ -281,21 +281,41 @@ type ProductStatus struct {
 // unreadable, or the wrong format version (never an empty object or empty
 // strings). It is pure visibility — no component gates a heartbeat on it.
 type ProductTelemetry struct {
-	Ready            bool      `json:"ready,omitempty"`
-	Connection       string    `json:"connection,omitempty"` // connected, disconnected
-	Sent             int64     `json:"sent,omitempty"`
-	Seen             int64     `json:"seen,omitempty"`
-	Admitted         int64     `json:"admitted,omitempty"`
-	DeliveryEPSMilli int64     `json:"delivery_eps_milli,omitempty"` // events/sec × 1000
-	LastWriteUTC     time.Time `json:"last_write_utc,omitempty"`
-	SpoolEvents      int64     `json:"spool_events,omitempty"`
-	SpoolBytes       int64     `json:"spool_bytes,omitempty"`
+	Ready            bool   `json:"ready,omitempty"`
+	Connection       string `json:"connection,omitempty"` // connected, disconnected
+	Sent             int64  `json:"sent,omitempty"`
+	Seen             int64  `json:"seen,omitempty"`
+	Admitted         int64  `json:"admitted,omitempty"`
+	DeliveryEPSMilli int64  `json:"delivery_eps_milli,omitempty"` // events/sec × 1000
+	// Timestamps are pointers so omitempty really omits them: encoding/json
+	// never omits a zero time.Time struct, and a hop re-encoding one would emit
+	// "0001-01-01T00:00:00Z" — violating the contract's "omitted when empty"
+	// and reading as "2000 years ago" downstream. (1.16.0; 1.15.0 shipped
+	// plain time.Time, so a 1.15.0 hop can still emit the zero value.)
+	LastWriteUTC *time.Time `json:"last_write_utc,omitempty"`
+	SpoolEvents  int64      `json:"spool_events,omitempty"`
+	SpoolBytes   int64      `json:"spool_bytes,omitempty"`
 	// StatusUTC is the agent's own snapshot time for these counters, distinct
 	// from the cascade heartbeat time, so a consumer can tell "delivering"
 	// from "silent" even while the connection reads connected.
-	StatusUTC time.Time `json:"status_utc,omitempty"`
+	StatusUTC *time.Time `json:"status_utc,omitempty"`
 	// LastError is redacted and length-bounded by the agent; never log content.
 	LastError string `json:"last_error,omitempty"`
+
+	// Target describes where SWF is configured to deliver (SWF status.ini,
+	// cascade 1.16.0). Read-only visibility on the DevOps channel: it lets the
+	// dashboard tell "pointed at the right collector but blocked" from
+	// "pointed at the wrong host:port" even when the SOC channel is dark. It is
+	// never a control surface — nothing in the cascade can change the
+	// destination. All fields omitted when empty. See
+	// docs/RELAY-1.16.0-CONTRACT-ADDENDUM.md.
+	TargetEndpoint   string `json:"target_endpoint,omitempty"`    // configured host:port
+	TargetResolvedIP string `json:"target_resolved_ip,omitempty"` // DNS-resolved address
+	// TargetTLS uses omitempty for consistency with Ready, so an explicit
+	// false (TLS off) does not serialize and reads as "not reported".
+	TargetTLS        bool       `json:"target_tls,omitempty"`
+	TargetSNI        string     `json:"target_sni,omitempty"`
+	LastConnectOKUTC *time.Time `json:"last_connect_ok_utc,omitempty"` // last successful connect; nil = never
 }
 
 // SystemMetrics reports system resource usage

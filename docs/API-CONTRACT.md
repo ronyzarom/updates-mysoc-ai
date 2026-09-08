@@ -16,6 +16,7 @@ implemented, that is called out explicitly in
 | 1.0.0   | 2026-08-12 | First authoritative contract, generated from server 1.3.0.1. |
 | 1.8.0   | 2026-08-19 | Cascade distribution: mandatory `X-License-Key` on agent endpoints, ed25519 release signing + `GET /api/v1/signing-key`, operator admin API, heartbeat children rollup, relay protocol. See Section 9. |
 | 1.15.0  | 2026-09-05 | Additive `products[].telemetry` (SWF delivery counters) on heartbeat / children rollup; stored in `last_heartbeat_data`, no migration. Decoded/re-encoded at each relay hop, so relays + server need 1.15.0+ to preserve it. See §7.3 and [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md). |
+| 1.16.0  | 2026-09-08 | Additive delivery-destination fields inside `products[].telemetry`: `target_endpoint`, `target_resolved_ip`, `target_tls`, `target_sni`, `last_connect_ok_utc` (read-only diagnostics, no control surface). Telemetry timestamps are now omitted (not zero-valued) when absent after re-encode. No migration; relays + server need 1.16.0+ to preserve the new fields. See §7.3 and [Relay 1.16.0 Contract Addendum](RELAY-1.16.0-CONTRACT-ADDENDUM.md). |
 
 ---
 
@@ -707,7 +708,7 @@ Each `artifact`: `{ name, arch, size, checksum }`.
 
 `instance_id, instance_type, product_tier?, parent_instance_id?, hostname, updater_version, config_hash, license{key,valid,expires_at,last_check}, products[], system{os,arch,cpu_usage,memory_*,disk_*,load_average,uptime}, security{…}?, timestamp, last_update_attempt?{from_version,target_version,success,error?,timestamp}`.
 Each `product` (`ProductStatus`): `{ name, version, channel, status, uptime, last_restart, pid?, health_endpoint?, health_status?, telemetry? }`.
-`telemetry` (`ProductTelemetry`, optional; SWF delivery counters, added 1.15.0): `{ ready?, connection?, sent?, seen?, admitted?, delivery_eps_milli?, last_write_utc?, spool_events?, spool_bytes?, status_utc?, last_error? }`. Additive and omitted entirely when the product has no delivery source. See [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md).
+`telemetry` (`ProductTelemetry`, optional; SWF delivery counters, added 1.15.0): `{ ready?, connection?, sent?, seen?, admitted?, delivery_eps_milli?, last_write_utc?, spool_events?, spool_bytes?, status_utc?, last_error?, target_endpoint?, target_resolved_ip?, target_tls?, target_sni?, last_connect_ok_utc? }`. Additive and omitted entirely when the product has no delivery source. The five `target_*` / `last_connect_ok_utc` fields (added 1.16.0) describe where the product is configured to deliver — read-only diagnostics, individually omitted when unset (`target_tls` omitted when false). Timestamps are omitted, never `0001-01-01T00:00:00Z`, when absent. See [Relay 1.15.0](RELAY-1.15.0-CONTRACT-ADDENDUM.md) and [Relay 1.16.0](RELAY-1.16.0-CONTRACT-ADDENDUM.md) Contract Addenda.
 
 ### 7.4 Instance
 

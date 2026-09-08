@@ -158,6 +158,18 @@ Each field maps to a `status.ini` (`format_version = 2`) key on your side:
 | `spool_bytes` | `spool_physical_bytes` |
 | `status_utc` | `status_timestamp` |
 | `last_error` | `last_error` |
+| `target_endpoint` (1.16.0) | `target_endpoint` — configured `host:port` as dialled |
+| `target_resolved_ip` (1.16.0) | `target_resolved_ip` — last DNS answer; empty if resolution failed or host is a literal IP |
+| `target_tls` (1.16.0) | `target_tls` — bool; **omitted when false** |
+| `target_sni` (1.16.0) | `target_sni` — TLS server name; omitted when TLS off / same as host |
+| `last_connect_ok_utc` (1.16.0) | `last_connect_ok` — last successful connect (+ handshake); omitted if never |
+
+The five `1.16.0` rows describe **where** SWF delivers so an operator can tell
+"right collector, blocked by a firewall" from "wrong host:port" while the SOC
+channel is dark. They are read-only diagnostics — the updates server cannot
+change your destination and has no endpoint to do so. Full contract:
+[Relay 1.16.0 Contract Addendum](RELAY-1.16.0-CONTRACT-ADDENDUM.md) (proposed
+for your countersign).
 
 Rules (full contract: [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md)):
 
@@ -173,7 +185,11 @@ Rules (full contract: [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADD
 - `last_error` is credential-redacted and length-bounded (**≤ 512 bytes**) on
   your side — no log content.
 - Roll a cascade updater and updates server at 1.15.0+ before or with this so
-  the object is not dropped by an older relay hop on the way up.
+  the object is not dropped by an older relay hop on the way up; **1.16.0+**
+  for the five destination fields (an older hop drops just those, the counters
+  still arrive).
+- Omit timestamps you don't have rather than sending a zero/epoch value; do not
+  infer "TLS off" on your side from anything — just omit `target_tls` when off.
 
 ### 3.2 Update check — `POST /api/v1/updates/swf/check`
 

@@ -2,6 +2,7 @@ package updatersim
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,6 +94,7 @@ func TestRelayChildrenFlowIntoHeartbeat(t *testing.T) {
 // childReport used by delta reporting).
 func TestRelayForwardsProductTelemetry(t *testing.T) {
 	statusUTC := time.Date(2026, 9, 5, 6, 40, 1, 0, time.UTC)
+	lastConnectOK := time.Date(2026, 9, 5, 6, 39, 30, 0, time.UTC)
 	swfTelemetry := &platformtypes.ProductTelemetry{
 		Ready:            true,
 		Connection:       "connected",
@@ -101,8 +103,16 @@ func TestRelayForwardsProductTelemetry(t *testing.T) {
 		Admitted:         14820,
 		DeliveryEPSMilli: 2500,
 		SpoolEvents:      0,
-		StatusUTC:        statusUTC,
+		StatusUTC:        &statusUTC,
 		LastError:        "syslog tls: handshake failure",
+		// Destination fields (1.16.0) ride the same typed object, so a hop
+		// compiled without them would strip them exactly like pre-1.15.0 hops
+		// stripped the whole telemetry object.
+		TargetEndpoint:   "cyfox-il.siemcore.ai:6514",
+		TargetResolvedIP: "34.165.118.36",
+		TargetTLS:        true,
+		TargetSNI:        "cyfox-il.siemcore.ai",
+		LastConnectOKUTC: &lastConnectOK,
 	}
 
 	// The child heartbeat arrives over the wire as JSON. Decoding into the
@@ -167,18 +177,32 @@ func TestRelayForwardsProductTelemetry(t *testing.T) {
 	if tel.Connection != "connected" || tel.Sent != 14820 || tel.DeliveryEPSMilli != 2500 {
 		t.Fatalf("telemetry counters not forwarded intact: %+v", tel)
 	}
-	if !tel.StatusUTC.Equal(statusUTC) {
-		t.Fatalf("status_utc not forwarded: got %s want %s", tel.StatusUTC, statusUTC)
+	if tel.StatusUTC == nil || !tel.StatusUTC.Equal(statusUTC) {
+		t.Fatalf("status_utc not forwarded: got %v want %s", tel.StatusUTC, statusUTC)
 	}
 	if tel.LastError != "syslog tls: handshake failure" {
 		t.Fatalf("last_error not forwarded: %q", tel.LastError)
 	}
+	assertDestination := func(where string, got *platformtypes.ProductTelemetry) {
+		t.Helper()
+		if got.TargetEndpoint != "cyfox-il.siemcore.ai:6514" ||
+			got.TargetResolvedIP != "34.165.118.36" ||
+			!got.TargetTLS ||
+			got.TargetSNI != "cyfox-il.siemcore.ai" {
+			t.Fatalf("destination fields not forwarded intact via %s: %+v", where, got)
+		}
+		if got.LastConnectOKUTC == nil || !got.LastConnectOKUTC.Equal(lastConnectOK) {
+			t.Fatalf("last_connect_ok_utc not forwarded via %s: got %v want %s", where, got.LastConnectOKUTC, lastConnectOK)
+		}
+	}
+	assertDestination("full rollup", tel)
 
 	// Delta-path projection (change-only inventory stream).
 	single := childReport(decoded, "online", time.Now(), "203.0.113.90")
 	if len(single.Products) != 1 || single.Products[0].Telemetry == nil {
 		t.Fatalf("telemetry missing from childReport projection: %+v", single.Products)
 	}
+	assertDestination("childReport", single.Products[0].Telemetry)
 
 	// And it must still be there after the rollup is serialized upward.
 	out, err := json.Marshal(reports)
@@ -194,5 +218,27 @@ func TestRelayForwardsProductTelemetry(t *testing.T) {
 	}
 	if back[0].Products[0].Telemetry == nil || back[0].Products[0].Telemetry.Sent != 14820 {
 		t.Fatalf("telemetry lost across rollup serialization: %s", out)
+	}
+	assertDestination("rollup serialization", back[0].Products[0].Telemetry)
+
+	// Omission semantics: a leaf that reports no destination (and no
+	// timestamps) must produce none of those keys after a hop re-encodes it —
+	// never empty strings, a literal false, or Go's zero time
+	// "0001-01-01T00:00:00Z" — so a consumer can tell "not reported" from
+	// "reported off" / "2000 years ago".
+	bareJSON, err := json.Marshal(&platformtypes.ProductTelemetry{Sent: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{
+		"target_endpoint", "target_resolved_ip", "target_tls", "target_sni",
+		"last_connect_ok_utc", "status_utc", "last_write_utc",
+	} {
+		if strings.Contains(string(bareJSON), `"`+key+`"`) {
+			t.Fatalf("%s must be omitted when unset: %s", key, bareJSON)
+		}
+	}
+	if strings.Contains(string(bareJSON), "0001-01-01") {
+		t.Fatalf("zero time leaked into re-encoded telemetry: %s", bareJSON)
 	}
 }
