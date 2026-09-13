@@ -32,6 +32,8 @@ Options:
   --customer-id ID       end customer identifier (groups the fleet view)
   --customer-name NAME   end customer display name
   --signing-key HEX      pinned release-signing public key (ask your operator)
+  --greenfield-input FILE  root-owned JSON with application inputs and signed
+                           first-release receipt; enables and starts provisioning
   --current-version V    required with --update
   --ca-file PATH         the relay's cert.pem to pin; omit when the relay
                          serves a publicly trusted certificate
@@ -42,9 +44,10 @@ EOF
 }
 
 MODE="" LICENSE_KEY="" PARENT_URL="" INSTANCE_ID="" PARENT_ID=""
-CUSTOMER_ID="" CUSTOMER_NAME="" SIGNING_KEY="" CURRENT_VERSION="" CA_FILE=""
+CUSTOMER_ID="" CUSTOMER_NAME="" SIGNING_KEY="" CURRENT_VERSION="" CA_FILE="" GREENFIELD_INPUT=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --greenfield-input) GREENFIELD_INPUT="${2:?--greenfield-input needs a value}"; shift ;;
         --clean)  MODE=clean ;;
         --update) MODE=update ;;
         --license-key)     LICENSE_KEY="${2:?--license-key needs a value}"; shift ;;
@@ -64,6 +67,14 @@ done
 if [[ -z "$MODE" && ( -n "$LICENSE_KEY$PARENT_URL$INSTANCE_ID$PARENT_ID$CUSTOMER_ID$CUSTOMER_NAME$SIGNING_KEY$CURRENT_VERSION$CA_FILE" ) ]]; then
     echo "config flags require a mode: --clean or --update" >&2
     exit 1
+fi
+
+if [[ -n "$GREENFIELD_INPUT" && "$MODE" != clean ]]; then
+    echo '--greenfield-input requires --clean' >&2
+    exit 1
+fi
+if [[ -n "$GREENFIELD_INPUT" ]]; then
+    GREENFIELD_INPUT="$(realpath "$GREENFIELD_INPUT")"
 fi
 
 ARCH=$(uname -m)
@@ -146,6 +157,11 @@ render_config() {
     echo "    config rendered: instance=$INSTANCE_ID parent=$PARENT_URL version=$CURRENT_VERSION mode=$MODE"
 }
 
+# A repeat bootstrap must not reset the updater's installed version to 0.0.0.
+if [[ -n "$GREENFIELD_INPUT" && -f /etc/siemcore/greenfield-release.json ]]; then
+    exec python3 ./greenfield-bootstrap.py "$GREENFIELD_INPUT" "$PWD"
+fi
+
 echo "==> creating service user and directories"
 id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $NAME
 mkdir -p /etc/$NAME /var/lib/$NAME
@@ -188,6 +204,10 @@ echo "==> installing systemd unit"
 install -m 0644 $NAME.service /etc/systemd/system/$NAME.service
 systemctl daemon-reload
 systemctl enable $NAME
+
+if [[ -n "$GREENFIELD_INPUT" ]]; then
+    exec python3 ./greenfield-bootstrap.py "$GREENFIELD_INPUT" "$PWD"
+fi
 
 echo
 echo "Done. Start with:  systemctl start $NAME"

@@ -64,6 +64,12 @@ for tier in "${TIERS[@]}"; do
                 cp "$f" "$OUT/$base" ;;
         esac
     done
+    if [[ "$tier" == siemcore && -n "${SIEMCORE_PROVISIONING_SOURCE:-}" ]]; then
+        [[ -f "$SIEMCORE_PROVISIONING_SOURCE/deploy/cascade/greenfield-hook.py" ]] || exit 1
+        [[ -z "$(git -C "$SIEMCORE_PROVISIONING_SOURCE" status --porcelain)" ]] || { echo 'Provisioning source must be committed and clean' >&2; exit 1; }
+        cp "$SIEMCORE_PROVISIONING_SOURCE/deploy/cascade/greenfield-hook.py" "$OUT/greenfield-hook.py"
+        git -C "$SIEMCORE_PROVISIONING_SOURCE" rev-parse HEAD > "$OUT/PROVISIONING_COMMIT"
+    fi
     chmod +x "$OUT/install.sh"
 
     echo "==> $tier: bundling docs (stamped)"
@@ -75,7 +81,7 @@ for tier in "${TIERS[@]}"; do
     done
 
     echo "==> $tier: checksums"
-    (cd "$OUT" && SHA bin/* config.yaml install.sh ./*.service > SHA256SUMS)
+    (cd "$OUT"; files=(bin/* config.yaml install.sh ./*.service); for file in ./*.py; do [[ ! -f "$file" ]] || files+=("$file"); done; SHA "${files[@]}" > SHA256SUMS)
 
     echo "    built $OUT"
 done
