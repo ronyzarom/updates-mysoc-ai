@@ -25,6 +25,8 @@ def validate(data):
     import base64
     if len(base64.b64decode(release.get('signature', ''), validate=True)) != 64:
         raise ValueError('signed release required')
+    if not re.fullmatch(r'[a-z][a-z0-9-]{0,40}', release.get('channel', '')):
+        raise ValueError('explicit release channel required')
     app = data['application']
     if app.get('schema') != 1 or app.get('topology') != 'single':
         raise ValueError('standalone bootstrap required')
@@ -77,7 +79,7 @@ def main():
   filesystem:
     install_root: /opt/siemcore-cascade
     restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
-    health_command: ["curl", "-fsS", "--max-time", "10", "http://127.0.0.1:8443/health/live"]
+    health_command: ["python3", "-c", "import json,os,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8443/health/live',timeout=10)); assert d.get('version')==os.environ['VERSION']"]
     command_timeout: 15m
     keep_releases: 3
 '''
@@ -88,6 +90,9 @@ def main():
         text, count = re.subn(r'(^simulation:\n)', lambda m: m[1] + block, text, flags=re.M)
         if count != 1:
             raise ValueError('expected one simulation configuration')
+    text, count = re.subn(r'(^    channel: )[a-z0-9-]+$', lambda m: m[1] + data['release']['channel'], text, flags=re.M)
+    if count != 1:
+        raise ValueError('expected one product channel')
     root = Path('/etc/siemcore')
     root.mkdir(mode=0o700, exist_ok=True)
     data['application']['machine_id'] = Path('/etc/machine-id').read_text().strip()
