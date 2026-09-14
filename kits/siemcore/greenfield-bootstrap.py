@@ -13,6 +13,15 @@ import sys
 NAME = 'siemcore-cascade-updater'
 
 
+def updater_identity(application):
+    # A pod has one logical application identity and distinct enrolled hosts.
+    # Existing standalone inputs keep their previous identity convention.
+    value = application.get('updater_instance_id', application.get('instance_id', ''))
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,100}', value):
+        raise ValueError('invalid updater node identity')
+    return value
+
+
 def validate(data):
     if set(data) != {'application', 'release'}:
         raise ValueError('application and signed release inputs required')
@@ -33,6 +42,7 @@ def validate(data):
     for name in ('cluster_id', 'instance_id', 'database_name'):
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,100}', app.get(name, '')):
             raise ValueError('invalid application identity')
+    updater_identity(app)
 
 
 def write_private(path, data):
@@ -71,8 +81,8 @@ def main():
     config = Path('/etc/' + NAME + '/config.yaml')
     text = config.read_text()
     # Fail before enabling if enrollment identity/signing pin do not match.
-    if 'id: ' + data['application']['instance_id'] + '\n' not in text:
-        raise ValueError('updater and application instance IDs differ')
+    if 'id: ' + updater_identity(data['application']) + '\n' not in text:
+        raise ValueError('updater enrollment does not match bootstrap node identity')
     if 'public_key: "' + data['release']['public_key'] + '"' not in text:
         raise ValueError('updater and bootstrap signing pins differ')
     block = '''  executor: filesystem

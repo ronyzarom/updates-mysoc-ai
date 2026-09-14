@@ -8,6 +8,17 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 class InputTests(unittest.TestCase):
+    def test_pod_nodes_share_application_identity_but_not_enrollment(self):
+        active = {'instance_id': 'siemcore-pod', 'updater_instance_id': 'pod-node-a'}
+        standby = dict(active, updater_instance_id='pod-node-b')
+        self.assertEqual(module.updater_identity(active), 'pod-node-a')
+        self.assertEqual(module.updater_identity(standby), 'pod-node-b')
+        self.assertEqual(active['instance_id'], standby['instance_id'])
+        self.assertEqual(module.updater_identity({'instance_id':'legacy'}), 'legacy')
+        for value in ('', '../host', 'node\nother', None):
+            with self.subTest(value=value), self.assertRaises((ValueError, TypeError)):
+                module.updater_identity(dict(active, updater_instance_id=value))
+
     def test_signed_receipt_and_identity_required(self):
         def fixture():
             return {'application': {'schema':1,'topology':'single','cluster_id':'lab','instance_id':'siemcore-lab','database_name':'siemcore'},
