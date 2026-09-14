@@ -165,6 +165,11 @@ fi
 echo "==> creating service user and directories"
 id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $NAME
 mkdir -p /etc/$NAME /var/lib/$NAME
+# The caller's umask is intentionally untrusted. Greenfield bootstrap commonly
+# runs with 077, so make the traversable group ownership explicit before the
+# unprivileged service reads config.yaml.
+chown root:$NAME /etc/$NAME
+chmod 0750 /etc/$NAME
 
 echo "==> installing binary (self-updatable layout)"
 # The binary lives in a versioned directory owned by the service user, and
