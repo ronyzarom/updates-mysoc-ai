@@ -331,14 +331,15 @@ func (s *Simulator) processOffer(
 	}
 
 	update := Update{
-		Product:        offer.Product,
-		FromVersion:    offer.CurrentVersion,
-		ToVersion:      offer.LatestVersion,
-		Channel:        offer.Channel,
-		UpdateGroup:    offer.UpdateGroup,
-		ReleaseNotes:   offer.ReleaseNotes,
-		ArtifactPath:   result.Path,
-		ArtifactSHA256: result.Checksum,
+		Product:          offer.Product,
+		FromVersion:      offer.CurrentVersion,
+		ToVersion:        offer.LatestVersion,
+		Channel:          offer.Channel,
+		UpdateGroup:      offer.UpdateGroup,
+		ReleaseNotes:     offer.ReleaseNotes,
+		ArtifactPath:     result.Path,
+		ArtifactSHA256:   result.Checksum,
+		ReleaseSignature: offer.Signature,
 	}
 
 	// In real mode an install must actually happen. With no executor

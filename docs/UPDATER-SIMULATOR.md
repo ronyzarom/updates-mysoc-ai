@@ -334,6 +334,15 @@ rollbacks are safe:
 <install_root>/<product>/.previous             prior target, used by rollback
 ```
 
+Each release directory also contains `.updater-release.json` with product,
+version, SHA-256, installation time, and the optional origin `signature` from
+the verified offer. Rollback preserves the predecessor's own receipt. Existing
+unsigned/older metadata remains readable. A privileged product hook must verify
+the signature and archive against its independently pinned signing key before
+execution: updater-writable metadata alone is not authorization. Retaining the
+receipt does not change release targeting, signature enforcement, or lifecycle
+recovery behavior.
+
 Behavior:
 
 - A gzip'd tar artifact is extracted (with a zip-slip guard); any other content

@@ -2,13 +2,17 @@ package updatersim
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -272,5 +276,59 @@ func writeTestJSON(t *testing.T, w http.ResponseWriter, value interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		t.Fatalf("write JSON: %v", err)
+	}
+}
+
+func TestSignedOfferReceiptReachesFilesystem(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact := filepath.Join(t.TempDir(), "release.tar.gz")
+	makeTarGz(t, artifact, map[string]string{"VERSION": "1.0.0.2"})
+	content, err := os.ReadFile(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(content)
+	checksum := hex.EncodeToString(sum[:])
+	signature := signing.Sign(priv, "siemcore", "1.0.0.2", checksum)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/artifact" {
+			_, _ = w.Write(content)
+			return
+		}
+		writeTestJSON(t, w, map[string]string{"status": "ok"})
+	}))
+	defer server.Close()
+	cfg := newSimulatorTestConfig(t, server.URL, ModeReal)
+	cfg.Signing = SigningConfig{PublicKey: hex.EncodeToString(pub), Require: true}
+	executor := newFSExecutor(t, t.TempDir())
+	simulator, err := NewSimulator(cfg, executor, discardLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer := &UpdateOffer{Product: "siemcore", CurrentVersion: "1.0.0", LatestVersion: "1.0.0.2", DownloadURL: server.URL + "/artifact", Checksum: checksum, Signature: signature}
+	if err := simulator.processOffer(context.Background(), ModeReal, offer); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(resolveCurrent(t, executor, "siemcore"), ".updater-release.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt releaseMetadata
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if err := signing.Verify(pub, receipt.Product, receipt.Version, receipt.SHA256, receipt.Signature); err != nil {
+		t.Fatalf("persisted receipt cannot be verified: %v", err)
+	}
+	// An invalid signature must never replace the installed receipt.
+	offer.LatestVersion = "1.0.0.3"
+	if err := simulator.processOffer(context.Background(), ModeReal, offer); err == nil {
+		t.Fatal("accepted signature for different version")
+	}
+	if got := filepath.Base(resolveCurrent(t, executor, "siemcore")); got != "1.0.0.2" {
+		t.Fatalf("invalid offer changed current: %s", got)
 	}
 }

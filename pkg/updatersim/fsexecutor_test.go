@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -237,4 +238,39 @@ func TestFilesystemExecutorRawArtifactCopiedAsFile(t *testing.T) {
 	if string(got) != "raw-binary-bytes" {
 		t.Fatalf("installed raw file = %q", string(got))
 	}
+}
+
+// A rollback must retain the predecessor's receipt, not the failed target's.
+func TestFilesystemExecutorPreservesReleaseReceipts(t *testing.T) {
+	e := newFSExecutor(t, t.TempDir())
+	updates := []Update{
+		{Product: "siemcore", ToVersion: "1.0.0.1", ArtifactSHA256: "first-sha", ReleaseSignature: "first-signature"},
+		{Product: "siemcore", FromVersion: "1.0.0.1", ToVersion: "1.0.0.2", ArtifactSHA256: "second-sha", ReleaseSignature: "second-signature"},
+	}
+	check := func(want Update) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(resolveCurrent(t, e, "siemcore"), ".updater-release.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var meta releaseMetadata
+		if err := json.Unmarshal(data, &meta); err != nil {
+			t.Fatal(err)
+		}
+		if meta.Product != want.Product || meta.Version != want.ToVersion || meta.SHA256 != want.ArtifactSHA256 || meta.Signature != want.ReleaseSignature {
+			t.Fatalf("incorrect receipt: %+v", meta)
+		}
+	}
+	for i := range updates {
+		updates[i].ArtifactPath = filepath.Join(t.TempDir(), "release.tar.gz")
+		makeTarGz(t, updates[i].ArtifactPath, map[string]string{"VERSION": updates[i].ToVersion})
+		if err := e.Apply(context.Background(), updates[i]); err != nil {
+			t.Fatal(err)
+		}
+		check(updates[i])
+	}
+	if err := e.Rollback(context.Background(), updates[1]); err != nil {
+		t.Fatal(err)
+	}
+	check(updates[0])
 }

@@ -15,6 +15,9 @@ type Update struct {
 	ReleaseNotes   string
 	ArtifactPath   string
 	ArtifactSHA256 string
+	// ReleaseSignature is the origin receipt. Privileged consumers must verify
+	// it against their own trusted key; staged metadata is not a trust boundary.
+	ReleaseSignature string
 }
 
 // Executor is the integration seam for a real SiemCore or SWF updater.
