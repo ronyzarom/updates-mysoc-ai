@@ -11,6 +11,14 @@ import subprocess
 import sys
 
 NAME = 'siemcore-cascade-updater'
+FILESYSTEM_BLOCK = '''  executor: filesystem
+  filesystem:
+    install_root: /opt/siemcore-cascade
+    restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
+    health_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
+    command_timeout: 15m
+    keep_releases: 3
+'''
 
 
 def updater_identity(application):
@@ -92,14 +100,7 @@ def main():
         raise ValueError('updater enrollment does not match bootstrap node identity')
     if 'public_key: "' + data['release']['public_key'] + '"' not in text:
         raise ValueError('updater and bootstrap signing pins differ')
-    block = '''  executor: filesystem
-  filesystem:
-    install_root: /opt/siemcore-cascade
-    restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
-    health_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update", "health"]
-    command_timeout: 15m
-    keep_releases: 3
-'''
+    block = FILESYSTEM_BLOCK
     if re.search(r'^  executor:', text, re.M):
         if block not in text:
             raise ValueError('existing executor differs')

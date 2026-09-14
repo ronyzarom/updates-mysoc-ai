@@ -8,6 +8,11 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 class InputTests(unittest.TestCase):
+    def test_executor_appends_health_phase_exactly_once(self):
+        self.assertIn('health_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]',
+                      module.FILESYSTEM_BLOCK)
+        self.assertNotIn('siemcore-apply-update", "health"', module.FILESYSTEM_BLOCK)
+
     def test_pod_nodes_share_application_identity_but_not_enrollment(self):
         active = {'instance_id': 'siemcore-pod', 'updater_instance_id': 'pod-node-a'}
         standby = dict(active, updater_instance_id='pod-node-b')
