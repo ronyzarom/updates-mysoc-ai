@@ -37,9 +37,16 @@ def validate(data):
     if not re.fullmatch(r'[a-z][a-z0-9-]{0,40}', release.get('channel', '')):
         raise ValueError('explicit release channel required')
     app = data['application']
-    if app.get('schema') != 1 or app.get('topology') != 'single':
-        raise ValueError('standalone bootstrap required')
-    for name in ('cluster_id', 'instance_id', 'database_name'):
+    shape = (app.get('schema'), app.get('topology'))
+    if shape not in ((1, 'single'), (2, 'pod')):
+        raise ValueError('supported standalone or pod bootstrap required')
+    role = app.get('pod_role') if shape == (2, 'pod') else None
+    if shape == (2, 'pod') and role not in ('a', 'b', 'witness'):
+        raise ValueError('pod bootstrap role required')
+    identities = ('cluster_id',)
+    if role != 'witness':
+        identities += ('instance_id', 'database_name')
+    for name in identities:
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,100}', app.get(name, '')):
             raise ValueError('invalid application identity')
     updater_identity(app)
@@ -89,7 +96,7 @@ def main():
   filesystem:
     install_root: /opt/siemcore-cascade
     restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
-    health_command: ["python3", "-c", "import json,os,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8443/health/live',timeout=10)); assert d.get('version')==os.environ['VERSION']"]
+    health_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update", "health"]
     command_timeout: 15m
     keep_releases: 3
 '''
@@ -131,7 +138,7 @@ def main():
     wrapper.write_text(content)
     wrapper.chmod(0o755)
     sudoers = Path('/etc/sudoers.d/' + NAME)
-    sudoers.write_text(NAME + ' ALL=(root) NOPASSWD: /usr/local/sbin/siemcore-apply-update apply, /usr/local/sbin/siemcore-apply-update rollback\n')
+    sudoers.write_text(NAME + ' ALL=(root) NOPASSWD: /usr/local/sbin/siemcore-apply-update apply, /usr/local/sbin/siemcore-apply-update rollback, /usr/local/sbin/siemcore-apply-update health\n')
     sudoers.chmod(0o440)
     subprocess.run(['visudo', '-cf', str(sudoers)], check=True)
     subprocess.run(['install', '-d', '-m', '0755', '-o', NAME, '-g', NAME, '/opt/siemcore-cascade'], check=True)

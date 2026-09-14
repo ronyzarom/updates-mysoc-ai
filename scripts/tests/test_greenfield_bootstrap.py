@@ -28,4 +28,18 @@ class InputTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 data=fixture();data[section][field]=bad;module.validate(data)
 
+    def test_pod_roles_use_distinct_updater_identity(self):
+        release = {'channel':'pod-lab','version':'3.3.152.4','sha256':'a'*64,
+                   'public_key':'b'*64,'signature':base64.b64encode(b'x'*64).decode()}
+        common = {'schema':2,'topology':'pod','cluster_id':'bezeq-rehearsal',
+                  'updater_instance_id':'bezeq-node-a'}
+        for role in ('a','b'):
+            application = dict(common, pod_role=role, instance_id='siemcore-bezeq', database_name='siemcore')
+            module.validate({'application':application,'release':release})
+        witness = dict(common, pod_role='witness', updater_instance_id='bezeq-witness')
+        module.validate({'application':witness,'release':release})
+        broken = dict(witness, pod_role='observer')
+        with self.assertRaisesRegex(ValueError, 'pod bootstrap role'):
+            module.validate({'application':broken,'release':release})
+
 if __name__ == '__main__': unittest.main()
