@@ -112,6 +112,18 @@ def main():
     library.mkdir(mode=0o755, exist_ok=True)
     shutil.copyfile(kit / 'greenfield-hook.py', library / 'greenfield-hook.py')
     (library / 'greenfield-hook.py').chmod(0o644)
+    recovery = library / 'recovery'
+    recovery.mkdir(mode=0o755, exist_ok=True)
+    for name in ('recovery.py', 'artifact.py', 'supervise.py'):
+        source = kit / 'recovery' / name
+        if not source.is_file() or source.is_symlink():
+            raise ValueError('transactional recovery payload missing')
+        shutil.copyfile(source, recovery / name)
+        (recovery / name).chmod(0o644)
+    recovery_state = Path('/var/lib/siemcore-recovery')
+    recovery_state.mkdir(mode=0o700, exist_ok=True)
+    if recovery_state.is_symlink() or recovery_state.stat().st_uid != 0 or recovery_state.stat().st_mode & 0o077:
+        raise ValueError('unsafe recovery state directory')
     wrapper = Path('/usr/local/sbin/siemcore-apply-update')
     content = '#!/bin/sh\nexec /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin /usr/bin/python3 /usr/local/lib/siemcore-cascade/greenfield-hook.py "$@"\n'
     if wrapper.exists() and (wrapper.is_symlink() or wrapper.read_text() != content):
