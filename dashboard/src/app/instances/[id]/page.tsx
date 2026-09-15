@@ -110,9 +110,9 @@ export default function InstanceDetailPage() {
 
   const deleteInstanceMutation = useMutation({
     mutationFn: (deleteId: string) => api.deleteInstance(deleteId),
-    onSuccess: async (_, deletedId) => {
+    onSuccess: (_, deletedId) => {
       setShowDeleteConfirm(false);
-      await refreshFleetQueries(queryClient, deletedId);
+      refreshFleetQueries(queryClient, deletedId);
       if (id === deletedId) router.replace("/instances");
     },
     onError: (error: Error) => {
