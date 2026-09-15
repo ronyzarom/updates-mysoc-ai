@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CleanupChildren } from "@/components/CleanupChildren";
+import { refreshFleetQueries } from "@/lib/fleet-cache";
 import { api } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -74,6 +75,11 @@ export default function InstanceDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setShowDeleteConfirm(false);
+    setMutationError(null);
+  }, [id]);
+
   // Sync selectedGroup with instance data when loaded
   useEffect(() => {
     if (instance?.update_group) {
@@ -103,10 +109,11 @@ export default function InstanceDetailPage() {
   });
 
   const deleteInstanceMutation = useMutation({
-    mutationFn: () => api.deleteInstance(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
-      router.push("/instances");
+    mutationFn: (deleteId: string) => api.deleteInstance(deleteId),
+    onSuccess: async (_, deletedId) => {
+      setShowDeleteConfirm(false);
+      await refreshFleetQueries(queryClient, deletedId);
+      if (id === deletedId) router.replace("/instances");
     },
     onError: (error: Error) => {
       setMutationError(`Failed to delete: ${error.message}`);
@@ -1031,7 +1038,7 @@ export default function InstanceDetailPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => deleteInstanceMutation.mutate()}
+                  onClick={() => deleteInstanceMutation.mutate(instance.id)}
                   disabled={deleteInstanceMutation.isPending}
                   className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >

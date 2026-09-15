@@ -1322,15 +1322,15 @@ func (s *Server) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	repo := licensing.NewInstanceRepository(s.db)
-	if err := repo.Delete(r.Context(), id); err != nil {
-		if errors.Is(err, licensing.ErrInstanceNotFound) {
-			writeError(w, http.StatusNotFound, "instance not found")
-			return
-		}
+	writeInstanceDeleteResult(w, repo.Delete(r.Context(), id))
+}
+
+func writeInstanceDeleteResult(w http.ResponseWriter, err error) {
+	if err != nil && !errors.Is(err, licensing.ErrInstanceNotFound) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
+	// DELETE is idempotent: a stale page or retry has already reached its goal.
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

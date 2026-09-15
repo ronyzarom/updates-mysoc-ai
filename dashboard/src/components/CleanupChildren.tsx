@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { refreshFleetQueries } from "@/lib/fleet-cache";
 import { api } from "@/lib/api";
 
 export function CleanupChildren({ parentId }: { parentId: string }) {
@@ -24,9 +25,7 @@ export function CleanupChildren({ parentId }: { parentId: string }) {
     onSuccess: ({ removed }) => {
       setResult(`${removed} entries removed.${removed < selected.length ? " Entries that are no longer eligible were skipped." : ""}`);
       setOpen(false);
-      client.invalidateQueries({ queryKey: ["instance-children"] });
-      client.invalidateQueries({ queryKey: ["instances"] });
-      client.invalidateQueries({ queryKey: ["inactive-children", parentId] });
+      refreshFleetQueries(client);
     },
   });
   const items = candidates.data?.items ?? [];
