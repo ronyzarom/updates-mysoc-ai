@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Updates-owned policy consumer; the existing fixed sudo boundary is unchanged.
+set -euo pipefail
+[[ $(id -u) == 0 && $# == 1 ]] || exit 1
+case "$1" in apply|rollback) ;; *) exit 1 ;; esac
+exec /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8 /usr/bin/python3 /usr/local/lib/siemcore-policy-consumer/1.16.1.20/consumer.py "$1"
