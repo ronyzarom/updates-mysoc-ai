@@ -50,6 +50,7 @@ class ConsumerTests(unittest.TestCase):
    def durable(path,raw):
     if failure[0] is not None and len(writes)==failure[0]:failure[0]=None;raise OSError('injected interruption')
     path.write_bytes(raw);writes.append(path)
+    if failure[0]==4 and len(writes)==4:failure[0]=None;raise OSError('interrupted after policy commit')
    snapshots=[]
    class Lifecycle:
     def __init__(self,policy):self.policy=policy
@@ -69,7 +70,7 @@ class ConsumerTests(unittest.TestCase):
     self.assertEqual(json.loads(new)['policy_revision'],4)
  def test_atomic_commit_retry(self):self.exercise_commit()
  def test_interruption_each_write(self):
-  for n in range(4):
+  for n in range(5):
    with self.subTest(write=n):self.exercise_commit(n)
  def test_pending_transaction(self):self.exercise_commit(pending=True)
 if __name__=='__main__':unittest.main()
