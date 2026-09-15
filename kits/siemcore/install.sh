@@ -32,6 +32,10 @@ Options:
   --customer-id ID       end customer identifier (groups the fleet view)
   --customer-name NAME   end customer display name
   --signing-key HEX      pinned release-signing public key (ask your operator)
+  --self-update-channel C  updater binary channel (default: stable), independent
+                           of the application channel in greenfield input
+  --greenfield-input FILE  root-owned JSON with application inputs and signed
+                           first-release receipt; enables and starts provisioning
   --current-version V    required with --update
   --ca-file PATH         the relay's cert.pem to pin; omit when the relay
                          serves a publicly trusted certificate
@@ -42,9 +46,12 @@ EOF
 }
 
 MODE="" LICENSE_KEY="" PARENT_URL="" INSTANCE_ID="" PARENT_ID=""
-CUSTOMER_ID="" CUSTOMER_NAME="" SIGNING_KEY="" CURRENT_VERSION="" CA_FILE=""
+CUSTOMER_ID="" CUSTOMER_NAME="" SIGNING_KEY="" CURRENT_VERSION="" CA_FILE="" GREENFIELD_INPUT=""
+SELF_UPDATE_CHANNEL=stable
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --greenfield-input) GREENFIELD_INPUT="${2:?--greenfield-input needs a value}"; shift ;;
+        --self-update-channel) SELF_UPDATE_CHANNEL="${2:?--self-update-channel needs a value}"; shift ;;
         --clean)  MODE=clean ;;
         --update) MODE=update ;;
         --license-key)     LICENSE_KEY="${2:?--license-key needs a value}"; shift ;;
@@ -61,9 +68,25 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+if [[ ! "$SELF_UPDATE_CHANNEL" =~ ^[a-z][a-z0-9-]{0,40}$ ]]; then
+    echo 'invalid self-update channel' >&2
+    exit 1
+fi
+if [[ -z "$MODE" && "$SELF_UPDATE_CHANNEL" != stable ]]; then
+    echo '--self-update-channel requires --clean or --update' >&2
+    exit 1
+fi
 if [[ -z "$MODE" && ( -n "$LICENSE_KEY$PARENT_URL$INSTANCE_ID$PARENT_ID$CUSTOMER_ID$CUSTOMER_NAME$SIGNING_KEY$CURRENT_VERSION$CA_FILE" ) ]]; then
     echo "config flags require a mode: --clean or --update" >&2
     exit 1
+fi
+
+if [[ -n "$GREENFIELD_INPUT" && "$MODE" != clean ]]; then
+    echo '--greenfield-input requires --clean' >&2
+    exit 1
+fi
+if [[ -n "$GREENFIELD_INPUT" ]]; then
+    GREENFIELD_INPUT="$(realpath "$GREENFIELD_INPUT")"
 fi
 
 ARCH=$(uname -m)
@@ -129,6 +152,7 @@ render_config() {
         -e "s|public_key: \"PASTE-HEX-PUBLIC-KEY\"|public_key: \"$SIGNING_KEY\"|" \
         -e "s|current_version: \"0.0.0\"|current_version: \"$CURRENT_VERSION\"|" \
         config.yaml > "$tmp"
+    printf '\nself_update:\n  channel: %s\n' "$SELF_UPDATE_CHANNEL" >> "$tmp"
     if [[ -n "$CA_FILE" ]]; then
         sed -i.sedbak "s|ca_file: mysoc-relay-ca.pem|ca_file: /etc/$NAME/mysoc-relay-ca.pem|" "$tmp"
     else
@@ -146,9 +170,19 @@ render_config() {
     echo "    config rendered: instance=$INSTANCE_ID parent=$PARENT_URL version=$CURRENT_VERSION mode=$MODE"
 }
 
+# A repeat bootstrap must not reset the updater's installed version to 0.0.0.
+if [[ -n "$GREENFIELD_INPUT" && -f /etc/siemcore/greenfield-release.json ]]; then
+    exec python3 ./greenfield-bootstrap.py "$GREENFIELD_INPUT" "$PWD"
+fi
+
 echo "==> creating service user and directories"
 id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $NAME
 mkdir -p /etc/$NAME /var/lib/$NAME
+# The caller's umask is intentionally untrusted. Greenfield bootstrap commonly
+# runs with 077, so make the traversable group ownership explicit before the
+# unprivileged service reads config.yaml.
+chown root:$NAME /etc/$NAME
+chmod 0750 /etc/$NAME
 
 echo "==> installing binary (self-updatable layout)"
 # The binary lives in a versioned directory owned by the service user, and
@@ -188,6 +222,10 @@ echo "==> installing systemd unit"
 install -m 0644 $NAME.service /etc/systemd/system/$NAME.service
 systemctl daemon-reload
 systemctl enable $NAME
+
+if [[ -n "$GREENFIELD_INPUT" ]]; then
+    exec python3 ./greenfield-bootstrap.py "$GREENFIELD_INPUT" "$PWD"
+fi
 
 echo
 echo "Done. Start with:  systemctl start $NAME"

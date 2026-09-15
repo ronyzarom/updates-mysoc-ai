@@ -37,6 +37,7 @@ type Simulator struct {
 	// set via SetBinaryVersion. It anchors self-update comparisons; empty for
 	// unstamped dev builds, which never self-update.
 	binaryVersion string
+	nowFn         func() time.Time // injectable clock for durable retry tests
 
 	// childrenFn supplies the cascade rollup for relay-mode heartbeats.
 	childrenFn func() []platformtypes.ChildReport
@@ -314,7 +315,7 @@ func (s *Simulator) Run(ctx context.Context, mode Mode) error {
 	}
 }
 
-func (s *Simulator) processOffer(
+func (s *Simulator) processOfferAttempt(
 	ctx context.Context,
 	mode Mode,
 	offer *UpdateOffer,
@@ -410,7 +411,11 @@ func (s *Simulator) failAndRollback(
 	update Update,
 	updateErr error,
 ) error {
-	rollbackErr := s.executor.Rollback(ctx, update)
+	var rollbackErr error
+	var preflight *PreMutationError
+	if !errors.As(updateErr, &preflight) {
+		rollbackErr = s.executor.Rollback(ctx, update)
+	}
 	errorMessage := updateErr.Error()
 	if rollbackErr != nil {
 		errorMessage += "; rollback: " + rollbackErr.Error()
@@ -439,6 +444,13 @@ func (s *Simulator) recordAttempt(update Update, success bool, message string) {
 		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
 	}
 	s.state.LastUpdateAttempt = attempt
+	if !success {
+		if retry := s.state.ProductRetries[update.Product]; retry != nil {
+			attempt.RetryAttempt = retry.Attempts
+			deadline := retry.NextRetryAt
+			attempt.NextRetryAt = &deadline
+		}
+	}
 	if success {
 		if s.state.ProductVersions == nil {
 			s.state.ProductVersions = make(map[string]string)

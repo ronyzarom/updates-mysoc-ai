@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -109,15 +110,54 @@ func (e *FilesystemExecutor) previousFile(product string) string {
 }
 
 // Apply installs the artifact for update and atomically activates it.
-func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
+func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) (resultErr error) {
+	var pointers *pointerSnapshot
+	invoked := false
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		var preflight *PreMutationError
+		if invoked && !errors.As(resultErr, &preflight) {
+			return
+		}
+		code := "staging_failed"
+		if preflight != nil {
+			code = preflight.Code
+		}
+		var restoreErr error
+		if pointers != nil {
+			restoreErr = pointers.restore(e, update.Product)
+		}
+		resultErr = &PreMutationError{Code: code, Cause: resultErr, RestoreError: restoreErr}
+	}()
 	if e.InstallRoot == "" {
 		return fmt.Errorf("filesystem executor requires an install_root")
 	}
 	if update.ArtifactPath == "" {
 		return fmt.Errorf("no artifact to install for %s %s", update.Product, update.ToVersion)
 	}
+	var err error
+	pointers, err = e.capturePointers(update.Product)
+	if err != nil {
+		return err
+	}
 
 	versionDir := e.versionDir(update.Product, update.ToVersion)
+	// Never clear a directory still used by the active or retained predecessor
+	// pointer, even after a crash left updater state behind the filesystem.
+	for _, retained := range []string{pointers.current, string(pointers.previous)} {
+		retained = strings.TrimSpace(retained)
+		if retained == "" {
+			continue
+		}
+		if !filepath.IsAbs(retained) {
+			retained = filepath.Join(e.productRoot(update.Product), retained)
+		}
+		if filepath.Clean(retained) == filepath.Clean(versionDir) {
+			return fmt.Errorf("refusing to overwrite retained release %s", update.ToVersion)
+		}
+	}
 	// Stage into a clean directory so re-running Apply is idempotent.
 	if err := os.RemoveAll(versionDir); err != nil {
 		return fmt.Errorf("clear staging dir: %w", err)
@@ -159,6 +199,7 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 		"target", versionDir,
 	)
 
+	invoked = true
 	if err := e.runCommand(ctx, "restart", "apply", e.RestartCommand, update); err != nil {
 		return fmt.Errorf("restart service: %w", err)
 	}
@@ -324,6 +365,11 @@ func (e *FilesystemExecutor) runCommand(ctx context.Context, kind, phase string,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if phase == "apply" && runCtx.Err() == nil {
+			if rejection := classifyPreMutationResult(err, output); rejection != nil {
+				return rejection
+			}
+		}
 		return fmt.Errorf("%s command failed: %w: %s", kind, err, strings.TrimSpace(string(output)))
 	}
 	if len(output) > 0 {

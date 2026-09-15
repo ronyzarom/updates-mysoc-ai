@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
@@ -30,7 +31,7 @@ func (e *failingTargetExecutor) Validate(ctx context.Context, u Update) error {
 }
 
 func TestTargetedReleaseUsesSignedPipelineAndReportsTruth(t *testing.T) {
-	for _, scenario := range []string{"success", "bad-signature", "bad-health", "stale-current"} {
+	for _, scenario := range []string{"success", "bad-signature", "bad-health", "stale-current", "deferred"} {
 		t.Run(scenario, func(t *testing.T) {
 			pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 			artifact := []byte("targeted signed test artifact")
@@ -68,6 +69,9 @@ func TestTargetedReleaseUsesSignedPipelineAndReportsTruth(t *testing.T) {
 			s, err := NewSimulator(cfg, executor, discardLogger())
 			if err != nil {
 				t.Fatal(err)
+			}
+			if scenario == "deferred" {
+				s.state.ProductRetries = map[string]*ProductRetry{"siemcore": {TargetVersion: "1.1.0", ArtifactDigest: checksum, UpdaterVersion: s.retryBuild(), Attempts: 1, NextRetryAt: time.Now().Add(time.Hour)}}
 			}
 			expected := "1.0.0"
 			if scenario == "stale-current" {

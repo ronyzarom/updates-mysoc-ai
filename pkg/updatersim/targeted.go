@@ -46,6 +46,9 @@ func (s *Simulator) RunTargetedRelease(ctx context.Context, product, target, exp
 	if err != nil {
 		return err
 	}
+	if s.state.ProductVersions[product] != target {
+		return fmt.Errorf("targeted release was deferred; target %s is not installed", target)
+	}
 	_, err = s.SendHeartbeat(ctx)
 	return err
 }

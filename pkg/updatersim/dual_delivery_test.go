@@ -109,6 +109,12 @@ func TestDualFixtureDeliveryAndRetry(t *testing.T) {
 						t.Fatal("failure not persisted")
 					}
 					writeEvidence(evidence)
+					if err = sim.processOffer(context.Background(), ModeReal, offer); err != nil || executor.applied {
+						t.Fatal("same-target retry must remain deferred", err)
+					}
+					if err = sim.RetryProduct(product, offer.LatestVersion, offer.Checksum); err != nil {
+						t.Fatal(err)
+					}
 					if err = sim.processOffer(context.Background(), ModeReal, offer); err != nil {
 						t.Fatal("retry failed", err)
 					}

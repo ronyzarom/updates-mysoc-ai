@@ -18,6 +18,7 @@ type State struct {
 	RelayToken        string                       `json:"relay_token,omitempty"`
 	ProductVersions   map[string]string            `json:"product_versions,omitempty"`
 	LastUpdateAttempt *platformtypes.UpdateAttempt `json:"last_update_attempt,omitempty"`
+	ProductRetries    map[string]*ProductRetry     `json:"product_retries,omitempty"`
 
 	// Desired-state reconciliation tracking.
 	SystemRelease     string            `json:"system_release,omitempty"`

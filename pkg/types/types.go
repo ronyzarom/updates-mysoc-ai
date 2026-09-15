@@ -150,14 +150,16 @@ type Deployment struct {
 
 // UpdateAttempt tracks the result of an update installation
 type UpdateAttempt struct {
-	SelectedArtifactKind string    `json:"selected_artifact_kind,omitempty"`
-	DependencyValidation string    `json:"dependency_validation,omitempty"`
-	ArtifactDigest       string    `json:"artifact_digest,omitempty"`
-	FromVersion          string    `json:"from_version"`
-	TargetVersion        string    `json:"target_version"`
-	Success              bool      `json:"success"`
-	Error                string    `json:"error,omitempty"`
-	Timestamp            time.Time `json:"timestamp"`
+	RetryAttempt         int        `json:"retry_attempt,omitempty"`
+	NextRetryAt          *time.Time `json:"next_retry_at,omitempty"`
+	SelectedArtifactKind string     `json:"selected_artifact_kind,omitempty"`
+	DependencyValidation string     `json:"dependency_validation,omitempty"`
+	ArtifactDigest       string     `json:"artifact_digest,omitempty"`
+	FromVersion          string     `json:"from_version"`
+	TargetVersion        string     `json:"target_version"`
+	Success              bool       `json:"success"`
+	Error                string     `json:"error,omitempty"`
+	Timestamp            time.Time  `json:"timestamp"`
 }
 
 // Heartbeat is the payload sent by updaters
