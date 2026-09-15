@@ -1368,7 +1368,8 @@ const upsertReportedNodeSQL = `
 		last_ip_address = COALESCE(EXCLUDED.last_ip_address, instances.last_ip_address),
 		last_ip_seen_at = COALESCE(EXCLUDED.last_ip_seen_at, instances.last_ip_seen_at),
 		updated_at = EXCLUDED.updated_at
-	WHERE instances.last_heartbeat IS NULL OR instances.last_heartbeat <= EXCLUDED.last_heartbeat`
+	WHERE (instances.last_heartbeat IS NULL OR instances.last_heartbeat <= EXCLUDED.last_heartbeat)
+ AND (instances.status <> 'decommissioned' OR ($21::boolean AND EXCLUDED.last_heartbeat > instances.updated_at))`
 
 // flattenReportedChildren walks the rollup tree depth-first into a flat slice,
 // skipping the reporter itself and empty ids. When the node budget is reached
@@ -1583,6 +1584,6 @@ func reportedNodeUpsertArgs(reporterID, parentID, licenseID string, child *types
 		uuid.New().String(), child.InstanceID, instanceType, child.Hostname, licenseIDPtr,
 		lastSeen, heartbeatData, status, child.ProductTier, parentID,
 		child.CustomerID, child.CustomerName, reporterID, now,
-		attemptFrom, attemptTarget, attemptSuccess, attemptError, attemptAt, sourceIP,
+		attemptFrom, attemptTarget, attemptSuccess, attemptError, attemptAt, sourceIP, !child.LastSeen.IsZero(),
 	}, nil
 }

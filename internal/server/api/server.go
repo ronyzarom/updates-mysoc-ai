@@ -220,6 +220,8 @@ func (s *Server) setupRoutes() {
 			// Mutations require admin authorization.
 			r.With(s.adminAuth).Put("/{id}", s.handleUpdateInstance)
 			r.With(s.adminAuth).Delete("/{id}", s.handleDeleteInstance)
+			r.With(s.adminAuth).Get("/{id}/inactive-children", s.handleInactiveChildren)
+			r.With(s.adminAuth).Post("/{id}/cleanup-children", s.handleCleanupChildren)
 			r.With(s.adminAuth).Put("/{id}/auto-update", s.handleSetAutoUpdate)
 			r.With(s.adminAuth).Put("/{id}/update-group", s.handleSetUpdateGroup)
 		})

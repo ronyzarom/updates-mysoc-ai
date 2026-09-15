@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CleanupChildren } from "@/components/CleanupChildren";
 import { api } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -58,7 +59,7 @@ export default function InstanceDetailPage() {
   const { data: childrenPage } = useQuery({
     queryKey: ["instance-children", instance?.instance_id],
     queryFn: () =>
-      api.getInstancesFiltered({
+      api.getTreeChildren({
         parent: instance!.instance_id,
         sort: "last_heartbeat",
         dir: "desc",
@@ -534,6 +535,7 @@ export default function InstanceDetailPage() {
                   Children ({childrenTotal.toLocaleString()}
                   {childrenTotal > children.length ? `, showing ${children.length}` : ""})
                 </p>
+                <RequireRole roles={["admin"]}><div className="mb-3"><CleanupChildren parentId={id} /></div></RequireRole>
                 {children.length === 0 ? (
                   <p className="text-sm text-slate-500">No child nodes</p>
                 ) : (

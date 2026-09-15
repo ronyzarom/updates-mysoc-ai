@@ -815,6 +815,14 @@ class ApiClient {
     return res.parents ?? [];
   }
 
+  async getInactiveChildren(id: string): Promise<{items: {id: string; instance_id: string; last_heartbeat: string | null}[]}> {
+    return this.fetch(`/api/v1/instances/${id}/inactive-children`);
+  }
+
+  async cleanupChildren(id: string, ids: string[]): Promise<{removed: number}> {
+    return this.fetch(`/api/v1/instances/${id}/cleanup-children`, {method: "POST", body: JSON.stringify({ids})});
+  }
+
   async deleteInstance(id: string): Promise<void> {
     await this.fetch(`/api/v1/instances/${id}`, { method: "DELETE" }, true);
   }
