@@ -108,6 +108,25 @@ func TestCleanupInactiveChildren(t *testing.T) {
 		}
 		return value
 	}
+	// The individual Delete action must preserve the same retirement marker.
+	var retiredID string
+	var retiredAt time.Time
+	if err := pool.QueryRow(ctx, "SELECT id, updated_at FROM instances WHERE instance_id='old'").Scan(&retiredID, &retiredAt); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := repo.Delete(ctx, retiredID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var retainedID string
+	var retainedAt time.Time
+	if err := pool.QueryRow(ctx, "SELECT id, updated_at FROM instances WHERE instance_id='old'").Scan(&retainedID, &retainedAt); err != nil {
+		t.Fatal("Delete removed retirement marker", err)
+	}
+	if retainedID != retiredID || !retainedAt.Equal(retiredAt) {
+		t.Fatal("repeated Delete changed retirement identity or timestamp")
+	}
 	report(old)
 	if status() != "decommissioned" {
 		t.Fatal("stale relay report resurrected deleted entry")
@@ -119,6 +138,14 @@ func TestCleanupInactiveChildren(t *testing.T) {
 	var removedAt time.Time
 	if err := pool.QueryRow(ctx, "SELECT updated_at FROM instances WHERE instance_id='old'").Scan(&removedAt); err != nil {
 		t.Fatal(err)
+	}
+	// Individual deletion of an active record must retire it too.
+	if err := repo.Delete(ctx, otherID); err != nil {
+		t.Fatal(err)
+	}
+	var otherStatus string
+	if err := pool.QueryRow(ctx, "SELECT status FROM instances WHERE id=$1", otherID).Scan(&otherStatus); err != nil || otherStatus != "decommissioned" {
+		t.Fatal("individual retirement failed", otherStatus, err)
 	}
 	report(removedAt.Add(time.Second))
 	if status() != "online" {

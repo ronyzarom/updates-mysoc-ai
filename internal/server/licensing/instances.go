@@ -1164,9 +1164,11 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 	return err
 }
 
-// Delete deletes an instance
+// Delete retires an instance while retaining its identity to suppress stale relay reports.
 func (r *InstanceRepository) Delete(ctx context.Context, id string) error {
-	cmdTag, err := r.db.Pool.Exec(ctx, `DELETE FROM instances WHERE id = $1`, id)
+	cmdTag, err := r.db.Pool.Exec(ctx, `UPDATE instances SET status = 'decommissioned',
+        updated_at = CASE WHEN status = 'decommissioned' THEN updated_at ELSE NOW() END
+        WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete instance: %w", err)
 	}
