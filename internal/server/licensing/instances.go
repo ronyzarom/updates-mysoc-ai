@@ -411,7 +411,7 @@ func (r *InstanceRepository) ListPaged(ctx context.Context, limit, offset int) (
 	}
 	defer rows.Close()
 
-	var items []types.Instance
+	items := []types.Instance{}
 	for rows.Next() {
 		instance, err := r.scanInstanceList(rows)
 		if err != nil {
@@ -531,7 +531,7 @@ func (r *InstanceRepository) ListPagedFiltered(ctx context.Context, f InstanceLi
 	}
 	defer rows.Close()
 
-	var items []types.Instance
+	items := []types.Instance{}
 	for rows.Next() {
 		instance, err := r.scanInstanceList(rows)
 		if err != nil {

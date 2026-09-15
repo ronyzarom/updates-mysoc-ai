@@ -151,7 +151,7 @@ func TestCleanupInactiveChildren(t *testing.T) {
 	// Deleted records are excluded even from all-status and decommissioned views.
 	for _, filter := range []InstanceListFilter{{Search: "old"}, {Search: "old", Status: "decommissioned"}} {
 		page, err := repo.ListPagedFiltered(ctx, filter, 20, 0)
-		if err != nil || page.Total != 0 || len(page.Items) != 0 {
+		if err != nil || page.Total != 0 || page.Items == nil || len(page.Items) != 0 {
 			t.Fatal("deleted record leaked into list", page, err)
 		}
 		tree, total, err := repo.TreeChildren(ctx, InstanceListFilter{Parent: "relay", Search: "old"}, true, 20, 0)
