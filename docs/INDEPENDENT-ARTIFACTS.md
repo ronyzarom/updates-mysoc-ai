@@ -54,4 +54,4 @@ Migration 016 replaces the old product/version unique constraint with product/ve
 
 Local qualification passes: all Go packages; race tests for protocol, server, publication and updater; PostgreSQL migration/publication/selection tests for all three products; two-hop independent cache separation/corruption recovery; signature/prerequisite verification; dashboard build and 29 tests. Tests prove protocol behavior, not installation of every real product.
 
-The implementation is not yet live. The API restart is deferred while SiemCore's existing .21 upload is in progress. Existing paired publication remains available. Product canary qualification and broader promotion remain separate from enabling the uploader.
+Deployed to the Updates API/dashboard and alpha updater/relay as 1.16.1.14 on 2026-09-15 after SiemCore completed its .21 upload. testing.mysoc.ai automatically updated and reported .14. Existing paired publication remains available. Product canary qualification and broader promotion remain separate from enabling the uploader. See verification/independent-1.16.1.14/DEPLOYMENT.md.
