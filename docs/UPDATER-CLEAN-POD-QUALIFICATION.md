@@ -1,4 +1,4 @@
-# Shared updater clean-pod qualification candidate 1.16.1.22
+# Shared updater clean-pod qualification candidate 1.16.1.23
 
 Scope: replacement Bezeq test pod A/B/witness only. SiemCore owns cloud replacement and inputs. Preserve A reserved IP 34.165.133.248, direct endpoint and SSL.com TLS. No bench/production changes or database copying. This document does not report live qualification or publication.
 
