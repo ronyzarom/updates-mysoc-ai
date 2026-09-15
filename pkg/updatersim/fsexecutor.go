@@ -88,6 +88,7 @@ type releaseMetadata struct {
 	Product              string    `json:"product"`
 	Version              string    `json:"version"`
 	SHA256               string    `json:"sha256"`
+	Signature            string    `json:"signature,omitempty"`
 	InstalledAt          time.Time `json:"installed_at"`
 }
 
@@ -134,6 +135,7 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 		Product:     update.Product,
 		Version:     update.ToVersion,
 		SHA256:      update.ArtifactSHA256,
+		Signature:   update.ArtifactSignature,
 		InstalledAt: time.Now().UTC(),
 	}
 	if err := writeJSONFile(filepath.Join(versionDir, ".updater-release.json"), meta); err != nil {

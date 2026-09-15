@@ -359,6 +359,7 @@ func (s *Simulator) processOffer(
 		ReleaseNotes:         offer.ReleaseNotes,
 		ArtifactPath:         result.Path,
 		ArtifactSHA256:       result.Checksum,
+		ArtifactSignature:    offer.Signature,
 		SelectedArtifactKind: offer.SelectedArtifactKind, DependencyValidation: offer.DependencyValidation,
 	}
 
