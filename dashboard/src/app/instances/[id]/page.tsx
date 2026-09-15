@@ -40,11 +40,13 @@ export default function InstanceDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const id = params.id as string;
+  const [deletedId, setDeletedId] = useState<string | null>(null);
 
   const { data: instance, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["instance", id],
-    queryFn: () => api.getInstance(id),
+    queryFn: ({ signal }) => api.getInstance(id, signal),
     retry: false,
+    enabled: deletedId !== id,
   });
 
   // Hierarchy is resolved server-side, never by pulling the whole fleet:
@@ -52,8 +54,8 @@ export default function InstanceDetailPage() {
   // parent-filtered paged query (bounded — a relay can have many children).
   const { data: ancestorChain } = useQuery({
     queryKey: ["instance-parents", id],
-    queryFn: () => api.getInstanceParents(id),
-    enabled: Boolean(instance),
+    queryFn: ({ signal }) => api.getInstanceParents(id, signal),
+    enabled: deletedId !== id && Boolean(instance),
   });
 
   const CHILDREN_PAGE = 100;
@@ -66,7 +68,7 @@ export default function InstanceDetailPage() {
         dir: "desc",
         limit: CHILDREN_PAGE,
       }),
-    enabled: Boolean(instance?.instance_id),
+    enabled: deletedId !== id && Boolean(instance?.instance_id),
   });
 
   const [selectedGroup, setSelectedGroup] = useState<string>("");
@@ -111,6 +113,7 @@ export default function InstanceDetailPage() {
   const deleteInstanceMutation = useMutation({
     mutationFn: (deleteId: string) => api.deleteInstance(deleteId),
     onSuccess: (_, deletedId) => {
+      setDeletedId(deletedId);
       setShowDeleteConfirm(false);
       refreshFleetQueries(queryClient, deletedId);
       if (id === deletedId) router.replace("/instances");
@@ -210,6 +213,8 @@ export default function InstanceDetailPage() {
     }
     return { label: "unknown", className: "bg-slate-500/20 text-slate-400" };
   };
+
+  if (deletedId === id) return <LoadingState label="Returning to fleet…" />;
 
   if (isLoading) {
     return <LoadingState label="Loading instance..." />;

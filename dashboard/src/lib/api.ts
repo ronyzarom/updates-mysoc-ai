@@ -803,14 +803,14 @@ class ApiClient {
     );
   }
 
-  async getInstance(id: string): Promise<Instance> {
-    return this.fetch<Instance>(`/api/v1/instances/${id}`);
+  async getInstance(id: string, signal?: AbortSignal): Promise<Instance> {
+    return this.fetch<Instance>(`/api/v1/instances/${id}`, { signal });
   }
 
   // Ancestor chain (nearest parent first), resolved server-side.
-  async getInstanceParents(id: string): Promise<Instance[]> {
+  async getInstanceParents(id: string, signal?: AbortSignal): Promise<Instance[]> {
     const res = await this.fetch<{ parents: Instance[] }>(
-      `/api/v1/instances/${id}/parents`
+      `/api/v1/instances/${id}/parents`, { signal }
     );
     return res.parents ?? [];
   }
