@@ -48,24 +48,25 @@ type LicenseLimits struct {
 
 // Instance represents a registered server instance
 type Instance struct {
-	ID                string     `json:"id"`
-	InstanceID        string     `json:"instance_id"`
-	InstanceType      string     `json:"instance_type"`                // OS/sub-type, e.g. swf-windows, siemcore-linux
-	ProductTier       string     `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
-	ParentInstanceID  string     `json:"parent_instance_id,omitempty"` // instance_id of the parent node (siemcore for swf, mysoc for siemcore)
-	CustomerID        string     `json:"customer_id,omitempty"`        // end customer this node serves, as reported up the cascade
-	CustomerName      string     `json:"customer_name,omitempty"`      // human-friendly customer label from the rollup
-	ReportedVia       string     `json:"reported_via,omitempty"`       // instance_id of the relay that reported this node (empty = direct heartbeat)
-	ReportedAt        *time.Time `json:"reported_at,omitempty"`        // when the covering rollup was received
-	Hostname          string     `json:"hostname"`
-	DisplayName       string     `json:"display_name,omitempty"` // Friendly name / domain (e.g., cloud.siemcore.ai)
-	LicenseID         string     `json:"license_id,omitempty"`
-	APIKeyHash        string     `json:"-"`
-	LastHeartbeat     *time.Time `json:"last_heartbeat,omitempty"`
-	LastHeartbeatData *Heartbeat `json:"last_heartbeat_data,omitempty"`
-	Status            string     `json:"status"` // online, offline, degraded
-	AutoUpdateEnabled bool       `json:"auto_update_enabled"`
-	UpdateGroup       string     `json:"update_group"` // alpha, beta, stable, production
+	LastArtifactDelivery *UpdateAttempt `json:"last_artifact_delivery,omitempty"`
+	ID                   string         `json:"id"`
+	InstanceID           string         `json:"instance_id"`
+	InstanceType         string         `json:"instance_type"`                // OS/sub-type, e.g. swf-windows, siemcore-linux
+	ProductTier          string         `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
+	ParentInstanceID     string         `json:"parent_instance_id,omitempty"` // instance_id of the parent node (siemcore for swf, mysoc for siemcore)
+	CustomerID           string         `json:"customer_id,omitempty"`        // end customer this node serves, as reported up the cascade
+	CustomerName         string         `json:"customer_name,omitempty"`      // human-friendly customer label from the rollup
+	ReportedVia          string         `json:"reported_via,omitempty"`       // instance_id of the relay that reported this node (empty = direct heartbeat)
+	ReportedAt           *time.Time     `json:"reported_at,omitempty"`        // when the covering rollup was received
+	Hostname             string         `json:"hostname"`
+	DisplayName          string         `json:"display_name,omitempty"` // Friendly name / domain (e.g., cloud.siemcore.ai)
+	LicenseID            string         `json:"license_id,omitempty"`
+	APIKeyHash           string         `json:"-"`
+	LastHeartbeat        *time.Time     `json:"last_heartbeat,omitempty"`
+	LastHeartbeatData    *Heartbeat     `json:"last_heartbeat_data,omitempty"`
+	Status               string         `json:"status"` // online, offline, degraded
+	AutoUpdateEnabled    bool           `json:"auto_update_enabled"`
+	UpdateGroup          string         `json:"update_group"` // alpha, beta, stable, production
 
 	// IP address tracking
 	LastIPAddress string     `json:"last_ip_address,omitempty"`
@@ -102,20 +103,37 @@ type Release struct {
 
 // Manifest contains release metadata
 type Manifest struct {
-	Product      string     `json:"product"`
-	Version      string     `json:"version"`
-	Channel      string     `json:"channel"`
-	Artifacts    []Artifact `json:"artifacts"`
-	Dependencies []string   `json:"dependencies,omitempty"`
-	Changelog    string     `json:"changelog,omitempty"`
+	ArtifactKind     string     `json:"artifact_kind,omitempty"`
+	Product          string     `json:"product"`
+	Version          string     `json:"version"`
+	Channel          string     `json:"channel"`
+	Artifacts        []Artifact `json:"artifacts"`
+	ArtifactVariants []Artifact `json:"artifact_variants,omitempty"`
+	Dependencies     []string   `json:"dependencies,omitempty"`
+	Changelog        string     `json:"changelog,omitempty"`
 }
 
 // Artifact represents a downloadable file in a release
 type Artifact struct {
-	Name     string `json:"name"`
-	Arch     string `json:"arch"` // linux/amd64, linux/arm64
-	Size     int64  `json:"size"`
-	Checksum string `json:"checksum"`
+	CriticalFields       []string     `json:"critical_fields,omitempty"`
+	Product              string       `json:"product,omitempty"`
+	Version              string       `json:"version,omitempty"`
+	MetadataSignature    string       `json:"metadata_signature,omitempty"`
+	Name                 string       `json:"name"`
+	Arch                 string       `json:"arch"` // linux/amd64, linux/arm64
+	Size                 int64        `json:"size"`
+	Checksum             string       `json:"checksum"`
+	Kind                 string       `json:"kind,omitempty"` // bootstrap or update
+	URL                  string       `json:"url,omitempty"`
+	Signature            string       `json:"signature,omitempty"`
+	SourceCommit         string       `json:"source_commit,omitempty"`
+	RequiredDependencies []Dependency `json:"required_dependencies,omitempty"`
+}
+
+type Dependency struct {
+	Reference    string   `json:"reference"`
+	Digest       string   `json:"digest"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // Deployment tracks what's installed on an instance
@@ -132,11 +150,14 @@ type Deployment struct {
 
 // UpdateAttempt tracks the result of an update installation
 type UpdateAttempt struct {
-	FromVersion   string    `json:"from_version"`
-	TargetVersion string    `json:"target_version"`
-	Success       bool      `json:"success"`
-	Error         string    `json:"error,omitempty"`
-	Timestamp     time.Time `json:"timestamp"`
+	SelectedArtifactKind string    `json:"selected_artifact_kind,omitempty"`
+	DependencyValidation string    `json:"dependency_validation,omitempty"`
+	ArtifactDigest       string    `json:"artifact_digest,omitempty"`
+	FromVersion          string    `json:"from_version"`
+	TargetVersion        string    `json:"target_version"`
+	Success              bool      `json:"success"`
+	Error                string    `json:"error,omitempty"`
+	Timestamp            time.Time `json:"timestamp"`
 }
 
 // Heartbeat is the payload sent by updaters
@@ -403,17 +424,21 @@ type ProductInstall struct {
 
 // ReleaseInfo is the response for release queries
 type ReleaseInfo struct {
-	Product         string    `json:"product"`
-	CurrentVersion  string    `json:"current_version,omitempty"`
-	LatestVersion   string    `json:"latest_version"`
-	UpdateAvailable bool      `json:"update_available"`
-	Channel         string    `json:"channel"`
-	DownloadURL     string    `json:"download_url"`
-	Checksum        string    `json:"checksum"`
-	Signature       string    `json:"signature,omitempty"` // base64 ed25519 signature over the release signing message
-	Size            int64     `json:"size"`
-	ReleaseNotes    string    `json:"release_notes,omitempty"`
-	ReleasedAt      time.Time `json:"released_at"`
+	Product              string       `json:"product"`
+	CurrentVersion       string       `json:"current_version,omitempty"`
+	LatestVersion        string       `json:"latest_version"`
+	UpdateAvailable      bool         `json:"update_available"`
+	Channel              string       `json:"channel"`
+	DownloadURL          string       `json:"download_url"`
+	Checksum             string       `json:"checksum"`
+	Signature            string       `json:"signature,omitempty"` // base64 ed25519 signature over the release signing message
+	Size                 int64        `json:"size"`
+	ReleaseNotes         string       `json:"release_notes,omitempty"`
+	ReleasedAt           time.Time    `json:"released_at"`
+	Artifacts            []Artifact   `json:"artifacts,omitempty"`
+	SelectedArtifactKind string       `json:"selected_artifact_kind,omitempty"`
+	DependencyValidation string       `json:"dependency_validation,omitempty"`
+	RequiredDependencies []Dependency `json:"required_dependencies,omitempty"`
 }
 
 // ============================================

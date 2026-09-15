@@ -271,9 +271,10 @@ type FilesystemConfig struct {
 
 // ProductConfig identifies one simulated managed product.
 type ProductConfig struct {
-	Name           string `yaml:"name"`
-	CurrentVersion string `yaml:"current_version"`
-	Channel        string `yaml:"channel"`
+	PrerequisiteVerifier []string `yaml:"prerequisite_verifier,omitempty"`
+	Name                 string   `yaml:"name"`
+	CurrentVersion       string   `yaml:"current_version"`
+	Channel              string   `yaml:"channel"`
 }
 
 // LoadConfig reads, defaults, validates, and resolves a YAML configuration.

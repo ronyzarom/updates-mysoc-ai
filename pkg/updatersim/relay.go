@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/artifactprotocol"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
@@ -262,7 +264,7 @@ func (r *Relay) ChildrenReport() []platformtypes.ChildReport {
 			lastSeen = child.DecommissionedAt
 		}
 		attempt := hb.LastUpdateAttempt
-		if attempt == nil {
+		if attempt == nil || (child.LastReport != nil && child.LastReport.Timestamp.After(attempt.Timestamp)) {
 			attempt = child.LastReport
 		}
 		system := hb.System
@@ -675,7 +677,14 @@ func (r *Relay) handleChildCheck(w http.ResponseWriter, req *http.Request) {
 
 	// The child downloads from this relay, never directly upstream.
 	localURL := fmt.Sprintf("/api/v1/releases/%s/%s/download", product, offer.LatestVersion)
-	relayJSON(w, http.StatusOK, map[string]interface{}{
+	if offer.ProtocolVersion != "" && offer.SelectedArtifactKind != "" {
+		if offer.SelectedArtifactKind != "bootstrap" && offer.SelectedArtifactKind != "update" {
+			relayError(w, http.StatusBadGateway, "invalid artifact kind")
+			return
+		}
+		localURL += "?artifact_kind=" + offer.SelectedArtifactKind
+	}
+	response := map[string]interface{}{
 		"update_available": true,
 		"latest_version":   offer.LatestVersion,
 		"download_url":     localURL,
@@ -685,7 +694,15 @@ func (r *Relay) handleChildCheck(w http.ResponseWriter, req *http.Request) {
 		"release_notes":    offer.ReleaseNotes,
 		"channel":          offer.Channel,
 		"update_group":     offer.UpdateGroup,
-	})
+	}
+	if offer.ProtocolVersion != "" {
+		response["protocol_version"] = offer.ProtocolVersion
+		response["artifacts"] = offer.Artifacts
+		response["selected_artifact_kind"] = offer.SelectedArtifactKind
+		response["dependency_validation"] = offer.DependencyValidation
+		response["required_dependencies"] = offer.RequiredDependencies
+	}
+	relayJSON(w, http.StatusOK, response)
 }
 
 // handleChildReport records the child's install result; it surfaces in the
@@ -704,11 +721,12 @@ func (r *Relay) handleChildReport(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	if child, ok := r.children[report.InstanceID]; ok {
 		child.LastReport = &platformtypes.UpdateAttempt{
-			FromVersion:   report.FromVersion,
-			TargetVersion: report.ToVersion,
-			Success:       report.Success,
-			Error:         report.Error,
-			Timestamp:     time.Now().UTC(),
+			FromVersion:          report.FromVersion,
+			TargetVersion:        report.ToVersion,
+			Success:              report.Success,
+			Error:                report.Error,
+			Timestamp:            time.Now().UTC(),
+			SelectedArtifactKind: report.SelectedArtifactKind, DependencyValidation: report.DependencyValidation, ArtifactDigest: report.ArtifactDigest,
 		}
 	}
 	r.mu.Unlock()
@@ -737,7 +755,7 @@ func (r *Relay) handleChildDownload(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	meta, path, err := r.ensureCached(req.Context(), product, version)
+	meta, path, err := r.ensureCached(req.Context(), product, version, req.URL.Query().Get("artifact_kind"))
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
@@ -780,7 +798,7 @@ func (r *Relay) handleChildReleaseMeta(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	meta, err := r.upstream.GetReleaseMeta(req.Context(), product, version)
+	meta, err := r.upstream.GetReleaseMeta(req.Context(), product, version, req.URL.Query().Get("artifact_kind"))
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
@@ -805,6 +823,9 @@ func releaseMetaBody(meta *platformtypes.Release) map[string]interface{} {
 	}
 	body["product"] = meta.ProductName
 	body["size"] = meta.ArtifactSize
+	if len(meta.Manifest.ArtifactVariants) > 0 {
+		body["artifacts"] = meta.Manifest.ArtifactVariants
+	}
 	return body
 }
 
@@ -813,15 +834,40 @@ func releaseMetaBody(meta *platformtypes.Release) map[string]interface{} {
 func (r *Relay) ensureCached(
 	ctx context.Context,
 	product, version string,
+	kinds ...string,
 ) (*platformtypes.Release, string, error) {
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
 
-	meta, err := r.upstream.GetReleaseMeta(ctx, product, version)
+	meta, err := r.upstream.GetReleaseMeta(ctx, product, version, kinds...)
 	if err != nil {
 		return nil, "", fmt.Errorf("fetch release metadata: %w", err)
 	}
 
+	kind := ""
+	if len(kinds) > 0 {
+		kind = kinds[0]
+	}
+	if kind != "" {
+		if err := artifactprotocol.ValidateArtifacts(product, version, meta.Manifest.ArtifactVariants); err != nil {
+			return nil, "", err
+		}
+		found := false
+		for _, a := range meta.Manifest.ArtifactVariants {
+			if a.Kind == kind {
+				if err := artifactprotocol.Verify(r.publicKey, a); err != nil {
+					return nil, "", err
+				}
+				meta.Checksum = a.Checksum
+				meta.Signature = a.Signature
+				meta.ArtifactSize = a.Size
+				found = true
+			}
+		}
+		if !found {
+			return nil, "", fmt.Errorf("unknown artifact variant")
+		}
+	}
 	// The cascade's integrity guarantee: verify the origin signature before
 	// serving anything downstream.
 	if r.publicKey != nil {
@@ -833,12 +879,32 @@ func (r *Relay) ensureCached(
 	}
 
 	fileName := fmt.Sprintf("%s-%s.artifact", product, version)
+	if kind != "" {
+		fileName = fmt.Sprintf("%s-%s-%s-%s.artifact", product, version, kind, meta.Checksum)
+	}
 	cachePath := filepath.Join(r.config.Relay.CacheDir, safeFileName(fileName))
 	if info, err := os.Stat(cachePath); err == nil && info.Size() > 0 {
-		return meta, cachePath, nil
+		if kind == "" {
+			return meta, cachePath, nil
+		}
+		f, err := os.Open(cachePath)
+		if err == nil {
+			h := sha256.New()
+			_, copyErr := io.Copy(h, f)
+			f.Close()
+			if copyErr == nil && info.Size() == meta.ArtifactSize && hex.EncodeToString(h.Sum(nil)) == meta.Checksum {
+				return meta, cachePath, nil
+			}
+		}
+		if err := os.Remove(cachePath); err != nil {
+			return nil, "", err
+		}
 	}
 
 	downloadURL := fmt.Sprintf("/api/v1/releases/%s/%s/download", product, version)
+	if kind != "" {
+		downloadURL += "?artifact_kind=" + kind
+	}
 	result, err := r.upstream.DownloadArtifact(
 		ctx,
 		downloadURL,

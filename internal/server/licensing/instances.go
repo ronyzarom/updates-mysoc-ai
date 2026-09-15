@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/catalog"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
@@ -72,7 +71,7 @@ const (
 	selectInstanceListCols = `id, instance_id, instance_type, hostname, display_name, license_id, 
 		api_key_hash, last_heartbeat, ` + derivedStatusCol + `, auto_update_enabled, update_group, 
 		last_ip_address, product_tier, parent_instance_id, customer_id, customer_name,
-		reported_via, reported_at, created_at, updated_at`
+		reported_via, reported_at, created_at, updated_at, CASE WHEN last_heartbeat_data->'last_update_attempt'->>'selected_artifact_kind' IN ('bootstrap','update') THEN last_heartbeat_data->'last_update_attempt' ELSE NULL END`
 )
 
 // InstanceRepository handles instance database operations
@@ -163,6 +162,9 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 		var heartbeat types.Heartbeat
 		if err := json.Unmarshal(lastHeartbeatData, &heartbeat); err == nil {
 			instance.LastHeartbeatData = &heartbeat
+			if heartbeat.LastUpdateAttempt != nil && heartbeat.LastUpdateAttempt.SelectedArtifactKind != "" {
+				instance.LastArtifactDelivery = heartbeat.LastUpdateAttempt
+			}
 		}
 	}
 
@@ -172,6 +174,7 @@ func (r *InstanceRepository) scanInstanceFull(row rowScanner) (*types.Instance, 
 // scanInstanceList scans a row without heartbeat JSON (lighter for list views)
 func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, error) {
 	var instance types.Instance
+	var delivery []byte
 	var licenseID, displayName, updateGroup, lastIPAddress *string
 	var autoUpdateEnabled *bool
 	var productTier, parentInstanceID *string
@@ -182,12 +185,19 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 		&licenseID, &instance.APIKeyHash, &instance.LastHeartbeat,
 		&instance.Status, &autoUpdateEnabled, &updateGroup,
 		&lastIPAddress, &productTier, &parentInstanceID, &customerID, &customerName,
-		&reportedVia, &instance.ReportedAt, &instance.CreatedAt, &instance.UpdatedAt,
+		&reportedVia, &instance.ReportedAt, &instance.CreatedAt, &instance.UpdatedAt, &delivery,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	if len(delivery) > 0 {
+		var attempt types.UpdateAttempt
+		if err := json.Unmarshal(delivery, &attempt); err != nil {
+			return nil, err
+		}
+		instance.LastArtifactDelivery = &attempt
+	}
 	// Handle nullable fields
 	if licenseID != nil {
 		instance.LicenseID = *licenseID
@@ -1268,14 +1278,9 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 		parentInstanceIDPtr = &parent
 	}
 
-	// Cascade children default to auto-update OFF: real product installs on a
-	// freshly enrolled child must be an explicit operator decision, not a side
-	// effect of enrollment. (Updater self-update is exempt from the toggle and
-	// stays on.) A child is anything that declares a parent — or whose tier
-	// structurally requires one (siemcore, swf), because a first-contact check
-	// may legitimately omit parent_instance_id (orphan enrollment racing ahead
-	// of the relay rollup) and must not get wider authorization for it.
-	autoUpdate := parentInstanceIDPtr == nil && !catalog.RequiresParent(heartbeat.ProductTier)
+	// New enrollments update automatically. This value applies ONLY on INSERT;
+	// ON CONFLICT deliberately preserves explicit maintenance/safety holds.
+	autoUpdate := true
 
 	_, err = r.db.Pool.Exec(ctx, `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
@@ -1337,7 +1342,7 @@ const upsertReportedNodeSQL = `
 	                       last_update_error, last_update_at, last_ip_address, last_ip_seen_at,
 	                       auto_update_enabled, created_at, updated_at)
 	VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-	        CASE WHEN $20::text IS NULL THEN NULL ELSE $14::timestamptz END, FALSE, $14, $14)
+	        CASE WHEN $20::text IS NULL THEN NULL ELSE $14::timestamptz END, TRUE, $14, $14)
 	ON CONFLICT (instance_id) DO UPDATE SET
 		hostname = COALESCE(NULLIF(EXCLUDED.hostname, ''), instances.hostname),
 		license_id = COALESCE(instances.license_id, EXCLUDED.license_id),

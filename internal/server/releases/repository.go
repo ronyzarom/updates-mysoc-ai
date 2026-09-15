@@ -52,7 +52,11 @@ func (r *Repository) Create(ctx context.Context, release *types.Release) error {
 }
 
 // GetByProductVersion retrieves a release by product and version
-func (r *Repository) GetByProductVersion(ctx context.Context, product, version string) (*types.Release, error) {
+func (r *Repository) GetByProductVersion(ctx context.Context, product, version string, kinds ...string) (*types.Release, error) {
+	kind := ""
+	if len(kinds) > 0 {
+		kind = kinds[0]
+	}
 	var release types.Release
 	var manifestJSON []byte
 
@@ -60,7 +64,10 @@ func (r *Repository) GetByProductVersion(ctx context.Context, product, version s
 		SELECT id, product_name, version, channel, manifest, artifact_path, artifact_size, checksum, signature, release_notes, min_updater_version, target_groups, released_at, created_at
 		FROM releases
 		WHERE product_name = $1 AND version = $2
-	`, product, version).Scan(
+          AND (COALESCE(manifest->>'artifact_kind','') = $3 OR COALESCE(manifest->>'artifact_kind','') = '')
+        ORDER BY (COALESCE(manifest->>'artifact_kind','') = $3) DESC
+        LIMIT 1
+	`, product, version, kind).Scan(
 		&release.ID, &release.ProductName, &release.Version, &release.Channel, &manifestJSON,
 		&release.ArtifactPath, &release.ArtifactSize, &release.Checksum, &release.Signature,
 		&release.ReleaseNotes, &release.MinUpdaterVersion, &release.TargetGroups, &release.ReleasedAt, &release.CreatedAt)

@@ -166,6 +166,12 @@ export function InstancesList({ tier, status, search, sort, dir }: InstancesList
                           })}
                         </span>
                       )}
+                      {instance.last_artifact_delivery?.selected_artifact_kind && (
+                        <span className="text-xs text-slate-300" title={instance.last_artifact_delivery.artifact_digest}>
+                          {instance.last_artifact_delivery.selected_artifact_kind}
+                          {" · "}{instance.last_artifact_delivery.dependency_validation || "Not reported"}
+                        </span>
+                      )}
                       <StatusBadge status={instance.status} />
                     </div>
                   </Link>

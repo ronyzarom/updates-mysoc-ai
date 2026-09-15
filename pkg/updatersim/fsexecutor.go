@@ -83,10 +83,12 @@ var versionDirPattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 // releaseMetadata is written alongside each installed version for auditing and
 // for Validate to confirm the expected version is live.
 type releaseMetadata struct {
-	Product     string    `json:"product"`
-	Version     string    `json:"version"`
-	SHA256      string    `json:"sha256"`
-	InstalledAt time.Time `json:"installed_at"`
+	ArtifactKind         string    `json:"artifact_kind,omitempty"`
+	DependencyValidation string    `json:"dependency_validation,omitempty"`
+	Product              string    `json:"product"`
+	Version              string    `json:"version"`
+	SHA256               string    `json:"sha256"`
+	InstalledAt          time.Time `json:"installed_at"`
 }
 
 func (e *FilesystemExecutor) productRoot(product string) string {
@@ -128,6 +130,7 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 	}
 
 	meta := releaseMetadata{
+		ArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation,
 		Product:     update.Product,
 		Version:     update.ToVersion,
 		SHA256:      update.ArtifactSHA256,
@@ -313,6 +316,9 @@ func (e *FilesystemExecutor) runCommand(ctx context.Context, kind, phase string,
 		"CURRENT_DIR="+e.currentLink(update.Product),
 		"INSTALL_ROOT="+e.InstallRoot,
 		"UPDATER_PHASE="+phase,
+		"ARTIFACT_KIND="+update.SelectedArtifactKind,
+		"DEPENDENCY_VALIDATION="+update.DependencyValidation,
+		"ARTIFACT_SHA256="+update.ArtifactSHA256,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

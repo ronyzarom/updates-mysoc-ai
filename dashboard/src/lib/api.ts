@@ -24,6 +24,7 @@ export interface Instance {
   update_group: string;
   last_heartbeat?: string;
   last_heartbeat_data?: HeartbeatData;
+  last_artifact_delivery?: UpdateAttempt;
   // IP address tracking
   last_ip_address?: string;
   last_ip_seen_at?: string;
@@ -67,6 +68,11 @@ export interface CreatedApiKey {
 }
 
 export interface UpdateAttempt {
+  selected_artifact_kind?: "bootstrap" | "update";
+    artifact_variants?: string;
+    update_artifact?: File;
+  dependency_validation?: "complete" | "missing" | "mismatch";
+  artifact_digest?: string;
   from_version: string;
   target_version: string;
   success: boolean;
@@ -377,6 +383,7 @@ export interface License {
 }
 
 export interface Release {
+  manifest?: { artifact_kind?: "bootstrap" | "update"; artifact_variants?: Array<{ kind: "bootstrap" | "update"; size: number; checksum: string; signature?: string }> };
   id: string;
   product_name: string;
   version: string;
@@ -939,6 +946,10 @@ class ApiClient {
     release_notes?: string;
     target_groups?: string[];
     artifact: File;
+    artifact_kind?: "bootstrap" | "update";
+    artifact_metadata?: string;
+    artifact_variants?: string;
+    update_artifact?: File;
   }): Promise<Release> {
     const formData = new FormData();
     formData.append("product", data.product);
@@ -951,6 +962,14 @@ class ApiClient {
       formData.append("target_groups", data.target_groups.join(","));
     }
     formData.append("artifact", data.artifact);
+    if (data.artifact_metadata) formData.append("artifact_metadata", data.artifact_metadata);
+    if (data.artifact_kind) formData.append("artifact_kind", data.artifact_kind);
+    if (data.artifact_variants && data.update_artifact) {
+      formData.delete("artifact");
+      formData.append("bootstrap", data.artifact);
+      formData.append("update", data.update_artifact);
+      formData.append("artifact_variants", data.artifact_variants);
+    }
 
     // Route through the shared request path so uploads get the same auth,
     // single-flight refresh, and error handling as every other call.
@@ -964,13 +983,13 @@ class ApiClient {
     );
   }
 
-  async deleteRelease(product: string, version: string): Promise<void> {
-    await this.fetch(`/api/v1/releases/${product}/${version}`, { method: "DELETE" }, true);
+  async deleteRelease(product: string, version: string, kind?: string): Promise<void> {
+    await this.fetch(`/api/v1/releases/${product}/${version}${kind ? `?artifact_kind=${kind}` : ""}`, { method: "DELETE" }, true);
   }
 
-  async updateRelease(product: string, version: string, data: { release_notes?: string; target_groups?: string[] }): Promise<void> {
+  async updateRelease(product: string, version: string, data: { release_notes?: string; target_groups?: string[]; artifact_kind?: string }): Promise<void> {
     await this.fetch(
-      `/api/v1/releases/${product}/${version}`,
+      `/api/v1/releases/${product}/${version}${data.artifact_kind ? `?artifact_kind=${data.artifact_kind}` : ""}`,
       {
         method: "PUT",
         body: JSON.stringify(data),

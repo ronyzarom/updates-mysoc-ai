@@ -2,6 +2,8 @@ package update
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -187,7 +189,7 @@ func (u *Updater) ApplyUpdate(productName string, releaseInfo *types.ReleaseInfo
 	downloadURL := u.config.Server.URL + releaseInfo.DownloadURL
 	tempPath := filepath.Join(tempDir, productName+"-"+releaseInfo.LatestVersion)
 
-	if err := u.downloadFile(downloadURL, tempPath); err != nil {
+	if err := u.downloadFile(downloadURL, tempPath, releaseInfo.Checksum); err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
 
@@ -250,7 +252,7 @@ func (u *Updater) getCurrentVersion(productName string) string {
 	return strings.TrimSpace(string(data))
 }
 
-func (u *Updater) downloadFile(url, destPath string) error {
+func (u *Updater) downloadFile(url, destPath, expectedChecksum string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
@@ -279,14 +281,21 @@ func (u *Updater) downloadFile(url, destPath string) error {
 	defer file.Close()
 
 	buf := make([]byte, 32*1024)
+	h := sha256.New()
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
-			file.Write(buf[:n])
+			if _, werr := file.Write(buf[:n]); werr != nil {
+				return werr
+			}
+			h.Write(buf[:n])
 		}
 		if err != nil {
 			break
 		}
+	}
+	if expectedChecksum != "" && hex.EncodeToString(h.Sum(nil)) != strings.TrimPrefix(strings.ToLower(expectedChecksum), "sha256:") {
+		return fmt.Errorf("artifact checksum mismatch")
 	}
 
 	return nil

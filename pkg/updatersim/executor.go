@@ -7,14 +7,16 @@ import (
 
 // Update describes verified work passed to a product-specific executor.
 type Update struct {
-	Product        string
-	FromVersion    string
-	ToVersion      string
-	Channel        string
-	UpdateGroup    string
-	ReleaseNotes   string
-	ArtifactPath   string
-	ArtifactSHA256 string
+	SelectedArtifactKind string
+	DependencyValidation string
+	Product              string
+	FromVersion          string
+	ToVersion            string
+	Channel              string
+	UpdateGroup          string
+	ReleaseNotes         string
+	ArtifactPath         string
+	ArtifactSHA256       string
 }
 
 // Executor is the integration seam for a real SiemCore or SWF updater.

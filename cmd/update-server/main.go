@@ -62,10 +62,12 @@ func main() {
 	// SERVER_HOST participates in the bind address so production can listen
 	// on 127.0.0.1 only, behind the TLS-terminating proxy.
 	httpServer := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		Handler:      server.Router(),
-		ReadTimeout:  5 * time.Minute, // Allow 5 minutes for reading large uploads
-		WriteTimeout: 5 * time.Minute, // Allow 5 minutes for writing responses
+		Addr:        fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+		Handler:     server.Router(),
+		ReadTimeout: cfg.Server.UploadTimeout,
+		// Go's WriteTimeout starts at request handling time, so include the full
+		// upload budget plus a bounded response window.
+		WriteTimeout: cfg.Server.UploadTimeout + 2*time.Minute,
 		IdleTimeout:  2 * time.Minute,
 	}
 

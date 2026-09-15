@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, type Release } from "@/lib/api";
 import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle, Search, ShieldCheck, ShieldAlert } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui";
 import { RequireRole } from "@/lib/auth-context";
 
@@ -15,6 +15,9 @@ interface UploadFormData {
   release_notes: string;
   target_groups: string[];
   artifact: File | null;
+  artifact_kind: "bootstrap" | "update";
+  independent?: boolean;
+  variant_manifest?: string;
 }
 
 // Canonical cascade products. Every release flows updates server -> mysoc
@@ -39,6 +42,12 @@ export default function ReleasesPage() {
 
   const [filter, setFilter] = useState("");
   const [showUploadModal, setShowUploadModal] = useState(false);
+  useEffect(() => {
+    if (!showUploadModal) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [showUploadModal]);
   const [uploadForm, setUploadForm] = useState<UploadFormData>({
     product: "",
     version: "",
@@ -46,6 +55,8 @@ export default function ReleasesPage() {
     release_notes: "",
     target_groups: [...DEFAULT_TARGET_GROUPS],
     artifact: null,
+    artifact_kind: "bootstrap",
+    independent: true,
   });
   const [productChoice, setProductChoice] = useState<string>("");
   const [uploadError, setUploadError] = useState("");
@@ -53,13 +64,22 @@ export default function ReleasesPage() {
   const uploadMutation = useMutation({
     mutationFn: async (data: UploadFormData) => {
       if (!data.artifact) throw new Error("No file selected");
+      if (data.independent && !data.variant_manifest) throw new Error("Artifact metadata from the product build is required");
+      if (data.independent) {
+        const metadata = JSON.parse(data.variant_manifest!);
+        if (metadata.kind !== data.artifact_kind) {
+          throw new Error("Manifest kind must match the selected artifact type");
+        }
+      }
       return api.uploadRelease({
         product: data.product,
         version: data.version,
-        channel: data.channel,
+        channel: data.independent ? `dual-alpha-${data.product}` : data.channel,
         release_notes: data.release_notes || undefined,
-        target_groups: data.target_groups.length > 0 ? data.target_groups : undefined,
+        target_groups: data.independent ? ["alpha"] : data.target_groups.length > 0 ? data.target_groups : undefined,
         artifact: data.artifact,
+        artifact_kind: data.artifact_kind,
+        artifact_metadata: data.independent ? data.variant_manifest : undefined,
       });
     },
     onSuccess: () => {
@@ -72,6 +92,8 @@ export default function ReleasesPage() {
         release_notes: "",
         target_groups: [...DEFAULT_TARGET_GROUPS],
         artifact: null,
+        artifact_kind: "bootstrap",
+        independent: true,
       });
       setProductChoice("");
       setUploadError("");
@@ -82,8 +104,8 @@ export default function ReleasesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async ({ product, version }: { product: string; version: string }) => {
-      return api.deleteRelease(product, version);
+    mutationFn: async ({ product, version, kind }: { product: string; version: string; kind?: string }) => {
+      return api.deleteRelease(product, version, kind);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["releases"] });
@@ -94,10 +116,10 @@ export default function ReleasesPage() {
 
   // Delete confirmation modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ product: string; version: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ product: string; version: string; kind?: string } | null>(null);
 
-  const handleDeleteRelease = (product: string, version: string) => {
-    setDeleteTarget({ product, version });
+  const handleDeleteRelease = (product: string, version: string, kind?: string) => {
+    setDeleteTarget({ product, version, kind });
     setShowDeleteModal(true);
   };
 
@@ -114,14 +136,16 @@ export default function ReleasesPage() {
     version: "",
     release_notes: "",
     target_groups: [] as string[],
+    artifact_kind: "",
   });
   const [editError, setEditError] = useState("");
 
   const editMutation = useMutation({
-    mutationFn: async (data: { product: string; version: string; release_notes: string; target_groups: string[] }) => {
+    mutationFn: async (data: { product: string; version: string; release_notes: string; target_groups: string[]; artifact_kind?: string }) => {
       return api.updateRelease(data.product, data.version, {
         release_notes: data.release_notes,
         target_groups: data.target_groups,
+        artifact_kind: data.artifact_kind,
       });
     },
     onSuccess: () => {
@@ -134,12 +158,13 @@ export default function ReleasesPage() {
     },
   });
 
-  const handleEditRelease = (release: { product_name: string; version: string; release_notes?: string; target_groups?: string[] }) => {
+  const handleEditRelease = (release: { product_name: string; version: string; release_notes?: string; target_groups?: string[]; manifest?: Release["manifest"] }) => {
     setEditForm({
       product: release.product_name,
       version: release.version,
       release_notes: release.release_notes || "",
       target_groups: release.target_groups || [],
+      artifact_kind: release.manifest?.artifact_kind || "",
     });
     setEditError("");
     setShowEditModal(true);
@@ -264,6 +289,23 @@ export default function ReleasesPage() {
                   </span>
                 </div>
 
+                <div className="space-y-6">
+                {(["bootstrap", "update"] as const).map((kind) => {
+                  const rows = (productReleases || []).flatMap<{ release: Release; artifact?: NonNullable<NonNullable<Release["manifest"]>["artifact_variants"]>[number]; legacy: boolean }>((release) => {
+                    const variants = release.manifest?.artifact_variants;
+                    if (!variants?.length) return [{ release, artifact: undefined, legacy: true }];
+                    return variants.filter((artifact) => artifact.kind === kind)
+                      .map((artifact) => ({ release, artifact, legacy: false }));
+                  });
+                  return (
+                  <section key={kind} aria-label={`${product} ${kind === "bootstrap" ? "Bootstrap" : "Updates"}`} className="rounded-lg border border-slate-700 overflow-hidden">
+                    <div className="px-4 py-3 bg-slate-900/40 border-b border-slate-700">
+                      <h3 className="font-semibold text-white">{kind === "bootstrap" ? "Bootstrap" : "Updates"} <span className="text-sm font-normal text-slate-400">({rows.length})</span></h3>
+                      <p className="text-sm text-slate-400 mt-1">{kind === "bootstrap" ? "Fresh installations and hosts missing prerequisites." : "Existing installations with verified prerequisites."}</p>
+                    </div>
+                    {rows.length === 0 ? (
+                      <p className="px-4 py-6 text-sm text-slate-400">No {kind === "bootstrap" ? "bootstrap" : "update"} artifacts published.</p>
+                    ) : (
                 <div className="table-container">
                   <table className="table">
                     <thead>
@@ -279,12 +321,17 @@ export default function ReleasesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {productReleases?.map((release) => (
+                      {rows.map(({ release, artifact, legacy }) => (
                         <tr key={release.id}>
                           <td>
                             <code className="text-cyan-400 font-medium">
                               {release.version}
                             </code>
+                            {legacy && (
+                              <div className="text-xs text-slate-400 mt-1" title="The same legacy artifact serves both installation paths; no separate variant was published.">
+                                Legacy · shared artifact
+                              </div>
+                            )}
                           </td>
                           <td>
                             <span
@@ -322,7 +369,7 @@ export default function ReleasesPage() {
                             </div>
                           </td>
                           <td>
-                            {release.signature ? (
+                            {(artifact ? artifact.signature : release.signature) ? (
                               <span
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400"
                                 title="ed25519-signed at publish; every cascade hop verifies before install"
@@ -341,7 +388,7 @@ export default function ReleasesPage() {
                             )}
                           </td>
                           <td className="text-slate-300">
-                            {formatBytes(release.artifact_size)}
+                            {formatBytes(artifact?.size ?? release.artifact_size)}
                           </td>
                           <td className="text-slate-400">
                             {formatDistanceToNow(new Date(release.released_at), {
@@ -366,7 +413,7 @@ export default function ReleasesPage() {
                                   <Pencil className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteRelease(release.product_name, release.version)}
+                                  onClick={() => handleDeleteRelease(release.product_name, release.version, release.manifest?.artifact_kind)}
                                   disabled={deleteMutation.isPending}
                                   className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors disabled:opacity-50"
                                   title="Delete release"
@@ -381,6 +428,11 @@ export default function ReleasesPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                    )}
+                  </section>
+                  );
+                })}
                 </div>
               </div>
             ))}
@@ -430,11 +482,12 @@ export default function ReleasesPage() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">Upload Release</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div role="dialog" aria-modal="true" aria-labelledby="upload-release-title" className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between px-6 py-4 border-b border-slate-700">
+              <h2 id="upload-release-title" className="text-xl font-semibold text-white">Upload Release</h2>
               <button
+                aria-label="Close upload dialog"
                 onClick={() => {
                   setShowUploadModal(false);
                   setUploadError("");
@@ -445,12 +498,24 @@ export default function ReleasesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleUploadSubmit} className="space-y-4">
+            <form onSubmit={handleUploadSubmit} className="flex flex-col min-h-0">
+              <div className="min-h-0 overflow-y-auto overscroll-contain px-6 py-4 space-y-4 [color-scheme:dark] [scrollbar-width:thin]">
               {uploadError && (
                 <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
                   {uploadError}
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Delivery</label>
+                <select aria-label="Artifact type" value={uploadForm.independent ? uploadForm.artifact_kind : "legacy"} onChange={(e) => setUploadForm({ ...uploadForm, independent: e.target.value !== "legacy", artifact_kind: e.target.value === "update" ? "update" : "bootstrap", target_groups: ["alpha"] })} className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white">
+                  <option value="bootstrap">Bootstrap</option>
+                  <option value="update">Update</option>
+                  <option value="legacy">Legacy single artifact</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">Publish this artifact independently. It has its own version and prerequisites; no matching artifact is required.</p>
+
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -511,10 +576,12 @@ export default function ReleasesPage() {
                   Channel
                 </label>
                 <select
-                  value={uploadForm.channel}
+                  value={uploadForm.independent ? `dual-alpha-${uploadForm.product}` : uploadForm.channel}
+                  disabled={uploadForm.independent}
                   onChange={(e) => setUploadForm({ ...uploadForm, channel: e.target.value })}
                   className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 >
+                  {uploadForm.independent && <option value={`dual-alpha-${uploadForm.product}`}>Isolated alpha qualification</option>}
                   <option value="stable">Stable</option>
                   <option value="beta">Beta</option>
                   <option value="alpha">Alpha</option>
@@ -529,6 +596,7 @@ export default function ReleasesPage() {
                   {["alpha", "beta", "stable", "production"].map((group) => (
                     <button
                       key={group}
+                      disabled={uploadForm.independent}
                       type="button"
                       onClick={() => {
                         const groups = uploadForm.target_groups.includes(group)
@@ -573,7 +641,7 @@ export default function ReleasesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Artifact File *
+                  {uploadForm.independent ? (uploadForm.artifact_kind === "bootstrap" ? "Bootstrap artifact *" : "Update artifact *") : "Artifact file *"}
                 </label>
                 <input
                   ref={fileInputRef}
@@ -588,7 +656,7 @@ export default function ReleasesPage() {
                 >
                   <FileUp className="w-8 h-8" />
                   {uploadForm.artifact ? (
-                    <span className="text-cyan-400">
+                    <span className="text-cyan-400 break-all">
                       {uploadForm.artifact.name} ({formatBytes(uploadForm.artifact.size)})
                     </span>
                   ) : (
@@ -597,7 +665,12 @@ export default function ReleasesPage() {
                 </button>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
+                {uploadForm.independent && <label className="block text-sm text-slate-300">Artifact metadata (JSON from product build)
+                  <textarea required value={uploadForm.variant_manifest || ""} onChange={(e) => setUploadForm({ ...uploadForm, variant_manifest: e.target.value })} className="block w-full mt-2 p-2 rounded bg-slate-800 font-mono text-xs" rows={5} />
+                </label>}
+
+              </div>
+              <div className="flex shrink-0 justify-end gap-3 px-6 py-4 border-t border-slate-700 bg-slate-900">
                 <button
                   type="button"
                   onClick={() => {

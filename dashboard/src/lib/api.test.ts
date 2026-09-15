@@ -113,3 +113,40 @@ describe("multipart upload", () => {
     expect(bodies.every((b) => b instanceof FormData)).toBe(true);
   });
 });
+
+
+describe("paired artifact upload", () => {
+  it("sends both files in one release request", async () => {
+    api.setTokens("fixture-token", "fixture-refresh");
+    let body: FormData | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => {
+      body = init?.body as FormData;
+      return new Response(JSON.stringify({ id: "paired" }), { status: 201 });
+    }));
+    await api.uploadRelease({ product: "siemcore", version: "1.0.1", channel: "stable", target_groups: ["alpha"], artifact: new File(["boot"], "bootstrap.tgz"), update_artifact: new File(["thin"], "update.tgz"), artifact_variants: "[]" });
+    expect(body?.has("artifact")).toBe(false);
+    expect((body?.get("bootstrap") as File).name).toBe("bootstrap.tgz");
+    expect((body?.get("update") as File).name).toBe("update.tgz");
+    expect(body?.get("artifact_variants")).toBe("[]");
+  });
+});
+
+
+describe("independent artifact publication", () => {
+  it.each(["bootstrap", "update"])("uploads %s without a paired file", async (kind) => {
+    api.setTokens("fixture-token", "fixture-refresh");
+    let body: FormData | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => {
+      body = init?.body as FormData;
+      return new Response(JSON.stringify({ id: kind }), { status: 201 });
+    }));
+    const metadata = JSON.stringify({ kind, product: "mysoc", version: "2.0.0" });
+    await api.uploadRelease({ product: "mysoc", version: "2.0.0", channel: "dual-alpha-mysoc", target_groups: ["alpha"], artifact_kind: kind, artifact: new File([kind], `${kind}.tgz`), artifact_metadata: metadata });
+    expect((body?.get("artifact") as File).name).toBe(`${kind}.tgz`);
+    expect(body?.get("artifact_kind")).toBe(kind);
+    expect(body?.get("artifact_metadata")).toBe(metadata);
+    expect(body?.has("bootstrap")).toBe(false);
+    expect(body?.has("update")).toBe(false);
+    expect(body?.has("artifact_variants")).toBe(false);
+  });
+});

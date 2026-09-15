@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
 // Config holds all configuration for the update server
@@ -21,10 +22,12 @@ type AuthConfig struct {
 
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Port        int
-	Host        string
-	APIKey      string // Admin API key for management endpoints
-	CORSOrigins []string
+	DualArtifactAlpha         bool
+	DualArtifactChannelPrefix string
+	Port                      int
+	Host                      string
+	APIKey                    string // Admin API key for management endpoints
+	CORSOrigins               []string
 
 	// IPAllowlistEnforced gates the allowlist-only IP control on the updater
 	// data-plane channel (heartbeat, update check/report, artifact download).
@@ -36,6 +39,7 @@ type ServerConfig struct {
 	// releases at publish time. Empty disables signing (releases publish
 	// unsigned and verifying updaters will reject them).
 	SigningKeySeed string
+	UploadTimeout  time.Duration
 }
 
 // DatabaseConfig holds database connection configuration
@@ -62,12 +66,15 @@ type StorageConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:                getEnvInt("SERVER_PORT", 8080),
-			Host:                getEnv("SERVER_HOST", "0.0.0.0"),
-			APIKey:              getEnv("ADMIN_API_KEY", ""),
-			CORSOrigins:         []string{"*"},
-			IPAllowlistEnforced: getEnvBool("IP_ALLOWLIST_ENFORCED", false),
-			SigningKeySeed:      getEnv("RELEASE_SIGNING_SEED", ""),
+			Port:                      getEnvInt("SERVER_PORT", 8080),
+			Host:                      getEnv("SERVER_HOST", "0.0.0.0"),
+			APIKey:                    getEnv("ADMIN_API_KEY", ""),
+			CORSOrigins:               []string{"*"},
+			IPAllowlistEnforced:       getEnvBool("IP_ALLOWLIST_ENFORCED", false),
+			SigningKeySeed:            getEnv("RELEASE_SIGNING_SEED", ""),
+			DualArtifactChannelPrefix: getEnv("DUAL_ARTIFACT_CHANNEL_PREFIX", ""),
+			DualArtifactAlpha:         getEnv("DUAL_ARTIFACT_ALPHA", "false") == "true",
+			UploadTimeout:             getEnvDuration("SERVER_UPLOAD_TIMEOUT", 30*time.Minute),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -91,6 +98,15 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if d, err := time.ParseDuration(value); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultValue
 }
 
 func getEnv(key, defaultValue string) string {

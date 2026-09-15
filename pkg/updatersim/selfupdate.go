@@ -418,6 +418,14 @@ func (s *Simulator) verifyAndDownload(ctx context.Context, offer *UpdateOffer) (
 	if err != nil {
 		return nil, fmt.Errorf("download %s %s: %w", offer.Product, offer.LatestVersion, err)
 	}
+	if offer.SelectedArtifactKind != "" {
+		for _, a := range offer.Artifacts {
+			if a.Kind == offer.SelectedArtifactKind && result.Size != a.Size {
+				_ = os.Remove(result.Path)
+				return nil, fmt.Errorf("signed artifact size mismatch")
+			}
+		}
+	}
 	s.logger.Info(
 		"artifact downloaded and verified",
 		"product", offer.Product,

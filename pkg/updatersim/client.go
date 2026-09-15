@@ -69,30 +69,40 @@ type HeartbeatResponse struct {
 // and ParentInstanceID carry the self-reported product hierarchy; servers that
 // do not understand them ignore the extra fields.
 type UpdateCheckRequest struct {
-	InstanceID       string `json:"instance_id"`
-	CurrentVersion   string `json:"current_version"`
-	UpdaterVersion   string `json:"updater_version"`
-	OS               string `json:"os"`
-	Arch             string `json:"arch"`
-	Hostname         string `json:"hostname"`
-	Channel          string `json:"channel"`
-	ProductTier      string `json:"product_tier,omitempty"`
-	ParentInstanceID string `json:"parent_instance_id,omitempty"`
+	InstanceID         string                     `json:"instance_id"`
+	CurrentVersion     string                     `json:"current_version"`
+	UpdaterVersion     string                     `json:"updater_version"`
+	OS                 string                     `json:"os"`
+	Arch               string                     `json:"arch"`
+	Hostname           string                     `json:"hostname"`
+	Channel            string                     `json:"channel"`
+	ProductTier        string                     `json:"product_tier,omitempty"`
+	ParentInstanceID   string                     `json:"parent_instance_id,omitempty"`
+	Lifecycle          string                     `json:"lifecycle,omitempty"`
+	InstalledVersion   string                     `json:"installed_version,omitempty"`
+	CachedDependencies []platformtypes.Dependency `json:"cached_dependencies"`
+	ProtocolVersion    string                     `json:"protocol_version,omitempty"`
+	Capabilities       []string                   `json:"capabilities,omitempty"`
 }
 
 // UpdateCheckResponse is the current group-aware update-check response.
 type UpdateCheckResponse struct {
-	UpdateAvailable bool   `json:"update_available"`
-	CurrentVersion  string `json:"current_version,omitempty"`
-	LatestVersion   string `json:"latest_version,omitempty"`
-	DownloadURL     string `json:"download_url,omitempty"`
-	UpdateURL       string `json:"update_url,omitempty"`
-	SHA256          string `json:"sha256,omitempty"`
-	Signature       string `json:"signature,omitempty"` // base64 ed25519 release signature
-	ReleaseNotes    string `json:"release_notes,omitempty"`
-	Channel         string `json:"channel,omitempty"`
-	UpdateGroup     string `json:"update_group,omitempty"`
-	AutoUpdate      *bool  `json:"auto_update,omitempty"`
+	ProtocolVersion      string                     `json:"protocol_version,omitempty"`
+	UpdateAvailable      bool                       `json:"update_available"`
+	CurrentVersion       string                     `json:"current_version,omitempty"`
+	LatestVersion        string                     `json:"latest_version,omitempty"`
+	DownloadURL          string                     `json:"download_url,omitempty"`
+	UpdateURL            string                     `json:"update_url,omitempty"`
+	SHA256               string                     `json:"sha256,omitempty"`
+	Signature            string                     `json:"signature,omitempty"` // base64 ed25519 release signature
+	ReleaseNotes         string                     `json:"release_notes,omitempty"`
+	Channel              string                     `json:"channel,omitempty"`
+	UpdateGroup          string                     `json:"update_group,omitempty"`
+	AutoUpdate           *bool                      `json:"auto_update,omitempty"`
+	Artifacts            []platformtypes.Artifact   `json:"artifacts,omitempty"`
+	SelectedArtifactKind string                     `json:"selected_artifact_kind,omitempty"`
+	DependencyValidation string                     `json:"dependency_validation,omitempty"`
+	RequiredDependencies []platformtypes.Dependency `json:"required_dependencies,omitempty"`
 }
 
 // UpdateReportRequest is the current update-result request. Kind and Stage are
@@ -100,28 +110,36 @@ type UpdateCheckResponse struct {
 // updates from manifest reconciliation and record the stage a failure occurred
 // in. Servers that do not understand them ignore the extra fields.
 type UpdateReportRequest struct {
-	InstanceID  string `json:"instance_id"`
-	FromVersion string `json:"from_version"`
-	ToVersion   string `json:"to_version"`
-	Success     bool   `json:"success"`
-	Error       string `json:"error,omitempty"`
-	Kind        string `json:"kind,omitempty"`
-	Stage       string `json:"stage,omitempty"`
+	SelectedArtifactKind string `json:"selected_artifact_kind,omitempty"`
+	DependencyValidation string `json:"dependency_validation,omitempty"`
+	ArtifactDigest       string `json:"artifact_digest,omitempty"`
+	InstanceID           string `json:"instance_id"`
+	FromVersion          string `json:"from_version"`
+	ToVersion            string `json:"to_version"`
+	Success              bool   `json:"success"`
+	Error                string `json:"error,omitempty"`
+	Kind                 string `json:"kind,omitempty"`
+	Stage                string `json:"stage,omitempty"`
 }
 
 // UpdateOffer normalizes the current policy and legacy response formats.
 type UpdateOffer struct {
-	Product         string
-	CurrentVersion  string
-	LatestVersion   string
-	UpdateAvailable bool
-	DownloadURL     string
-	Checksum        string
-	Signature       string
-	ReleaseNotes    string
-	Channel         string
-	UpdateGroup     string
-	Source          string
+	ProtocolVersion      string
+	Product              string
+	CurrentVersion       string
+	LatestVersion        string
+	UpdateAvailable      bool
+	DownloadURL          string
+	Checksum             string
+	Signature            string
+	ReleaseNotes         string
+	Channel              string
+	UpdateGroup          string
+	Source               string
+	Artifacts            []platformtypes.Artifact
+	SelectedArtifactKind string
+	DependencyValidation string
+	RequiredDependencies []platformtypes.Dependency
 }
 
 // DownloadResult describes a verified artifact saved by the simulator.
@@ -218,11 +236,15 @@ func (c *Client) SetRelayToken(token string) {
 func (c *Client) GetReleaseMeta(
 	ctx context.Context,
 	product, version string,
+	kinds ...string,
 ) (*platformtypes.Release, error) {
 	if !productNamePattern.MatchString(product) {
 		return nil, fmt.Errorf("invalid product name %q", product)
 	}
 	path := "/api/v1/releases/" + url.PathEscape(product) + "/" + url.PathEscape(version)
+	if len(kinds) > 0 && kinds[0] != "" {
+		path += "?artifact_kind=" + url.QueryEscape(kinds[0])
+	}
 	var release platformtypes.Release
 	if err := c.doJSON(ctx, http.MethodGet, path, nil, &release); err != nil {
 		return nil, err
@@ -278,17 +300,22 @@ func (c *Client) CheckUpdate(
 		downloadURL = response.UpdateURL
 	}
 	return &UpdateOffer{
-		Product:         product,
-		CurrentVersion:  request.CurrentVersion,
-		LatestVersion:   response.LatestVersion,
-		UpdateAvailable: response.UpdateAvailable,
-		DownloadURL:     downloadURL,
-		Checksum:        normalizeChecksum(response.SHA256),
-		Signature:       response.Signature,
-		ReleaseNotes:    response.ReleaseNotes,
-		Channel:         response.Channel,
-		UpdateGroup:     response.UpdateGroup,
-		Source:          "policy",
+		Product:              product,
+		CurrentVersion:       request.CurrentVersion,
+		LatestVersion:        response.LatestVersion,
+		UpdateAvailable:      response.UpdateAvailable,
+		DownloadURL:          downloadURL,
+		Checksum:             normalizeChecksum(response.SHA256),
+		Signature:            response.Signature,
+		ReleaseNotes:         response.ReleaseNotes,
+		Channel:              response.Channel,
+		UpdateGroup:          response.UpdateGroup,
+		Artifacts:            response.Artifacts,
+		SelectedArtifactKind: response.SelectedArtifactKind,
+		ProtocolVersion:      response.ProtocolVersion,
+		DependencyValidation: response.DependencyValidation,
+		RequiredDependencies: response.RequiredDependencies,
+		Source:               "policy",
 	}, nil
 }
 

@@ -101,10 +101,14 @@ type CreateReleaseRequest struct {
 	Filename          string
 	FileSize          int64
 	File              io.Reader
+	ArtifactKind      string
 }
 
 // CreateRelease creates a new release
 func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (*types.Release, error) {
+	if req.ArtifactKind == "update" {
+		return nil, fmt.Errorf("update artifacts require artifact_metadata or paired artifact_variants")
+	}
 	// Calculate checksum while saving
 	hasher := sha256.New()
 	teeReader := io.TeeReader(req.File, hasher)
@@ -143,6 +147,7 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 					Name:     req.Filename,
 					Size:     req.FileSize,
 					Checksum: checksum,
+					Kind:     req.ArtifactKind,
 				},
 			},
 		},
@@ -158,8 +163,8 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 }
 
 // GetRelease retrieves a release by product and version
-func (s *Service) GetRelease(ctx context.Context, product, version string) (*types.Release, error) {
-	return s.repo.GetByProductVersion(ctx, product, version)
+func (s *Service) GetRelease(ctx context.Context, product, version string, kinds ...string) (*types.Release, error) {
+	return s.repo.GetByProductVersion(ctx, product, version, kinds...)
 }
 
 // findHighestVersion finds the release with the highest semantic version from a list
@@ -185,7 +190,13 @@ func (s *Service) GetLatestRelease(ctx context.Context, product, channel, curren
 		return nil, err
 	}
 
-	release := findHighestVersion(releases)
+	compatible := releases[:0]
+	for _, r := range releases {
+		if r.Manifest.ArtifactKind == "" {
+			compatible = append(compatible, r)
+		}
+	}
+	release := findHighestVersion(compatible)
 	if release == nil {
 		return nil, nil
 	}
@@ -204,7 +215,13 @@ func (s *Service) GetLatestReleaseForGroup(ctx context.Context, product, channel
 		return nil, err
 	}
 
-	release := findHighestVersion(releases)
+	compatible := releases[:0]
+	for _, r := range releases {
+		if r.Manifest.ArtifactKind == "" {
+			compatible = append(compatible, r)
+		}
+	}
+	release := findHighestVersion(compatible)
 	if release == nil {
 		return nil, nil
 	}
@@ -225,7 +242,13 @@ func (s *Service) HighestReleaseForGroup(ctx context.Context, product, channel, 
 	if err != nil {
 		return nil, err
 	}
-	return findHighestVersion(all), nil
+	legacy := all[:0]
+	for _, r := range all {
+		if r.Manifest.ArtifactKind == "" {
+			legacy = append(legacy, r)
+		}
+	}
+	return findHighestVersion(legacy), nil
 }
 
 // ReleaseInfoFor builds the check response for a (cached) release against the

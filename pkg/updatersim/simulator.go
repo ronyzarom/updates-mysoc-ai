@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/artifactprotocol"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
@@ -169,7 +170,7 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 	}
 
 	operatingSystem, architecture := s.platform()
-	offer, err := s.client.CheckUpdate(ctx, product.Name, UpdateCheckRequest{
+	request := UpdateCheckRequest{
 		InstanceID:       s.config.Instance.ID,
 		CurrentVersion:   product.CurrentVersion,
 		UpdaterVersion:   s.config.Instance.UpdaterVersion,
@@ -179,7 +180,20 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 		Channel:          product.Channel,
 		ProductTier:      s.config.Instance.ProductTier,
 		ParentInstanceID: s.config.Instance.ParentID,
-	})
+	}
+	if len(product.PrerequisiteVerifier) > 0 {
+		request.ProtocolVersion = artifactprotocol.Version
+		request.Capabilities = []string{artifactprotocol.Capability, artifactprotocol.IndependentCapability}
+		request.Lifecycle = "empty"
+		evidence, probeErr := s.prerequisiteEvidence(ctx, product.Name)
+		if probeErr != nil {
+			return nil, fmt.Errorf("prerequisite inspection: %w", probeErr)
+		}
+		request.Lifecycle = evidence.Lifecycle
+		request.InstalledVersion = evidence.InstalledVersion
+		request.CachedDependencies = evidence.Dependencies
+	}
+	offer, err := s.client.CheckUpdate(ctx, product.Name, request)
 	if err == nil {
 		return offer, nil
 	}
@@ -322,8 +336,14 @@ func (s *Simulator) processOffer(
 	// the artifact. In the cascade this is what prevents any intermediate hop
 	// from substituting a payload: the signature is minted only by the updates
 	// server.
+	if err := s.verifyDualOffer(ctx, offer); err != nil {
+		return s.recordDualFailure(offer, err)
+	}
 	result, err := s.verifyAndDownload(ctx, offer)
 	if err != nil {
+		if offer.SelectedArtifactKind != "" {
+			return s.recordDualFailure(offer, err)
+		}
 		return err
 	}
 	if mode == ModeDownload {
@@ -331,14 +351,15 @@ func (s *Simulator) processOffer(
 	}
 
 	update := Update{
-		Product:        offer.Product,
-		FromVersion:    offer.CurrentVersion,
-		ToVersion:      offer.LatestVersion,
-		Channel:        offer.Channel,
-		UpdateGroup:    offer.UpdateGroup,
-		ReleaseNotes:   offer.ReleaseNotes,
-		ArtifactPath:   result.Path,
-		ArtifactSHA256: result.Checksum,
+		Product:              offer.Product,
+		FromVersion:          offer.CurrentVersion,
+		ToVersion:            offer.LatestVersion,
+		Channel:              offer.Channel,
+		UpdateGroup:          offer.UpdateGroup,
+		ReleaseNotes:         offer.ReleaseNotes,
+		ArtifactPath:         result.Path,
+		ArtifactSHA256:       result.Checksum,
+		SelectedArtifactKind: offer.SelectedArtifactKind, DependencyValidation: offer.DependencyValidation,
 	}
 
 	// In real mode an install must actually happen. With no executor
@@ -350,6 +371,9 @@ func (s *Simulator) processOffer(
 			"no executor configured: refusing to report a successful install that did not happen (set simulation.executor: filesystem)"))
 	}
 
+	if err := s.verifyDualOffer(ctx, offer); err != nil {
+		return s.recordDualFailure(offer, err)
+	}
 	if err := s.executor.Apply(ctx, update); err != nil {
 		return s.failAndRollback(ctx, update, fmt.Errorf("apply: %w", err))
 	}
@@ -362,10 +386,11 @@ func (s *Simulator) processOffer(
 		return err
 	}
 	if err := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
-		InstanceID:  s.config.Instance.ID,
-		FromVersion: update.FromVersion,
-		ToVersion:   update.ToVersion,
-		Success:     true,
+		InstanceID:           s.config.Instance.ID,
+		FromVersion:          update.FromVersion,
+		ToVersion:            update.ToVersion,
+		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
+		Success: true,
 	}); err != nil {
 		return fmt.Errorf("report update: %w", err)
 	}
@@ -393,22 +418,24 @@ func (s *Simulator) failAndRollback(
 	s.recordAttempt(update, false, errorMessage)
 	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
 	reportErr := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
-		InstanceID:  s.config.Instance.ID,
-		FromVersion: update.FromVersion,
-		ToVersion:   update.ToVersion,
-		Success:     false,
-		Error:       errorMessage,
+		InstanceID:           s.config.Instance.ID,
+		FromVersion:          update.FromVersion,
+		ToVersion:            update.ToVersion,
+		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
+		Success: false,
+		Error:   errorMessage,
 	})
 	return errors.Join(updateErr, rollbackErr, stateErr, reportErr)
 }
 
 func (s *Simulator) recordAttempt(update Update, success bool, message string) {
 	attempt := &platformtypes.UpdateAttempt{
-		FromVersion:   update.FromVersion,
-		TargetVersion: update.ToVersion,
-		Success:       success,
-		Error:         message,
-		Timestamp:     time.Now().UTC(),
+		FromVersion:          update.FromVersion,
+		TargetVersion:        update.ToVersion,
+		Success:              success,
+		Error:                message,
+		Timestamp:            time.Now().UTC(),
+		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
 	}
 	s.state.LastUpdateAttempt = attempt
 	if success {

@@ -1,0 +1,189 @@
+{
+  "check_method": "POST",
+  "check_path": "/api/v1/updates/swf/check",
+  "description": "TEST ONLY: zero-seed Ed25519 key. Payloads are literal ASCII fixture-bootstrap and fixture-update; not real product archives. Never trust this key in production.",
+  "empty_check_request": {
+    "arch": "amd64",
+    "cached_dependencies": [],
+    "capabilities": [
+      "verified-dependencies-v1",
+      "independent-artifacts-v1"
+    ],
+    "channel": "dual-alpha-swf",
+    "current_version": "",
+    "hostname": "fixture-swf",
+    "installed_version": "",
+    "instance_id": "fixture-swf",
+    "lifecycle": "empty",
+    "os": "windows",
+    "parent_instance_id": "fixture-siemcore",
+    "product_tier": "swf",
+    "protocol_version": "dual-artifact-v1",
+    "updater_version": "1.16.1.14"
+  },
+  "independent_bootstrap_response": {
+    "artifacts": [
+      {
+        "product": "swf",
+        "version": "2.3.0.1",
+        "metadata_signature": "eRquvr6CfoY81RYgE+aMqj8HKC6XgNtpAdPT0b8X8KD+1BsXRlSzXNlYghQGX2MOui1XzC3LF7sQvazu+anZBQ==",
+        "name": "swf-bootstrap.zip",
+        "arch": "windows/amd64",
+        "size": 17,
+        "checksum": "d6603c9915d0425a2ae0d8bff4605717d1d3327eb4f7072f94c51a16d053a7d2",
+        "kind": "bootstrap",
+        "url": "/api/v1/releases/swf/2.3.0.1/download?artifact_kind=bootstrap",
+        "signature": "WcCEgVvdwBHzCmLSUy1cf+3iw1j3faNKWvYq7NNs20+MCN3xXN23Jw3anAFJCvPyiQT+1E1Qgc2FaHsGu7X3Dw==",
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "channel": "dual-alpha-swf",
+    "dependency_validation": "missing",
+    "download_url": "https://updates.example.invalid/api/v1/releases/swf/2.3.0.1/download?artifact_kind=bootstrap",
+    "latest_version": "2.3.0.1",
+    "protocol_version": "dual-artifact-v1",
+    "release_notes": "fixture only",
+    "required_dependencies": null,
+    "selected_artifact_kind": "bootstrap",
+    "sha256": "d6603c9915d0425a2ae0d8bff4605717d1d3327eb4f7072f94c51a16d053a7d2",
+    "signature": "WcCEgVvdwBHzCmLSUy1cf+3iw1j3faNKWvYq7NNs20+MCN3xXN23Jw3anAFJCvPyiQT+1E1Qgc2FaHsGu7X3Dw==",
+    "update_available": true,
+    "update_group": "alpha",
+    "update_url": "https://updates.example.invalid/api/v1/releases/swf/2.3.0.1/download?artifact_kind=bootstrap"
+  },
+  "independent_update_response": {
+    "artifacts": [
+      {
+        "product": "swf",
+        "version": "2.3.0.1",
+        "metadata_signature": "Im+hKkvupd0aPdfqQWXpnmE/wJRX9FXk9a+R80SGsBsPKx1SJqxw/K7m1orh+jQWsuyWlWBJ6RVTLS8OO3XvBw==",
+        "name": "swf-update.zip",
+        "arch": "windows/amd64",
+        "size": 14,
+        "checksum": "ff9bdc1ae7ac856bcefa3560c568fb3ea63f200bd50f3ec352cd9005ed7c787e",
+        "kind": "update",
+        "url": "/api/v1/releases/swf/2.3.0.1/download?artifact_kind=update",
+        "signature": "y0E8ibEr1ks/SuZY6nK9I3MhQ/a3+UaFI1LP9UdaPi6QwF4UNN2O2Ro5pInW0w2JyjeU2iS0XShjfxS23rXnDA==",
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "required_dependencies": [
+          {
+            "reference": "fixture-runtime",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "capabilities": [
+              "runtime-v1"
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "dual-alpha-swf",
+    "dependency_validation": "complete",
+    "download_url": "https://updates.example.invalid/api/v1/releases/swf/2.3.0.1/download?artifact_kind=update",
+    "latest_version": "2.3.0.1",
+    "protocol_version": "dual-artifact-v1",
+    "release_notes": "fixture only",
+    "required_dependencies": [
+      {
+        "reference": "fixture-runtime",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "capabilities": [
+          "runtime-v1"
+        ]
+      }
+    ],
+    "selected_artifact_kind": "update",
+    "sha256": "ff9bdc1ae7ac856bcefa3560c568fb3ea63f200bd50f3ec352cd9005ed7c787e",
+    "signature": "y0E8ibEr1ks/SuZY6nK9I3MhQ/a3+UaFI1LP9UdaPi6QwF4UNN2O2Ro5pInW0w2JyjeU2iS0XShjfxS23rXnDA==",
+    "update_available": true,
+    "update_group": "alpha",
+    "update_url": "https://updates.example.invalid/api/v1/releases/swf/2.3.0.1/download?artifact_kind=update"
+  },
+  "installed_check_request": {
+    "arch": "amd64",
+    "cached_dependencies": [
+      {
+        "reference": "fixture-runtime",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "capabilities": [
+          "runtime-v1"
+        ]
+      }
+    ],
+    "capabilities": [
+      "verified-dependencies-v1",
+      "independent-artifacts-v1"
+    ],
+    "channel": "dual-alpha-swf",
+    "current_version": "2.3.0.0",
+    "hostname": "fixture-swf",
+    "installed_version": "2.3.0.0",
+    "instance_id": "fixture-swf",
+    "lifecycle": "installed",
+    "os": "windows",
+    "parent_instance_id": "fixture-siemcore",
+    "product_tier": "swf",
+    "protocol_version": "dual-artifact-v1",
+    "updater_version": "1.16.1.14"
+  },
+  "paired_update_response": {
+    "artifacts": [
+      {
+        "product": "swf",
+        "version": "2.3.0.1",
+        "metadata_signature": "eRquvr6CfoY81RYgE+aMqj8HKC6XgNtpAdPT0b8X8KD+1BsXRlSzXNlYghQGX2MOui1XzC3LF7sQvazu+anZBQ==",
+        "name": "swf-bootstrap.zip",
+        "arch": "windows/amd64",
+        "size": 17,
+        "checksum": "d6603c9915d0425a2ae0d8bff4605717d1d3327eb4f7072f94c51a16d053a7d2",
+        "kind": "bootstrap",
+        "url": "/api/v1/releases/swf/2.3.0.1/download?artifact_kind=bootstrap",
+        "signature": "WcCEgVvdwBHzCmLSUy1cf+3iw1j3faNKWvYq7NNs20+MCN3xXN23Jw3anAFJCvPyiQT+1E1Qgc2FaHsGu7X3Dw==",
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "product": "swf",
+        "version": "2.3.0.1",
+        "metadata_signature": "Im+hKkvupd0aPdfqQWXpnmE/wJRX9FXk9a+R80SGsBsPKx1SJqxw/K7m1orh+jQWsuyWlWBJ6RVTLS8OO3XvBw==",
+        "name": "swf-update.zip",
+        "arch": "windows/amd64",
+        "size": 14,
+        "checksum": "ff9bdc1ae7ac856bcefa3560c568fb3ea63f200bd50f3ec352cd9005ed7c787e",
+        "kind": "update",
+        "url": "/api/v1/releases/swf/2.3.0.1/download?artifact_kind=update",
+        "signature": "y0E8ibEr1ks/SuZY6nK9I3MhQ/a3+UaFI1LP9UdaPi6QwF4UNN2O2Ro5pInW0w2JyjeU2iS0XShjfxS23rXnDA==",
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "required_dependencies": [
+          {
+            "reference": "fixture-runtime",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "capabilities": [
+              "runtime-v1"
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "dual-alpha-swf",
+    "dependency_validation": "complete",
+    "download_url": "https://updates.example.invalid/api/v1/releases/swf/2.3.0.1/download?artifact_kind=update",
+    "latest_version": "2.3.0.1",
+    "protocol_version": "dual-artifact-v1",
+    "release_notes": "fixture only",
+    "required_dependencies": [
+      {
+        "reference": "fixture-runtime",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "capabilities": [
+          "runtime-v1"
+        ]
+      }
+    ],
+    "selected_artifact_kind": "update",
+    "sha256": "ff9bdc1ae7ac856bcefa3560c568fb3ea63f200bd50f3ec352cd9005ed7c787e",
+    "signature": "y0E8ibEr1ks/SuZY6nK9I3MhQ/a3+UaFI1LP9UdaPi6QwF4UNN2O2Ro5pInW0w2JyjeU2iS0XShjfxS23rXnDA==",
+    "update_available": true,
+    "update_group": "alpha",
+    "update_url": "https://updates.example.invalid/api/v1/releases/swf/2.3.0.1/download?artifact_kind=update"
+  },
+  "public_key": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29"
+}

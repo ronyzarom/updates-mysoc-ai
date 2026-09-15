@@ -238,3 +238,36 @@ func TestFilesystemExecutorRawArtifactCopiedAsFile(t *testing.T) {
 		t.Fatalf("installed raw file = %q", string(got))
 	}
 }
+
+func TestDualFilesystemExecutionAndRetainedRollback(t *testing.T) {
+	root := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "executor-status")
+	hook := filepath.Join(t.TempDir(), "apply.sh")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nprintf '%s %s %s' \"$ARTIFACT_KIND\" \"$DEPENDENCY_VALIDATION\" \"$UPDATER_PHASE\" > \""+logPath+"\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	executor := NewFilesystemExecutor(FilesystemConfig{InstallRoot: root, RestartCommand: []string{hook}}, discardLogger())
+	baseline := filepath.Join(t.TempDir(), "baseline.tgz")
+	makeTarGz(t, baseline, map[string]string{"app": "retained baseline"})
+	before := Update{Product: "siemcore", ToVersion: "1.0.0", ArtifactPath: baseline, SelectedArtifactKind: "bootstrap", DependencyValidation: "missing"}
+	if err := executor.Apply(context.Background(), before); err != nil {
+		t.Fatal(err)
+	}
+	thin := filepath.Join(t.TempDir(), "update.tgz")
+	makeTarGz(t, thin, map[string]string{"app": "thin update"})
+	update := Update{Product: "siemcore", FromVersion: "1.0.0", ToVersion: "1.0.1", ArtifactPath: thin, SelectedArtifactKind: "update", DependencyValidation: "complete"}
+	if err := executor.Apply(context.Background(), update); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil || string(data) != "update complete apply" {
+		t.Fatalf("executor contract missing: %s %v", data, err)
+	}
+	if err := executor.Rollback(context.Background(), update); err != nil {
+		t.Fatal(err)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "siemcore", "current", "app"))
+	if err != nil || string(data) != "retained baseline" {
+		t.Fatalf("local rollback failed: %s %v", data, err)
+	}
+}

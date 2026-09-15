@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/catalog"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/releases"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/artifactprotocol"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
 
@@ -177,12 +180,16 @@ func (s *Server) handleListReleases(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 	// Check admin auth via middleware already
 
-	// Parse multipart form (max 500MB)
-	if err := r.ParseMultipartForm(500 << 20); err != nil {
+	// Enforce the artifact size cap while streaming the request body. The
+	// ParseMultipartForm memory limit alone does not cap total request bytes.
+	r.Body = http.MaxBytesReader(w, r.Body, 500<<20)
+	// Spill large uploads to temporary disk; retain the total request cap.
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "failed to parse form")
 		return
 	}
 
+	defer r.MultipartForm.RemoveAll()
 	productName := r.FormValue("product")
 	version := r.FormValue("version")
 	channel := r.FormValue("channel")
@@ -190,6 +197,11 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 		channel = "stable"
 	}
 	releaseNotes := r.FormValue("release_notes")
+	artifactKind := r.FormValue("artifact_kind")
+	if artifactKind != "" && artifactKind != "bootstrap" && artifactKind != "update" {
+		writeError(w, http.StatusBadRequest, "artifact_kind must be bootstrap or update")
+		return
+	}
 
 	// Parse target groups (comma-separated or multiple form values)
 	var targetGroups []string
@@ -227,6 +239,104 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Independent publication uses one file and its signed identity/dependency metadata.
+	if metadata := r.FormValue("artifact_metadata"); metadata != "" {
+		if !s.config.Server.DualArtifactAlpha {
+			writeError(w, 409, "artifact publication is not enabled")
+			return
+		}
+		if prefix := s.config.Server.DualArtifactChannelPrefix; prefix != "" && channel != prefix+productName {
+			writeError(w, 400, "artifact qualification requires channel "+prefix+productName)
+			return
+		}
+		if len(targetGroups) != 1 || targetGroups[0] != "alpha" {
+			writeError(w, 400, "artifact qualification requires alpha only")
+			return
+		}
+		var a types.Artifact
+		dec := json.NewDecoder(strings.NewReader(metadata))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&a) != nil || dec.Decode(new(any)) != io.EOF {
+			writeError(w, 400, "invalid artifact_metadata")
+			return
+		}
+		if a.Kind != artifactKind || (artifactKind != "bootstrap" && artifactKind != "update") {
+			writeError(w, 400, "artifact kind mismatch")
+			return
+		}
+		if err := artifactprotocol.ValidateArtifacts(productName, version, []types.Artifact{a}); err != nil {
+			writeError(w, 400, err.Error())
+			return
+		}
+		f, h, err := r.FormFile("artifact")
+		if err != nil {
+			writeError(w, 400, "artifact file required")
+			return
+		}
+		defer f.Close()
+		if h.Filename != a.Name || h.Size != a.Size {
+			writeError(w, 400, "artifact filename/size mismatch")
+			return
+		}
+		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{ProductName: productName, Version: version, Channel: channel, TargetGroups: targetGroups, ReleaseNotes: releaseNotes, ArtifactKind: artifactKind}, []releases.VariantUpload{{Artifact: a, File: f}})
+		if err != nil {
+			writeError(w, 400, err.Error())
+			return
+		}
+		writeJSON(w, 201, release)
+		return
+	}
+
+	if metadata := r.FormValue("artifact_variants"); metadata != "" {
+		if !s.config.Server.DualArtifactAlpha {
+			writeError(w, http.StatusConflict, "dual artifacts are not enabled")
+			return
+		}
+		if prefix := s.config.Server.DualArtifactChannelPrefix; prefix != "" && channel != prefix+productName {
+			writeError(w, http.StatusBadRequest, "dual artifact qualification requires channel "+prefix+productName)
+			return
+		}
+		var variants []types.Artifact
+		decoder := json.NewDecoder(strings.NewReader(metadata))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&variants); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid artifact_variants metadata")
+			return
+		}
+		if decoder.Decode(new(any)) != io.EOF {
+			writeError(w, http.StatusBadRequest, "trailing artifact metadata")
+			return
+		}
+		if len(targetGroups) != 1 || targetGroups[0] != "alpha" {
+			writeError(w, http.StatusBadRequest, "dual artifact publication currently requires alpha only")
+			return
+		}
+		if err := artifactprotocol.ValidatePair(productName, version, variants); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		uploads := make([]releases.VariantUpload, 0, 2)
+		for _, variant := range variants {
+			f, h, err := r.FormFile(variant.Kind)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "both bootstrap and update files required")
+				return
+			}
+			defer f.Close()
+			if h.Filename != variant.Name || h.Size != variant.Size {
+				writeError(w, http.StatusBadRequest, "variant filename/size mismatch")
+				return
+			}
+			uploads = append(uploads, releases.VariantUpload{Artifact: variant, File: f})
+		}
+		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{ProductName: productName, Version: version, Channel: channel, ReleaseNotes: releaseNotes, TargetGroups: targetGroups}, uploads)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, release)
+		return
+	}
 	// Get uploaded file
 	file, header, err := r.FormFile("artifact")
 	if err != nil {
@@ -245,6 +355,7 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 		Filename:     header.Filename,
 		FileSize:     header.Size,
 		File:         file,
+		ArtifactKind: artifactKind,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -294,7 +405,7 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 	version := chi.URLParam(r, "version")
 
 	svc := s.releaseService()
-	release, err := svc.GetRelease(r.Context(), product, version)
+	release, err := svc.GetRelease(r.Context(), product, version, r.URL.Query().Get("artifact_kind"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -314,6 +425,9 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	body["product"] = release.ProductName
 	body["size"] = release.ArtifactSize
+	if len(release.Manifest.ArtifactVariants) > 0 {
+		body["artifacts"] = release.Manifest.ArtifactVariants
+	}
 
 	writeJSON(w, http.StatusOK, body)
 }
@@ -334,7 +448,7 @@ func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {
 	version := chi.URLParam(r, "version")
 
 	svc := s.releaseService()
-	release, err := svc.GetRelease(r.Context(), product, version)
+	release, err := svc.GetRelease(r.Context(), product, version, r.URL.Query().Get("artifact_kind"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -344,6 +458,23 @@ func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if kind := r.URL.Query().Get("artifact_kind"); kind != "" {
+		found := false
+		for _, a := range release.Manifest.ArtifactVariants {
+			if a.Kind == kind {
+				release.ArtifactPath = a.Name
+				release.ArtifactSize = a.Size
+				release.Checksum = a.Checksum
+				release.Signature = a.Signature
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeError(w, http.StatusNotFound, "artifact variant not found")
+			return
+		}
+	}
 	// Get the artifact file
 	reader, err := s.storage.Get(product, version, filepath.Base(release.ArtifactPath))
 	if err != nil {
@@ -430,7 +561,7 @@ func (s *Server) handleUpdateRelease(w http.ResponseWriter, r *http.Request) {
 	svc := s.releaseService()
 
 	// Get the release first
-	release, err := svc.GetRelease(r.Context(), product, version)
+	release, err := svc.GetRelease(r.Context(), product, version, r.URL.Query().Get("artifact_kind"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -486,7 +617,7 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 	svc := s.releaseService()
 
 	// Get the release first
-	release, err := svc.GetRelease(r.Context(), product, version)
+	release, err := svc.GetRelease(r.Context(), product, version, r.URL.Query().Get("artifact_kind"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -519,7 +650,7 @@ func (s *Server) handleDeleteRelease(w http.ResponseWriter, r *http.Request) {
 	svc := s.releaseService()
 
 	// Get the release first to find its ID
-	release, err := svc.GetRelease(r.Context(), product, version)
+	release, err := svc.GetRelease(r.Context(), product, version, r.URL.Query().Get("artifact_kind"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -584,7 +715,7 @@ func (s *Server) handleDirectDownload(w http.ResponseWriter, r *http.Request) {
 
 	// Try to get release info for checksum
 	svc := s.releaseService()
-	release, _ := svc.GetRelease(r.Context(), product, version)
+	release, _ := svc.GetRelease(r.Context(), product, version, r.URL.Query().Get("artifact_kind"))
 
 	// Set headers for download
 	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
@@ -740,15 +871,20 @@ func (s *Server) handleDecommission(w http.ResponseWriter, r *http.Request) {
 // Accepts the format sent by siemcore-updater and creates/updates instances
 
 type UpdateCheckRequest struct {
-	InstanceID       string `json:"instance_id"`
-	CurrentVersion   string `json:"current_version"`
-	UpdaterVersion   string `json:"updater_version"`
-	OS               string `json:"os"`
-	Arch             string `json:"arch"`
-	Hostname         string `json:"hostname"`
-	Channel          string `json:"channel"`
-	ProductTier      string `json:"product_tier,omitempty"`       // canonical tier (defaults to {product} when it is a tier)
-	ParentInstanceID string `json:"parent_instance_id,omitempty"` // parent node's instance_id
+	InstanceID         string             `json:"instance_id"`
+	CurrentVersion     string             `json:"current_version"`
+	UpdaterVersion     string             `json:"updater_version"`
+	OS                 string             `json:"os"`
+	Arch               string             `json:"arch"`
+	Hostname           string             `json:"hostname"`
+	Channel            string             `json:"channel"`
+	ProductTier        string             `json:"product_tier,omitempty"`       // canonical tier (defaults to {product} when it is a tier)
+	ParentInstanceID   string             `json:"parent_instance_id,omitempty"` // parent node's instance_id
+	Lifecycle          string             `json:"lifecycle,omitempty"`
+	InstalledVersion   string             `json:"installed_version,omitempty"`
+	CachedDependencies []types.Dependency `json:"cached_dependencies,omitempty"`
+	ProtocolVersion    string             `json:"protocol_version,omitempty"`
+	Capabilities       []string           `json:"capabilities,omitempty"`
 }
 
 func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
@@ -834,11 +970,12 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	instance, _ := instanceRepo.GetByInstanceID(r.Context(), req.InstanceID)
 	if instance != nil && !instance.AutoUpdateEnabled && !selfUpdateProduct {
 		// Auto-update disabled - don't notify of updates
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		response := map[string]interface{}{
 			"update_available": false,
 			"current_version":  req.CurrentVersion,
 			"auto_update":      false,
-		})
+		}
+		writeJSON(w, http.StatusOK, response)
 		return
 	}
 
@@ -867,6 +1004,27 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	info := releaseSvc.ReleaseInfoFor(release, req.CurrentVersion)
+	dualSelected := false
+	if s.config.Server.DualArtifactAlpha && updateGroup == "alpha" && artifactprotocol.Advertised(req.ProtocolVersion, req.Capabilities) {
+		dualSelected = releaseSvc.DualOffer(release, info, req.OS+"/"+req.Arch, artifactprotocol.Evidence{Lifecycle: req.Lifecycle, InstalledVersion: req.InstalledVersion, Dependencies: req.CachedDependencies})
+	}
+
+	if s.config.Server.DualArtifactAlpha && updateGroup == "alpha" && artifactprotocol.Advertised(req.ProtocolVersion, req.Capabilities) && slices.Contains(req.Capabilities, artifactprotocol.IndependentCapability) {
+		candidate, independent, e := releaseSvc.IndependentOffer(r.Context(), product, channel, updateGroup, req.CurrentVersion, req.OS+"/"+req.Arch, artifactprotocol.Evidence{Lifecycle: req.Lifecycle, InstalledVersion: req.InstalledVersion, Dependencies: req.CachedDependencies})
+		if e != nil {
+			if e == releases.ErrPrerequisites {
+				writeError(w, http.StatusPreconditionFailed, e.Error())
+			} else {
+				writeError(w, 500, "failed to select artifact")
+			}
+			return
+		}
+		if independent != nil {
+			release = candidate
+			info = independent
+			dualSelected = true
+		}
+	}
 
 	if info != nil && info.UpdateAvailable {
 		// Build absolute download URL
@@ -881,7 +1039,7 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		host := r.Host
 		absoluteURL := fmt.Sprintf("%s://%s%s", scheme, host, info.DownloadURL)
 
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		response := map[string]interface{}{
 			"update_available": true,
 			"latest_version":   info.LatestVersion,
 			"download_url":     absoluteURL,
@@ -891,7 +1049,15 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 			"release_notes":    info.ReleaseNotes,
 			"channel":          info.Channel,
 			"update_group":     updateGroup,
-		})
+		}
+		if dualSelected {
+			response["protocol_version"] = artifactprotocol.Version
+			response["artifacts"] = info.Artifacts
+			response["selected_artifact_kind"] = info.SelectedArtifactKind
+			response["dependency_validation"] = info.DependencyValidation
+			response["required_dependencies"] = info.RequiredDependencies
+		}
+		writeJSON(w, http.StatusOK, response)
 	} else {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"update_available": false,
@@ -903,11 +1069,14 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 
 // Update report handler - reports update success/failure
 type UpdateReportRequest struct {
-	InstanceID  string `json:"instance_id"`
-	FromVersion string `json:"from_version"`
-	ToVersion   string `json:"to_version"`
-	Success     bool   `json:"success"`
-	Error       string `json:"error,omitempty"`
+	SelectedArtifactKind string `json:"selected_artifact_kind,omitempty"`
+	DependencyValidation string `json:"dependency_validation,omitempty"`
+	ArtifactDigest       string `json:"artifact_digest,omitempty"`
+	InstanceID           string `json:"instance_id"`
+	FromVersion          string `json:"from_version"`
+	ToVersion            string `json:"to_version"`
+	Success              bool   `json:"success"`
+	Error                string `json:"error,omitempty"`
 }
 
 func (s *Server) handleUpdateReport(w http.ResponseWriter, r *http.Request) {
@@ -929,12 +1098,28 @@ func (s *Server) handleUpdateReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// A valid license is mandatory on the agent plane (1.8.0).
-	if s.requireLicense(w, r) == nil {
+	license := s.requireLicense(w, r)
+	if license == nil {
 		return
 	}
 
-	// For now, just acknowledge the report
-	// TODO: Store update reports in database for analytics
+	if req.SelectedArtifactKind != "" {
+		digest, digestErr := hex.DecodeString(req.ArtifactDigest)
+		if req.InstanceID == "" || (req.SelectedArtifactKind != "bootstrap" && req.SelectedArtifactKind != "update") || (req.DependencyValidation != "complete" && req.DependencyValidation != "missing" && req.DependencyValidation != "mismatch") || digestErr != nil || len(digest) != 32 {
+			writeError(w, http.StatusBadRequest, "invalid artifact delivery report")
+			return
+		}
+		recorded, err := licensing.NewInstanceRepository(s.db).RecordArtifactReport(r.Context(), req.InstanceID, license.ID, types.UpdateAttempt{FromVersion: req.FromVersion, TargetVersion: req.ToVersion, Success: req.Success, Error: req.Error, Timestamp: time.Now().UTC(), SelectedArtifactKind: req.SelectedArtifactKind, DependencyValidation: req.DependencyValidation, ArtifactDigest: req.ArtifactDigest})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to persist artifact report")
+			return
+		}
+		if !recorded {
+			writeError(w, http.StatusNotFound, "instance not found for this license")
+			return
+		}
+	}
+	// Legacy report acknowledgements retain their existing behavior.
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "ok",
 		"message": "update report received",

@@ -1,0 +1,28 @@
+{
+  "artifact": {
+    "product": "swf",
+    "version": "2.3.0.1",
+    "metadata_signature": "eiIsm9lsumF4YoKrkE423Rua9SH0kHHT3qbwl09bIAz/+ElPTS4sz4ZhHplXX0XFVC+qinzB0LhBRD6E9hwGDQ==",
+    "name": "swf-update.zip",
+    "arch": "windows/amd64",
+    "size": 1234,
+    "checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "kind": "update",
+    "signature": "yK8mgQB+cjq2FkoKjNbffuoJvhceZKiIJORHA1POLdOzoFu0datm05tYhGf12fItDyxTs9gGLBAfMAQcVi3dBQ==",
+    "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "required_dependencies": [
+      {
+        "reference": "fixture-runtime",
+        "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "capabilities": [
+          "runtime-v1",
+          "amd64"
+        ]
+      }
+    ]
+  },
+  "canonical_metadata": "{\"protocol\":\"dual-artifact-v1\",\"artifact\":{\"product\":\"swf\",\"version\":\"2.3.0.1\",\"name\":\"swf-update.zip\",\"arch\":\"windows/amd64\",\"size\":1234,\"checksum\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"kind\":\"update\",\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"required_dependencies\":[{\"reference\":\"fixture-runtime\",\"digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"capabilities\":[\"amd64\",\"runtime-v1\"]}]}}",
+  "description": "TEST ONLY: zero seed; never trust this key in production",
+  "metadata_sha256": "33eb7e36845ee06de3117770db9b50171149a0bce5fbe966add9aa01ead719ad",
+  "public_key": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29"
+}

@@ -69,15 +69,29 @@ func (s *LocalStorage) Save(product, version, filename string, reader io.Reader)
 	}
 
 	path := filepath.Join(dir, filename)
-	file, err := os.Create(path)
+	tmp, err := os.CreateTemp(dir, ".upload-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		_ = tmp.Close()
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	if _, err := io.Copy(file, reader); err != nil {
+	if _, err := io.Copy(tmp, reader); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
+	if err := tmp.Close(); err != nil {
+		return "", fmt.Errorf("failed to close file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return "", fmt.Errorf("failed to finalize file: %w", err)
+	}
+	cleanup = false
 
 	return path, nil
 }

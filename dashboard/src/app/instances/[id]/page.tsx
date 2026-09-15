@@ -671,6 +671,16 @@ export default function InstanceDetailPage() {
           </div>
         </div>
 
+        {instance.last_heartbeat_data?.last_update_attempt?.selected_artifact_kind && (
+          <div className="card space-y-2">
+            <h2 className="text-lg font-semibold text-white">Artifact delivery</h2>
+            <p className="text-slate-300">Artifact: {instance.last_heartbeat_data.last_update_attempt.selected_artifact_kind}</p>
+            <p className="text-slate-300">Prerequisites: {instance.last_heartbeat_data.last_update_attempt.dependency_validation || "Not reported"}</p>
+            <p className="text-slate-300">Apply result: {instance.last_heartbeat_data.last_update_attempt.success ? "Succeeded" : "Failed"}</p>
+            <p className="text-xs text-slate-400 break-all">SHA-256: {instance.last_heartbeat_data.last_update_attempt.artifact_digest || "Not reported"}</p>
+          </div>
+        )}
+
         {/* Last Update Attempt */}
         {instance.last_update_at && (
           <div className="card">
