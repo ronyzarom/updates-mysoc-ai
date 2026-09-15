@@ -22,8 +22,10 @@ it("does not refetch deleted detail or ancestry while observers remain mounted",
   const client = new QueryClient();
   const detailFetch = vi.fn(async () => ({ id: "deleted" }));
   const parentFetch = vi.fn(async () => []);
-  const detailOptions = { queryKey: ["instance", "deleted"], queryFn: detailFetch, initialData: { id: "deleted" }, staleTime: Infinity };
-  const parentOptions = { queryKey: ["instance-parents", "deleted"], queryFn: parentFetch, initialData: [], staleTime: Infinity };
+  const detailOptions = { queryKey: ["instance", "deleted"], queryFn: detailFetch, staleTime: Infinity };
+  const parentOptions = { queryKey: ["instance-parents", "deleted"], queryFn: parentFetch, staleTime: Infinity };
+  client.setQueryData(detailOptions.queryKey, { id: "deleted" });
+  client.setQueryData(parentOptions.queryKey, []);
   const detail = new QueryObserver(client, detailOptions);
   const parents = new QueryObserver(client, parentOptions);
   const stopDetail = detail.subscribe(() => {});
