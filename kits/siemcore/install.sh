@@ -34,6 +34,8 @@ Options:
   --signing-key HEX      pinned release-signing public key (ask your operator)
   --self-update-channel C  updater binary channel (default: stable), independent
                            of the application channel in greenfield input
+  --relay-cert-file FILE   existing relay full certificate chain (PEM)
+  --relay-key-file FILE    matching unencrypted private key (PEM); both required
   --greenfield-input FILE  root-owned JSON with application inputs and signed
                            first-release receipt; enables and starts provisioning
   --current-version V    required with --update
@@ -48,10 +50,13 @@ EOF
 MODE="" LICENSE_KEY="" PARENT_URL="" INSTANCE_ID="" PARENT_ID=""
 CUSTOMER_ID="" CUSTOMER_NAME="" SIGNING_KEY="" CURRENT_VERSION="" CA_FILE="" GREENFIELD_INPUT=""
 SELF_UPDATE_CHANNEL=stable
+RELAY_CERT_FILE="" RELAY_KEY_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --greenfield-input) GREENFIELD_INPUT="${2:?--greenfield-input needs a value}"; shift ;;
         --self-update-channel) SELF_UPDATE_CHANNEL="${2:?--self-update-channel needs a value}"; shift ;;
+        --relay-cert-file) RELAY_CERT_FILE="${2:?--relay-cert-file needs a value}"; shift ;;
+        --relay-key-file) RELAY_KEY_FILE="${2:?--relay-key-file needs a value}"; shift ;;
         --clean)  MODE=clean ;;
         --update) MODE=update ;;
         --license-key)     LICENSE_KEY="${2:?--license-key needs a value}"; shift ;;
@@ -68,9 +73,22 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
-if [[ ! "$SELF_UPDATE_CHANNEL" =~ ^[a-z][a-z0-9-]{0,40}$ ]]; then
+if [[ ! "$SELF_UPDATE_CHANNEL" =~ ^[a-z][a-z0-9-]{0,19}$ ]]; then
     echo 'invalid self-update channel' >&2
     exit 1
+fi
+if [[ -n "$RELAY_CERT_FILE" || -n "$RELAY_KEY_FILE" ]]; then
+    [[ -n "$MODE" && -n "$RELAY_CERT_FILE" && -n "$RELAY_KEY_FILE" ]] || {
+        echo 'relay certificate and key require both flags and --clean or --update' >&2; exit 1;
+    }
+    RELAY_CERT_FILE=$(realpath "$RELAY_CERT_FILE")
+    RELAY_KEY_FILE=$(realpath "$RELAY_KEY_FILE")
+    [[ -f "$RELAY_CERT_FILE" && -f "$RELAY_KEY_FILE" ]] || exit 1
+    openssl x509 -in "$RELAY_CERT_FILE" -checkend 0 -noout >/dev/null
+    cert_public=$(openssl x509 -in "$RELAY_CERT_FILE" -pubkey -noout)
+    key_public=$(openssl pkey -in "$RELAY_KEY_FILE" -passin pass: -pubout)
+    [[ "$cert_public" == "$key_public" ]] || { echo 'relay certificate and key do not match' >&2; exit 1; }
+    unset cert_public key_public
 fi
 if [[ -z "$MODE" && "$SELF_UPDATE_CHANNEL" != stable ]]; then
     echo '--self-update-channel requires --clean or --update' >&2
@@ -153,6 +171,13 @@ render_config() {
         -e "s|current_version: \"0.0.0\"|current_version: \"$CURRENT_VERSION\"|" \
         config.yaml > "$tmp"
     printf '\nself_update:\n  channel: %s\n' "$SELF_UPDATE_CHANNEL" >> "$tmp"
+    if [[ -n "$RELAY_CERT_FILE" ]]; then
+        install -m 0640 -o root -g "$NAME" "$RELAY_CERT_FILE" /etc/$NAME/relay-fullchain.pem
+        install -m 0640 -o root -g "$NAME" "$RELAY_KEY_FILE" /etc/$NAME/relay-private-key.pem
+        sed -i.sedbak \
+            -e "s|^    # cert_file:.*|    cert_file: /etc/$NAME/relay-fullchain.pem|" \
+            -e "s|^    # key_file:.*|    key_file: /etc/$NAME/relay-private-key.pem|" "$tmp"
+    fi
     if [[ -n "$CA_FILE" ]]; then
         sed -i.sedbak "s|ca_file: mysoc-relay-ca.pem|ca_file: /etc/$NAME/mysoc-relay-ca.pem|" "$tmp"
     else

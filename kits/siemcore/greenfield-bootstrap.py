@@ -42,7 +42,7 @@ def validate(data):
     import base64
     if len(base64.b64decode(release.get('signature', ''), validate=True)) != 64:
         raise ValueError('signed release required')
-    if not re.fullmatch(r'[a-z][a-z0-9-]{0,40}', release.get('channel', '')):
+    if not re.fullmatch(r'[a-z][a-z0-9-]{0,19}', release.get('channel', '')):
         raise ValueError('explicit release channel required')
     app = data['application']
     shape = (app.get('schema'), app.get('topology'))

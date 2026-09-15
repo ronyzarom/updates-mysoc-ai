@@ -29,7 +29,7 @@ class InputTests(unittest.TestCase):
             return {'application': {'schema':1,'topology':'single','cluster_id':'lab','instance_id':'siemcore-lab','database_name':'siemcore'},
                     'release': {'channel':'pod-lab','version':'3.3.151.99','sha256':'a'*64,'public_key':'b'*64,'signature':base64.b64encode(b'x'*64).decode()}}
         module.validate(fixture())
-        for section, field, bad in [('release','version','../x'),('release','signature',''),('release','sha256','bad'),('release','public_key','bad'),('application','instance_id','bad\nid'),('application','topology','ha')]:
+        for section, field, bad in [('release','channel','pod-qualified-20260915'),('release','version','../x'),('release','signature',''),('release','sha256','bad'),('release','public_key','bad'),('application','instance_id','bad\nid'),('application','topology','ha')]:
             with self.subTest(field=field), self.assertRaises(ValueError):
                 data=fixture();data[section][field]=bad;module.validate(data)
 
