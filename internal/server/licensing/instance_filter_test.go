@@ -28,8 +28,8 @@ func TestBuildInstanceFilter_PlaceholderNumbering(t *testing.T) {
 
 func TestBuildInstanceFilter_Empty(t *testing.T) {
 	where, args := buildInstanceFilter(InstanceListFilter{})
-	if where != "" {
-		t.Fatalf("empty filter should yield no WHERE, got %q", where)
+	if where != " WHERE deleted_at IS NULL" {
+		t.Fatalf("empty filter should exclude deleted instances, got %q", where)
 	}
 	if len(args) != 0 {
 		t.Fatalf("empty filter should yield no args, got %v", args)

@@ -38,7 +38,7 @@ func (r *InstanceRepository) InactiveChildren(ctx context.Context, parent string
 // Retain a tombstone so an old cached relay report cannot recreate the entry.
 // A genuine later heartbeat may re-enroll it, as for normal decommissioning.
 func (r *InstanceRepository) CleanupChildren(ctx context.Context, parent string, ids []string) (int64, error) {
-	result, err := r.db.Pool.Exec(ctx, `UPDATE instances SET status='decommissioned',updated_at=NOW() WHERE `+inactiveChildPredicate+` AND id = ANY($2::uuid[])`, parent, ids)
+	result, err := r.db.Pool.Exec(ctx, `UPDATE instances SET status='decommissioned',deleted_at=NOW(),updated_at=NOW() WHERE `+inactiveChildPredicate+` AND id = ANY($2::uuid[])`, parent, ids)
 	if err != nil {
 		return 0, err
 	}

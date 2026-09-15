@@ -1032,7 +1032,7 @@ export default function InstanceDetailPage() {
               </div>
               
               <p className="text-sm text-slate-500 mb-6">
-                This marks the instance as decommissioned and retains its history and settings. Cached relay reports cannot restore it. A new heartbeat from the host can reactivate it.
+                This removes the instance from fleet lists and counts. An internal retirement record is retained to block cached relay reports. A new heartbeat from the host can reactivate it.
               </p>
 
               <div className="flex gap-3 w-full">

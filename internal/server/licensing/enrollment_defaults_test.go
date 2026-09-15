@@ -41,6 +41,7 @@ func TestEnrollmentDefaultsPreserveExplicitHolds(t *testing.T) {
 	}
 	defer pool.Close()
 	_, err = pool.Exec(ctx, `CREATE TABLE instances (
+ deleted_at timestamptz,
 	 id text PRIMARY KEY, instance_id text UNIQUE, instance_type text, hostname text, display_name text,
 	 license_id text, api_key_hash text, last_heartbeat timestamptz, last_heartbeat_data jsonb,
 	 status text, last_ip_address text, last_ip_seen_at timestamptz, product_tier text,

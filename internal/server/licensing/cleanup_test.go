@@ -41,6 +41,7 @@ func TestCleanupInactiveChildren(t *testing.T) {
 	}
 	defer pool.Close()
 	_, err = pool.Exec(ctx, `CREATE TABLE instances (
+ deleted_at timestamptz,
 	 id uuid PRIMARY KEY, instance_id text UNIQUE, instance_type text, hostname text, display_name text,
 	 license_id text, api_key_hash text, last_heartbeat timestamptz, last_heartbeat_data jsonb,
 	 status text, last_ip_address text, last_ip_seen_at timestamptz, product_tier text,
@@ -147,7 +148,29 @@ func TestCleanupInactiveChildren(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT status FROM instances WHERE id=$1", otherID).Scan(&otherStatus); err != nil || otherStatus != "decommissioned" {
 		t.Fatal("individual retirement failed", otherStatus, err)
 	}
+	// Deleted records are excluded even from all-status and decommissioned views.
+	for _, filter := range []InstanceListFilter{{Search: "old"}, {Search: "old", Status: "decommissioned"}} {
+		page, err := repo.ListPagedFiltered(ctx, filter, 20, 0)
+		if err != nil || page.Total != 0 || len(page.Items) != 0 {
+			t.Fatal("deleted record leaked into list", page, err)
+		}
+		tree, total, err := repo.TreeChildren(ctx, InstanceListFilter{Parent: "relay", Search: "old"}, true, 20, 0)
+		if err != nil || total != 0 || len(tree) != 0 {
+			t.Fatal("deleted record leaked into tree", tree, err)
+		}
+		stats, err := repo.FleetStatsSummary(ctx, filter)
+		if err != nil || stats.Total != 0 {
+			t.Fatal("deleted record leaked into fleet counts", stats, err)
+		}
+	}
+	var archived bool
+	if err := pool.QueryRow(ctx, "SELECT deleted_at IS NOT NULL FROM instances WHERE id=$1", retiredID).Scan(&archived); err != nil || !archived {
+		t.Fatal("missing archive marker", err)
+	}
 	report(removedAt.Add(time.Second))
+	if err := pool.QueryRow(ctx, "SELECT deleted_at IS NOT NULL FROM instances WHERE id=$1", retiredID).Scan(&archived); err != nil || archived {
+		t.Fatal("fresh heartbeat failed to reactivate", err)
+	}
 	if status() != "online" {
 		t.Fatal("genuine fresh heartbeat did not revive host")
 	}

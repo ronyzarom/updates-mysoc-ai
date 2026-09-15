@@ -311,7 +311,7 @@ func (r *InstanceRepository) GetByAPIKeyHash(ctx context.Context, apiKeyHash str
 func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error) {
 	rows, err := r.db.Pool.Query(ctx, `
 		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, `+derivedStatusCol+`, auto_update_enabled, update_group, product_tier, parent_instance_id, customer_id, customer_name, reported_via, reported_at, created_at, updated_at
-		FROM instances
+		FROM instances WHERE deleted_at IS NULL
 		ORDER BY created_at DESC
 	`)
 	if err != nil {
@@ -397,14 +397,14 @@ type ListInstancesResult struct {
 func (r *InstanceRepository) ListPaged(ctx context.Context, limit, offset int) (*ListInstancesResult, error) {
 	// Get total count
 	var total int
-	err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM instances`).Scan(&total)
+	err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM instances WHERE deleted_at IS NULL`).Scan(&total)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count instances: %w", err)
 	}
 
 	// Get paginated results with lighter query (no heartbeat JSON parsing)
 	rows, err := r.db.Pool.Query(ctx,
-		`SELECT `+selectInstanceListCols+` FROM instances ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+		`SELECT `+selectInstanceListCols+` FROM instances WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
 		limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instances: %w", err)
@@ -461,7 +461,7 @@ var sortColumns = map[string]string{
 // buildInstanceFilter renders the WHERE clause and positional args shared by
 // the count and page queries. The returned args start at $1.
 func buildInstanceFilter(f InstanceListFilter) (string, []interface{}) {
-	var conds []string
+	conds := []string{"deleted_at IS NULL"}
 	var args []interface{}
 	add := func(cond string, val interface{}) {
 		args = append(args, val)
@@ -667,7 +667,7 @@ func (r *InstanceRepository) CustomerDirectory(ctx context.Context, search, sort
 			FROM (
 				SELECT customer_id, customer_name, last_update_success,
 				       ` + derivedStatusExpr + ` AS derived
-				FROM instances
+				FROM instances WHERE deleted_at IS NULL
 			) t
 			GROUP BY cid
 		)`
@@ -740,7 +740,7 @@ var treeChildOrder = ` ORDER BY (` + derivedStatusExpr + `) = 'offline' DESC,
 // has_children expandability test) so a relay that keeps re-reporting retired
 // children doesn't clutter the view. includeDecommissioned surfaces them.
 func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFilter, includeDecommissioned bool, limit, offset int) ([]TreeChildRow, int, error) {
-	var conds []string
+	conds := []string{"deleted_at IS NULL"}
 	var args []interface{}
 	add := func(cond string, val interface{}) {
 		args = append(args, val)
@@ -816,11 +816,11 @@ func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFil
 	rollup := `
 WITH RECURSIVE seed(root, iid, depth, reported_via, status, last_heartbeat, last_update_success) AS (
     SELECT instance_id, instance_id, 0, reported_via, status, last_heartbeat, last_update_success
-    FROM instances WHERE instance_id = ANY($1)
+    FROM instances WHERE deleted_at IS NULL AND instance_id = ANY($1)
     UNION ALL
     SELECT s.root, i.instance_id, s.depth + 1, i.reported_via, i.status, i.last_heartbeat, i.last_update_success
     FROM instances i JOIN seed s ON i.parent_instance_id = s.iid
-    WHERE s.depth < 16
+    WHERE s.depth < 16 AND i.deleted_at IS NULL
 )
 SELECT root,
     COUNT(*) AS total,
@@ -893,7 +893,7 @@ func (r *InstanceRepository) SecurityStatsSummary(ctx context.Context) (*Securit
 			COALESCE(SUM((sec->>'pending_updates')::int), 0) AS pending,
 			COALESCE(SUM((sec->>'security_updates')::int), 0) AS secupd,
 			COUNT(*) FILTER (WHERE (sec->>'reboot_required')::boolean) AS reboot
-		FROM (SELECT last_heartbeat_data->'security' AS sec FROM instances) t
+		FROM (SELECT last_heartbeat_data->'security' AS sec FROM instances WHERE deleted_at IS NULL) t
 	`).Scan(&s.Reporting, &s.AvgScore, &s.FirewallEnabled, &s.SSHHardened,
 		&s.PendingUpdates, &s.SecurityUpdates, &s.RebootRequired)
 	if err != nil {
@@ -917,7 +917,7 @@ type SecurityRow struct {
 func (r *InstanceRepository) ListSecurityPaged(ctx context.Context, limit, offset int) ([]SecurityRow, int, error) {
 	var total int
 	if err := r.db.Pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM instances WHERE last_heartbeat_data ? 'security'`,
+		`SELECT COUNT(*) FROM instances WHERE deleted_at IS NULL AND last_heartbeat_data ? 'security'`,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("security count: %w", err)
 	}
@@ -927,7 +927,7 @@ func (r *InstanceRepository) ListSecurityPaged(ctx context.Context, limit, offse
 		       `+derivedStatusExpr+` AS status,
 		       last_heartbeat_data->'security' AS security
 		FROM instances
-		WHERE last_heartbeat_data ? 'security'
+		WHERE deleted_at IS NULL AND last_heartbeat_data ? 'security'
 		ORDER BY (last_heartbeat_data->'security'->>'security_score')::int ASC NULLS LAST
 		LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
@@ -1030,7 +1030,7 @@ func (r *InstanceRepository) UpdateHeartbeat(ctx context.Context, instanceID str
 	// Build base update
 	query := `
 		UPDATE instances
-		SET last_heartbeat = $2, last_heartbeat_data = $3, status = 'online', 
+		SET last_heartbeat = $2, last_heartbeat_data = $3, status = 'online', deleted_at = NULL,
 		    last_ip_address = $4, last_ip_seen_at = $5, updated_at = $5
 		WHERE instance_id = $1
 	`
@@ -1040,7 +1040,7 @@ func (r *InstanceRepository) UpdateHeartbeat(ctx context.Context, instanceID str
 	if heartbeat.LastUpdateAttempt != nil {
 		query = `
 			UPDATE instances
-			SET last_heartbeat = $2, last_heartbeat_data = $3, status = 'online',
+			SET last_heartbeat = $2, last_heartbeat_data = $3, status = 'online', deleted_at = NULL,
 			    last_ip_address = $4, last_ip_seen_at = $5,
 			    last_update_from_version = $6, last_update_target_version = $7,
 			    last_update_success = $8, last_update_error = $9, last_update_at = $10,
@@ -1109,7 +1109,7 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
 			last_heartbeat = EXCLUDED.last_heartbeat,
 			last_heartbeat_data = EXCLUDED.last_heartbeat_data,
-			status = 'online',
+			status = 'online', deleted_at = NULL,
 			last_ip_address = EXCLUDED.last_ip_address,
 			last_ip_seen_at = EXCLUDED.last_ip_seen_at,
 			product_tier = COALESCE(EXCLUDED.product_tier, instances.product_tier),
@@ -1137,7 +1137,7 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 				license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
 				last_heartbeat = EXCLUDED.last_heartbeat,
 				last_heartbeat_data = EXCLUDED.last_heartbeat_data,
-				status = 'online',
+				status = 'online', deleted_at = NULL,
 				last_ip_address = EXCLUDED.last_ip_address,
 				last_ip_seen_at = EXCLUDED.last_ip_seen_at,
 				last_update_from_version = EXCLUDED.last_update_from_version,
@@ -1166,7 +1166,7 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 
 // Delete retires an instance while retaining its identity to suppress stale relay reports.
 func (r *InstanceRepository) Delete(ctx context.Context, id string) error {
-	cmdTag, err := r.db.Pool.Exec(ctx, `UPDATE instances SET status = 'decommissioned',
+	cmdTag, err := r.db.Pool.Exec(ctx, `UPDATE instances SET status = 'decommissioned', deleted_at = COALESCE(deleted_at, NOW()),
         updated_at = CASE WHEN status = 'decommissioned' THEN updated_at ELSE NOW() END
         WHERE id = $1`, id)
 	if err != nil {
@@ -1356,6 +1356,7 @@ const upsertReportedNodeSQL = `
 				THEN EXCLUDED.last_heartbeat_data
 			ELSE instances.last_heartbeat_data END,
 		status = EXCLUDED.status,
+		deleted_at = CASE WHEN EXCLUDED.status IN ('online', 'degraded') THEN NULL ELSE instances.deleted_at END,
 		product_tier = COALESCE(NULLIF(EXCLUDED.product_tier, ''), instances.product_tier),
 		parent_instance_id = COALESCE(NULLIF(EXCLUDED.parent_instance_id, ''), instances.parent_instance_id),
 		customer_id = COALESCE(NULLIF(EXCLUDED.customer_id, ''), instances.customer_id),
@@ -1371,7 +1372,7 @@ const upsertReportedNodeSQL = `
 		last_ip_seen_at = COALESCE(EXCLUDED.last_ip_seen_at, instances.last_ip_seen_at),
 		updated_at = EXCLUDED.updated_at
 	WHERE (instances.last_heartbeat IS NULL OR instances.last_heartbeat <= EXCLUDED.last_heartbeat)
- AND (instances.status <> 'decommissioned' OR ($21::boolean AND EXCLUDED.last_heartbeat > instances.updated_at))`
+ AND (instances.status <> 'decommissioned' OR ($21::boolean AND EXCLUDED.last_heartbeat > GREATEST(instances.updated_at, instances.deleted_at)))`
 
 // flattenReportedChildren walks the rollup tree depth-first into a flat slice,
 // skipping the reporter itself and empty ids. When the node budget is reached
