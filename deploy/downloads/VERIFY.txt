@@ -1,0 +1,11 @@
+Download the package, manifest.json, manifest.sig and verify-download.py into one directory.
+Use Python 3 with the cryptography package installed through your approved software source.
+Obtain the expected signing public key from your operator through your established trusted channel.
+
+python3 verify-download.py --public-key "$SIGNING_PUBLIC_KEY" mysoc-updater-kit-1.16.1.24-r1-linux-amd64.tar.gz
+# For SiemCore use siemcore-updater-kit-1.16.1.24-r1-linux-amd64.tar.gz instead.
+
+The manifest uses the existing Updates Ed25519 key with a distinct signing domain:
+mysoc-installation-repository-v1 followed by newline and the exact manifest.json bytes.
+After successful verification, extract the package and run sha256sum -c SHA256SUMS inside it.
+Read START-HERE.txt. Configure through approved provisioning. Do not rerun clean install on existing servers.
