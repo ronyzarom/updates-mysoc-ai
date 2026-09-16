@@ -1,4 +1,4 @@
-# Retained-candidate pod boundary 1.0.0.1 — LOCAL CANDIDATE, NOT QUALIFIED FOR DEPLOYMENT
+# Retained-candidate pod boundary 1.0.0.1 — A/B prerequisite installed
 
 Updates owns this privileged boundary. It wraps the pinned existing root hook,
 without editing SiemCore's hook or extending updater sudo permissions. A/B only;
@@ -79,3 +79,27 @@ for that identity), instance enable-osconfig=TRUE, and GoogleAPI connectivity.
 Currentpod already has serviceaccounts; projectmetadata is PER-VM and individual
 enablement was absent. Do not change currentpod metadata or deploy this boundary
 until remaining signed-artifact gates pass.
+
+## Exact negative test and scoped installation — 2026-09-16
+
+The unchanged signed .32 and .30 archives passed the actual pinned legacy
+Ed25519/checksum verifier on the disposable VM. The actual .32 compensation
+entrypoint rejected the missing transaction with the expected error. Native
+systemd execution auditing proved no .30 rollback entrypoint ran. Synthetic
+product-approved inputs supplied no working credentials. This test does not
+establish successful compensation, full retained rollback or DB recovery.
+
+Under the existing one-time non-SSH prerequisite approval, installed on exact
+A/B IDs in PROVISIONING-PLAN.md through per-instance OS Config. Package SHA256:
+79b0abc14ce642cb1db8092fbadaba4d1af2cd259ab34eff7caca1239d247485.
+The package uses the existing Ed25519 key, domain mysoc-pod-boundary-v1.
+The updater's own state.json.cycle-lock was acquired nonblocking before stopping
+the updater; a running cycle would have refused installation. Root policy,
+sudo and updater config hashes were preserved. Updaters resumed and reported
+heartbeats; installed hashes were independently read back. Application remained
+.30, public health healthy, A owner generation3, B standby, PG streaming and Redis
+replication up. Witness was not modified. Product .32 was not published/offered.
+
+Evidence and signed provisioning archive: main workspace
+docs/verification/pod-boundary-native-20260916. The earlier native-only caveats
+remain relevant; this prerequisite installation is not product rollout acceptance.
