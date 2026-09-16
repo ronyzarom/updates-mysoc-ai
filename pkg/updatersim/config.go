@@ -257,6 +257,7 @@ type SimulationConfig struct {
 // FilesystemConfig configures the real filesystem installer used when
 // simulation.executor is "filesystem".
 type FilesystemConfig struct {
+	PodMaintenance *PodMaintenanceConfig `yaml:"pod_maintenance,omitempty"`
 	// InstallRoot is the base directory that holds per-product install trees.
 	InstallRoot string `yaml:"install_root"`
 	// RestartCommand runs after the atomic symlink swap (and after rollback).
@@ -583,4 +584,13 @@ func (c *Config) Product(name string) (*ProductConfig, bool) {
 		}
 	}
 	return nil, false
+}
+
+// PodMaintenanceConfig explicitly enables the negotiated pod executor. Omitted
+// configurations keep the normal legacy installation flow.
+type PodMaintenanceConfig struct {
+	PodID            string   `yaml:"pod_id"`
+	NodeID           string   `yaml:"node_id"`
+	JournalDirectory string   `yaml:"journal_directory"`
+	AdapterCommand   []string `yaml:"adapter_command"`
 }

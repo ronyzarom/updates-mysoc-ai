@@ -1,0 +1,361 @@
+{
+  "notice": "Synthetic protocol fixtures, not a published release or live grant. JSON is strict but is not a new signing format.",
+  "capabilities": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 0
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "paused",
+      "permission_expires": "2026-09-17T10:05:00Z",
+      "capabilities": [
+        "pod-maintenance-v1"
+      ]
+    }
+  },
+  "begin-or-resume": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 0
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "paused",
+      "permission_expires": "2026-09-17T10:05:00Z"
+    }
+  },
+  "status": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "paused",
+      "permission_expires": "2026-09-17T10:05:00Z"
+    }
+  },
+  "apply": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "paused",
+      "permission_expires": "2026-09-17T10:05:00Z"
+    }
+  },
+  "recover": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "paused",
+      "permission_expires": "2026-09-17T10:05:00Z"
+    }
+  },
+  "health": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "paused",
+      "permission_expires": "2026-09-17T10:05:00Z",
+      "health": {
+        "version": "3.3.152.36",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "role": "STBY",
+        "management_ready": true,
+        "processing_disabled": true,
+        "traffic_disabled": true,
+        "authority_valid": true,
+        "replication_status": "degraded"
+      }
+    }
+  },
+  "complete": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "health": {
+        "version": "3.3.152.36",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "role": "STBY",
+        "management_ready": true,
+        "processing_disabled": true,
+        "traffic_disabled": true,
+        "authority_valid": true,
+        "replication_status": "degraded"
+      }
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "completed",
+      "permission_expires": "2026-09-17T10:05:00Z"
+    }
+  },
+  "acceptance": {
+    "request": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42
+    },
+    "response": {
+      "binding": {
+        "protocol": "pod-maintenance-v1",
+        "operation_id": "e84dad38ac34473daf1ad7510ae54ef21",
+        "pod_id": "qualification-pod",
+        "node_id": "1",
+        "updater_id": "qualification-updater-1",
+        "product": "siemcore",
+        "from_version": "3.3.152.35",
+        "target_version": "3.3.152.36",
+        "artifact_path": "/var/lib/updater/downloads/siemcore.tar.gz",
+        "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deadline": "2026-09-17T10:30:00Z",
+        "artifact_signature": "SYNTHETIC-NOT-A-VALID-RELEASE-SIGNATURE"
+      },
+      "generation": 42,
+      "phase": "completed",
+      "permission_expires": "2026-09-17T10:05:00Z",
+      "acceptance": {
+        "health": {
+          "version": "3.3.152.36",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "role": "STBY",
+          "management_ready": true,
+          "processing_disabled": true,
+          "traffic_disabled": true,
+          "authority_valid": true,
+          "replication_status": "degraded"
+        },
+        "active_ip_owned": false,
+        "service_healthy": true,
+        "processing_authority_valid": false
+      }
+    }
+  }
+}

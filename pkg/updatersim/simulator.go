@@ -256,6 +256,12 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 		return fmt.Errorf("invalid cycle mode %q", mode)
 	}
 
+	if mode == ModeReal {
+		if pending, err := s.resumePendingPod(ctx); pending {
+			_, heartbeatErr := s.SendHeartbeat(ctx)
+			return errors.Join(err, heartbeatErr)
+		}
+	}
 	if _, err := s.SendHeartbeat(ctx); err != nil {
 		return err
 	}
@@ -390,13 +396,20 @@ func (s *Simulator) processOfferAttempt(
 		return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "policy_authorization", Stage: "prerequisite"}))
 	}
 
-	if err := s.executor.Apply(ctx, update); err != nil {
-		return s.failAndRollback(ctx, update, fmt.Errorf("apply: %w", err))
-	}
-	if err := s.executor.Validate(ctx, update); err != nil {
-		return s.failAndRollback(ctx, update, fmt.Errorf("validation: %w", err))
-	}
+	if s.config.Simulation.Filesystem.PodMaintenance != nil {
+		if err := s.applyPodMaintenance(ctx, update); err != nil {
+			s.recordAttempt(update, false, "pod maintenance: "+err.Error())
+			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "pod_maintenance", Stage: "maintenance"}))
+		}
+	} else {
+		if err := s.executor.Apply(ctx, update); err != nil {
+			return s.failAndRollback(ctx, update, fmt.Errorf("apply: %w", err))
+		}
+		if err := s.executor.Validate(ctx, update); err != nil {
+			return s.failAndRollback(ctx, update, fmt.Errorf("validation: %w", err))
+		}
 
+	}
 	s.recordAttempt(update, true, "")
 	if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
 		return err
