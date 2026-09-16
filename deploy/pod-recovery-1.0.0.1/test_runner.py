@@ -138,3 +138,28 @@ class VerifiedBundle(unittest.TestCase):
   (self.root/'retained.tar.gz').write_bytes(b'tampered')
   with self.assertRaises(ValueError):
    with self.runner.bundle(self.state):self.fail('entered invalid bundle')
+
+class Retention(unittest.TestCase):
+ def test_interrupted_copy_retries_without_truncated_final(self):
+  import shutil
+  with tempfile.TemporaryDirectory() as d,patch.object(r,'trusted',lambda *a:None):
+   root=Path(d);source=root/'source';source.write_bytes(b'complete signed bytes');store=root/'store';store.mkdir()
+   runner=r.Runner(None,store)
+   ref={'artifact':str(source),'sha256':r.sha(source.read_bytes())}
+   @contextlib.contextmanager
+   def bundle(state):yield root,'b'*64
+   def interrupted(src,dst):dst.write(b'partial');raise OSError('interrupted copy')
+   with patch.object(runner,'bundle',bundle),patch.object(shutil,'copyfileobj',side_effect=interrupted):
+    with self.assertRaises(OSError):runner.prepare(intent(),ref)
+   self.assertFalse((store/'retained.tar.gz').exists());self.assertFalse(runner.journal.exists())
+   # A killed process may leave an unrelated private partial; retry ignores it.
+   (store/'.retained-orphan').write_bytes(b'partial')
+   with patch.object(runner,'bundle',bundle):runner.prepare(intent(),ref)
+   self.assertEqual((store/'retained.tar.gz').read_bytes(),source.read_bytes())
+   self.assertEqual((store/'retained.tar.gz').stat().st_mode&0o777,0o400)
+ def test_wrong_final_digest_remains_fail_closed(self):
+  with tempfile.TemporaryDirectory() as d,patch.object(r,'trusted',lambda *a:None):
+   root=Path(d);source=root/'source';source.write_bytes(b'right');(root/'retained.tar.gz').write_bytes(b'wrong')
+   runner=r.Runner(None,root)
+   with self.assertRaises(ValueError):runner.prepare(intent(),{'artifact':str(source),'sha256':r.sha(b'right')})
+   self.assertEqual((root/'retained.tar.gz').read_bytes(),b'wrong')

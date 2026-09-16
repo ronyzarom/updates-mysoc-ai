@@ -139,10 +139,20 @@ class Runner:
    trusted(target,True)
    if sha(target.read_bytes())!=ref['sha256']:raise ValueError('retained artifact conflict')
   else:
-   with artifact.open('rb') as src,target.open('xb') as dst:
-    os.fchmod(dst.fileno(),0o400)
-    import shutil
-    shutil.copyfileobj(src,dst);dst.flush();os.fsync(dst.fileno())
+   # A killed copy can leave a private partial, never a truncated final archive.
+   fd,partial=tempfile.mkstemp(prefix='.retained-',dir=self.root)
+   try:
+    with artifact.open('rb') as src,os.fdopen(fd,'wb') as dst:
+     os.fchmod(dst.fileno(),0o400)
+     import shutil
+     shutil.copyfileobj(src,dst);dst.flush();os.fsync(dst.fileno())
+    if sha(Path(partial).read_bytes())!=ref['sha256']:raise ValueError('artifact checksum mismatch')
+    os.replace(partial,target)
+    directory=os.open(self.root,os.O_DIRECTORY)
+    try:os.fsync(directory)
+    finally:os.close(directory)
+   finally:
+    if os.path.exists(partial):os.unlink(partial)
   state={'schema':1,'intent':intent,'release':ref,'phase':'prepared','runtime_sha256':None}
   with self.bundle(state) as (_,runtime):state['runtime_sha256']=runtime
   atomic(self.root/'intent.json',intent);self.save(state);return state
