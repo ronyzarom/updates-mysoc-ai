@@ -1,7 +1,8 @@
 # Boundary 1.0.0.2 — local review candidate
 
-Not signed, installed, published or qualified on a native host. No live journal
-has been edited. 1.0.0.1 remains the deployed implementation.
+Signed review candidate. Native replay and filesystem/systemd qualification passed
+on the isolated qualification VM. No live pod journal has been edited; 1.0.0.1
+remains deployed on the pod. No product release has been published.
 
 ## Exact incident reconciliation
 
@@ -31,7 +32,8 @@ or authorize a retry, service start, maintenance change, DB action or IP move.
 
 ## Evidence limits and mandatory review
 
-The log pins were derived from the captured diagnostic tails. The operation
+The log pins were derived from captured diagnostics and subsequently matched
+against full files on B by read-only SHA-256 readback. The operation
 compares full local files against those pins; if any tail was truncated or the
 file changed it MUST refuse. Never loosen this to substring matching. These
 root-owned logs and requests are historical evidence, not a cryptographic
@@ -66,7 +68,7 @@ No claim that these fields are already visible in fleet reporting.
    evidence. A crash before wrapper switch leaves old boundary rejecting new
    apply, which is fail closed. The new `install.py` stages the versioned files and supports retry after a
    terminal-write/wrapper-switch interruption. Its local tests pass; native
-   qualification and the signed OS Config delivery envelope are still pending.
+   replay qualification has passed. Envelope qualification is tracked separately.
    Do not reuse 1.0.0.1 installer (it rejects existing journals).
 4. Independently read back terminal journal, preserved evidence and package
    hashes. Keep B product hold until product-owned recovery and next candidate
@@ -78,5 +80,30 @@ Local tests:
 Current local result: 31 tests pass, including exact evidence checks, extra
 execution/environment injection refusal, populated cgroup refusal, installation
 drift, and interruption after reconciliation before wrapper switch. Signature
-and systemd adapters are still mocked in these tests; no native qualification
-or deployment is claimed. No package has been signed.
+and systemd adapters are mocked in the unit suite; the separate native result
+below verifies real signatures and systemd behavior. No pod deployment is claimed.
+
+## Native qualification and signing (2026-09-16)
+
+OS Config boundary-2-native-20260916 passed on disposable VM
+6826523492612546857. Real .33/.30 signatures and checksums were verified.
+Historical incident logs were replayed under fixture identities/paths; native
+systemd active-unit refusal, empty stopped cgroup, exact terminal evidence and
+versioned installer repeat passed. No signed product apply, DB or pod activation
+was run. A first fixture packaging attempt failed on tar-preserved non-root
+ownership; extraction was corrected to root ownership without weakening checks.
+
+Signed package SHA-256:
+`ba508630db07192ceda951957755c0fed076798823c61547af06943b0be2aa2e`
+Existing key/domain, `mysoc-pod-boundary-v1\n1.0.0.2\n<sha256>`.
+Signature independently verified locally. Signed package and receipts are in
+`/tmp/pod-boundary-2-package/`; durable evidence is in the primary repository's
+`docs/verification/pod-boundary-2-20260916/` directory.
+
+`provision_osconfig.py` is the management-channel envelope (not part of the
+signed package payload). It verifies exact GCP/machine/product identity and
+configuration hashes, validates package signature and safe members, stops only
+the updater after cycle-lock acquisition, invokes the versioned installer under
+all three locks, then restores the updater's prior active state. No pod service,
+VM, DB, ownership, routing or ring changes are performed. The product hold must
+be independently verified and preserved by the deployment coordinator.
