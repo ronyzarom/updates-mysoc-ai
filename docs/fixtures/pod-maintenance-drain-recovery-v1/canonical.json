@@ -323,5 +323,58 @@
     "lease_released": false,
     "node_evidence_observed_at": "2026-09-17T12:00:00Z",
     "reason": "processing-termination-unknown"
-  }
+  },
+  "generation_discovery_request": {
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "generation": 0,
+    "protocol": "pod-maintenance-drain-recovery-v1"
+  },
+  "generation_discovery_response": {
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "generation": 42,
+    "ingress_stopped": true,
+    "lease_released": false,
+    "observed_at": "2026-09-17T12:00:00Z",
+    "original_deadline_expired": true,
+    "phase": "draining",
+    "processing_stopped": true,
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "valid_until": "2026-09-17T12:00:30Z",
+    "watchdog_exited": false,
+    "watchdog_retired": false
+  },
+  "generation_discovery_semantics": "Pinned-mTLS exact-binding read-only lookup; positive generation comes from existing durable operation. No allocation/mutation. Persist only after authenticated proof."
 }

@@ -60,12 +60,15 @@ type TransitionReceipt struct {
 	Phase                 string                `json:"phase"`
 }
 type TransitionCoordinator struct {
-	Directory    string
-	Adapter      NextOperationAdapter
-	ObserverKey  ed25519.PublicKey
-	ReleaseKey   ed25519.PublicKey
-	Now          func() time.Time
-	afterPrepare func() error
+	// AfterDurableCheckpoint is optional instrumentation for isolated crash qualification.
+	// Production callers leave it nil; it never supplies authorization.
+	AfterDurableCheckpoint func(string)
+	Directory              string
+	Adapter                NextOperationAdapter
+	ObserverKey            ed25519.PublicKey
+	ReleaseKey             ed25519.PublicKey
+	Now                    func() time.Time
+	afterPrepare           func() error
 }
 
 func (c *TransitionCoordinator) now() time.Time {
@@ -252,6 +255,9 @@ func (c *TransitionCoordinator) Advance(ctx context.Context, a RecoveryAuthoriza
 	if e = writeDurableJSON(receiptPath, receipt); e != nil {
 		return e
 	}
+	if c.AfterDurableCheckpoint != nil {
+		c.AfterDurableCheckpoint("prepared")
+	}
 	if c.afterPrepare != nil {
 		if e = c.afterPrepare(); e != nil {
 			return e
@@ -314,10 +320,16 @@ func (c *TransitionCoordinator) finalize(path string, r *TransitionReceipt) erro
 	} else if !os.IsNotExist(e) {
 		return e
 	}
+	if c.AfterDurableCheckpoint != nil {
+		c.AfterDurableCheckpoint("recovery-archived")
+	}
 	if reflect.DeepEqual(current.Binding, claims.PreviousBinding) {
 		if e = writeJournal(filepath.Join(c.Directory, "operation.json"), Journal{Binding: claims.NextBinding, Phase: "intent"}); e != nil {
 			return e
 		}
+	}
+	if c.AfterDurableCheckpoint != nil {
+		c.AfterDurableCheckpoint("next-intent-written")
 	}
 	r.Phase = "activated"
 	if e = writeDurableJSON(filepath.Join(archive, "transition.json"), r); e != nil {

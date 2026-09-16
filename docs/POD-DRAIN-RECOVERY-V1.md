@@ -7,7 +7,15 @@ advertise it. These fixtures authorize no real operation.
 ## Read-only status
 
 Action `status` takes protocol, exact original v1 binding and maintenance
-generation. It remains read-only after the original deadline and after a recovery
+generation. Generation zero is permitted ONLY for authenticated read-only lookup
+after a lost begin response: observer resolves the exact full binding under the
+pinned mTLS registry identity and derives its already-persisted positive original
+generation. It never allocates a generation or creates a barrier. Response repeats
+that exact binding and returns the positive generation. Foreign identity/binding
+or absent durable operation is refused. Updater may persist the discovered value
+only after authenticated proof; a status timestamp or echoed request is not proof.
+Every authorize/resume mutation and signed grant still requires the positive exact
+original generation; zero never authorizes mutation. No v1 state widening. It remains read-only after the original deadline and after a recovery
 authorization expires or is revoked. Authentication/registered identity is still
 required. Status may return phase `draining`, `paused`, or `blocked`; it includes
 captured_owner, original_deadline_expired, observed_at, valid_until and current
