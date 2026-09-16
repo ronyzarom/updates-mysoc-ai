@@ -11,6 +11,10 @@ mysoc relay  ◀── heartbeat + rollup ── THIS NODE (siemcore-cascade-upd
                                  swf updaters heartbeat here
 ```
 
+See [installation commands by server role](docs/SIEMCORE-INSTALLATION-ROLES.md) in generated kits
+(source guide: `docs/SIEMCORE-INSTALLATION-ROLES.md` at repository root).
+Testing pod nodes follow the normal `stable` updater channel and `alpha` fleet group.
+
 ## Naming and ports (important on v3 hosts)
 
 - The unit is `siemcore-cascade-updater`, **not** `siemcore-updater` — the

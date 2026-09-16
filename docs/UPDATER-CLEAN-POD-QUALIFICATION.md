@@ -14,14 +14,14 @@ Use Linux systemd hosts with root provisioning, Python >=3.9, OpenSSL with Ed255
 
 Root-owned private input JSON must contain application and release. Application is schema2/topology pod, pod_role a/b/witness, cluster_id and unique updater_instance_id; a/b also require logical instance_id and database_name. SiemCore owns remaining product fields and new machine identity; helper binds local machine-id. Release requires version, sha256, public_key, signature and channel.
 
-Use isolated release.channel `pod-app-20260915` and independent updater channel `pod-upd-20260915`. No release has been published on either channel by this preparation. Explicitly enroll/reconcile just new nodes to alpha before publishing alpha-only; never omit target groups. Product/version identities cannot be republished on another channel through current API, so qualification versions are dedicated to this channel.
+Historical product qualification used release.channel `pod-app-20260915`. The isolated updater channel from that rehearsal is retired: use updater channel `stable` and fleet group `alpha` for normal testing. See [current role-based installation guidance](SIEMCORE-INSTALLATION-ROLES.md). The remaining qualification details below describe the original candidate, not current deployment status. Explicitly enroll/reconcile just new nodes to alpha before publishing alpha-only; never omit target groups. Product/version identities cannot be republished on another channel through current API, so qualification versions are dedicated to this channel.
 
 ```sh
 sudo ./install.sh --clean --greenfield-input /root/pod-input.json \
   --instance-id "$UPDATER_NODE_ID" --parent-url "$PARENT_URL" \
   --parent-id mysoc-testing-mysoc-ai --customer-id "$CUSTOMER_ID" \
   --customer-name "$CUSTOMER_NAME" --license-key "$ENROLLMENT_CREDENTIAL" \
-  --signing-key "$PUBLIC_SIGNING_KEY" --self-update-channel pod-upd-20260915
+  --signing-key "$PUBLIC_SIGNING_KEY" --self-update-channel stable
 ```
 
 Resolve credentials through existing protected provisioning; do not paste them into logs. Add --ca-file only if relay uses the approved private CA. Installer starts service after root hook/input/receipt configuration. Repeat identical bootstrap preserves installed-version/config; channel flag applies on first installation, and repeat bootstrap does not rewrite it.
