@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/updatecapability"
 	"io"
 	"regexp"
 	"strconv"
@@ -92,20 +93,24 @@ func (s *Service) SigningPublicKeyHex() string {
 
 // CreateReleaseRequest is the request to create a release
 type CreateReleaseRequest struct {
-	ProductName       string
-	Version           string
-	Channel           string
-	ReleaseNotes      string
-	MinUpdaterVersion string
-	TargetGroups      []string
-	Filename          string
-	FileSize          int64
-	File              io.Reader
-	ArtifactKind      string
+	UpdaterRequirements *updatecapability.Requirements
+	ProductName         string
+	Version             string
+	Channel             string
+	ReleaseNotes        string
+	MinUpdaterVersion   string
+	TargetGroups        []string
+	Filename            string
+	FileSize            int64
+	File                io.Reader
+	ArtifactKind        string
 }
 
 // CreateRelease creates a new release
 func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (*types.Release, error) {
+	if err := req.UpdaterRequirements.Validate(); err != nil {
+		return nil, err
+	}
 	if req.ArtifactKind == "update" {
 		return nil, fmt.Errorf("update artifacts require artifact_metadata or paired artifact_variants")
 	}
@@ -138,7 +143,7 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 		ReleaseNotes:      req.ReleaseNotes,
 		MinUpdaterVersion: req.MinUpdaterVersion,
 		TargetGroups:      req.TargetGroups,
-		Manifest: types.Manifest{
+		Manifest: types.Manifest{UpdaterRequirements: req.UpdaterRequirements,
 			Product: req.ProductName,
 			Version: req.Version,
 			Channel: req.Channel,
@@ -192,7 +197,7 @@ func (s *Service) GetLatestRelease(ctx context.Context, product, channel, curren
 
 	compatible := releases[:0]
 	for _, r := range releases {
-		if r.Manifest.ArtifactKind == "" {
+		if r.Manifest.ArtifactKind == "" && r.Manifest.UpdaterRequirements == nil {
 			compatible = append(compatible, r)
 		}
 	}
@@ -217,7 +222,7 @@ func (s *Service) GetLatestReleaseForGroup(ctx context.Context, product, channel
 
 	compatible := releases[:0]
 	for _, r := range releases {
-		if r.Manifest.ArtifactKind == "" {
+		if r.Manifest.ArtifactKind == "" && r.Manifest.UpdaterRequirements == nil {
 			compatible = append(compatible, r)
 		}
 	}

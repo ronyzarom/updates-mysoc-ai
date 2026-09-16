@@ -1,0 +1,88 @@
+{
+  "action": "authorize-next-operation",
+  "authorization_payload_decoded": {
+    "protocol": "pod-maintenance-next-operation-v1",
+    "authorization_id": "fixture-next-authorization",
+    "previous_binding": {
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "deadline": "2026-09-17T10:00:00Z"
+    },
+    "previous_generation": 42,
+    "previous_outcome": "predecessor-restored",
+    "next_binding": {
+      "artifact_signature": "SCQ+MWiK9aOlUkkgNj0z4xv/MmAPviLa+vM0lq28oaxqstP+QkSPsQqEExbmD3WXAIU869Y+tUDBRgf4+oXHAQ==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-next-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.37",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "deadline": "2026-09-17T12:30:00Z"
+    },
+    "issued_at": "2026-09-17T12:00:00Z",
+    "expires_at": "2026-09-17T12:10:00Z"
+  },
+  "notice": "Synthetic signing vector; target artifact is not provided or qualified. Never provision fixture key.",
+  "observer_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+  "request": {
+    "protocol": "pod-maintenance-next-operation-v1",
+    "authorization": {
+      "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1uZXh0LW9wZXJhdGlvbi12MSIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW5leHQtYXV0aG9yaXphdGlvbiIsInByZXZpb3VzX2JpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJjMmNiMjllMmQyNzg1MjM0NTdhOTFiOTY0MzY0MmUzY2I1NTdiODBkZGMxOTcwN2QyODdlMmM3ZjAwNmIwN2JjIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJwcmV2aW91c19nZW5lcmF0aW9uIjo0MiwicHJldmlvdXNfb3V0Y29tZSI6InByZWRlY2Vzc29yLXJlc3RvcmVkIiwibmV4dF9iaW5kaW5nIjp7ImFydGlmYWN0X3NpZ25hdHVyZSI6IlNDUStNV2lLOWFPbFVra2dOajB6NHh2L01tQVB2aUxhK3ZNMGxxMjhvYXhxc3RQK1FrU1BzUXFFRXhibUQzV1hBSVU4NjlZK3RVREJSZ2Y0K29YSEFRPT0iLCJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS12MSIsIm9wZXJhdGlvbl9pZCI6ImZpeHR1cmUtbmV4dC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNyIsImFydGlmYWN0X3NoYTI1NiI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJjMmNiMjllMmQyNzg1MjM0NTdhOTFiOTY0MzY0MmUzY2I1NTdiODBkZGMxOTcwN2QyODdlMmM3ZjAwNmIwN2JjIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEyOjMwOjAwWiJ9LCJpc3N1ZWRfYXQiOiIyMDI2LTA5LTE3VDEyOjAwOjAwWiIsImV4cGlyZXNfYXQiOiIyMDI2LTA5LTE3VDEyOjEwOjAwWiJ9",
+      "signature": "D7/RTNHyGTTEeqRR1vWnGhxK6ltDhA4Jjg7N4SZ/jSsE9Al1EvyYJ08kHhH7QkURkcX7AMefAmj2WCDAg6zuDw=="
+    }
+  },
+  "response": {
+    "protocol": "pod-maintenance-next-operation-v1",
+    "authorization_id": "fixture-next-authorization",
+    "previous_binding": {
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "deadline": "2026-09-17T10:00:00Z"
+    },
+    "previous_generation": 42,
+    "previous_outcome": "predecessor-restored",
+    "next_binding": {
+      "artifact_signature": "SCQ+MWiK9aOlUkkgNj0z4xv/MmAPviLa+vM0lq28oaxqstP+QkSPsQqEExbmD3WXAIU869Y+tUDBRgf4+oXHAQ==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-next-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.37",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "deadline": "2026-09-17T12:30:00Z"
+    },
+    "allowed": true,
+    "valid_until": "2026-09-17T12:01:00Z"
+  }
+}

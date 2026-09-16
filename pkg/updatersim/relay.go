@@ -685,15 +685,16 @@ func (r *Relay) handleChildCheck(w http.ResponseWriter, req *http.Request) {
 		localURL += "?artifact_kind=" + offer.SelectedArtifactKind
 	}
 	response := map[string]interface{}{
-		"update_available": true,
-		"latest_version":   offer.LatestVersion,
-		"download_url":     localURL,
-		"update_url":       localURL,
-		"sha256":           offer.Checksum,
-		"signature":        offer.Signature,
-		"release_notes":    offer.ReleaseNotes,
-		"channel":          offer.Channel,
-		"update_group":     offer.UpdateGroup,
+		"updater_requirements": offer.UpdaterRequirements,
+		"update_available":     true,
+		"latest_version":       offer.LatestVersion,
+		"download_url":         localURL,
+		"update_url":           localURL,
+		"sha256":               offer.Checksum,
+		"signature":            offer.Signature,
+		"release_notes":        offer.ReleaseNotes,
+		"channel":              offer.Channel,
+		"update_group":         offer.UpdateGroup,
 	}
 	if len(offer.PolicyAuthorization) > 0 {
 		response["policy_authorization"] = offer.PolicyAuthorization

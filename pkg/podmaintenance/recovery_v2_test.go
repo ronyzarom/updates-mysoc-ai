@@ -75,6 +75,7 @@ type recoveryFixture struct {
 	auth     RecoveryAuthorization
 	claims   RecoveryClaims
 	observer ed25519.PrivateKey
+	release  ed25519.PrivateKey
 }
 
 func makeRecovery(t *testing.T, action string) recoveryFixture {
@@ -109,7 +110,7 @@ func makeRecovery(t *testing.T, action string) recoveryFixture {
 	claims := RecoveryClaims{Protocol: RecoveryProtocol, AuthorizationID: "auth-1", Binding: b, Generation: 9, Action: action, IssuedAt: time.Now().Add(-time.Minute), ExpiresAt: time.Now().Add(10 * time.Minute)}
 	f := &recoveryFake{}
 	c := &RecoveryCoordinator{Directory: dir, Adapter: f, ObserverKey: opub, ReleaseKey: pub}
-	return recoveryFixture{c: c, f: f, b: b, a: a, auth: signAuthorization(claims, opriv), claims: claims, observer: opriv}
+	return recoveryFixture{c: c, f: f, b: b, a: a, auth: signAuthorization(claims, opriv), claims: claims, observer: opriv, release: priv}
 }
 func signAuthorization(c RecoveryClaims, k ed25519.PrivateKey) RecoveryAuthorization {
 	raw, _ := json.Marshal(c)

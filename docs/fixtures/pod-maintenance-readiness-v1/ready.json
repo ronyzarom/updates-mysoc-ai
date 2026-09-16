@@ -1,0 +1,26 @@
+{
+  "action": "readiness",
+  "notice": "Synthetic fixture, not operational readiness proof.",
+  "request": {
+    "protocol": "pod-maintenance-readiness-v1",
+    "pod_id": "qualification-pod",
+    "node_id": "1",
+    "updater_id": "qualification-updater-1"
+  },
+  "response": {
+    "protocol": "pod-maintenance-readiness-v1",
+    "pod_id": "qualification-pod",
+    "node_id": "1",
+    "updater_id": "qualification-updater-1",
+    "capabilities": [
+      "pod-maintenance-v1",
+      "pod-maintenance-recovery-v2"
+    ],
+    "ready": true,
+    "observer_verified": true,
+    "credentials_ready": true,
+    "lifecycle_ready": true,
+    "issued_at": "2026-09-17T12:00:00Z",
+    "valid_until": "2026-09-17T12:00:45Z"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "status": "PROPOSED ONLY; not implemented or advertised in 1.16.1.25. Review before product integration.",
+  "protocol": "pod-maintenance-drain-recovery-v1",
+  "status_request": {
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "binding": {
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "deadline": "2026-09-17T10:00:00Z"
+    },
+    "generation": 42
+  },
+  "status_response": {
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "binding": {
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "deadline": "2026-09-17T10:00:00Z"
+    },
+    "generation": 42,
+    "phase": "draining",
+    "original_deadline_expired": true,
+    "processing_stopped": true,
+    "ingress_stopped": true,
+    "watchdog_retired": false,
+    "watchdog_exited": false,
+    "lease_released": false,
+    "observed_at": "2026-09-17T12:00:00Z",
+    "valid_until": "2026-09-17T12:00:30Z"
+  },
+  "authorization_claims": {
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "authorization_id": "synthetic-drain-recovery-id",
+    "binding": {
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "deadline": "2026-09-17T10:00:00Z"
+    },
+    "generation": 42,
+    "action": "resume-drain",
+    "issued_at": "2026-09-17T12:00:00Z",
+    "expires_at": "2026-09-17T12:10:00Z"
+  },
+  "authorization_signature_domain": "mysoc-pod-drain-recovery-v1\n",
+  "permitted_actions": [
+    "status",
+    "authorize-drain-recovery",
+    "resume-drain"
+  ],
+  "forbidden_actions": [
+    "apply",
+    "recover-artifact",
+    "rollback",
+    "complete",
+    "clear-maintenance",
+    "reassign-owner"
+  ],
+  "completion": "Same operation reaches paused only after independent processing/ingress/watchdog/lease verification. Later product recovery requires its own separately scoped recovery-v2 grant."
+}

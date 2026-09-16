@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/updatecapability"
 	"io"
 	"net/http"
 	"net/url"
@@ -69,6 +70,7 @@ type HeartbeatResponse struct {
 // and ParentInstanceID carry the self-reported product hierarchy; servers that
 // do not understand them ignore the extra fields.
 type UpdateCheckRequest struct {
+	DeploymentRole             string                     `json:"deployment_role,omitempty"`
 	PolicyAuthorizationVersion string                     `json:"policy_authorization_version,omitempty"`
 	InstanceID                 string                     `json:"instance_id"`
 	CurrentVersion             string                     `json:"current_version"`
@@ -88,23 +90,24 @@ type UpdateCheckRequest struct {
 
 // UpdateCheckResponse is the current group-aware update-check response.
 type UpdateCheckResponse struct {
-	PolicyAuthorization  json.RawMessage            `json:"policy_authorization,omitempty"`
-	ProtocolVersion      string                     `json:"protocol_version,omitempty"`
-	UpdateAvailable      bool                       `json:"update_available"`
-	CurrentVersion       string                     `json:"current_version,omitempty"`
-	LatestVersion        string                     `json:"latest_version,omitempty"`
-	DownloadURL          string                     `json:"download_url,omitempty"`
-	UpdateURL            string                     `json:"update_url,omitempty"`
-	SHA256               string                     `json:"sha256,omitempty"`
-	Signature            string                     `json:"signature,omitempty"` // base64 ed25519 release signature
-	ReleaseNotes         string                     `json:"release_notes,omitempty"`
-	Channel              string                     `json:"channel,omitempty"`
-	UpdateGroup          string                     `json:"update_group,omitempty"`
-	AutoUpdate           *bool                      `json:"auto_update,omitempty"`
-	Artifacts            []platformtypes.Artifact   `json:"artifacts,omitempty"`
-	SelectedArtifactKind string                     `json:"selected_artifact_kind,omitempty"`
-	DependencyValidation string                     `json:"dependency_validation,omitempty"`
-	RequiredDependencies []platformtypes.Dependency `json:"required_dependencies,omitempty"`
+	UpdaterRequirements  *updatecapability.Requirements `json:"updater_requirements,omitempty"`
+	PolicyAuthorization  json.RawMessage                `json:"policy_authorization,omitempty"`
+	ProtocolVersion      string                         `json:"protocol_version,omitempty"`
+	UpdateAvailable      bool                           `json:"update_available"`
+	CurrentVersion       string                         `json:"current_version,omitempty"`
+	LatestVersion        string                         `json:"latest_version,omitempty"`
+	DownloadURL          string                         `json:"download_url,omitempty"`
+	UpdateURL            string                         `json:"update_url,omitempty"`
+	SHA256               string                         `json:"sha256,omitempty"`
+	Signature            string                         `json:"signature,omitempty"` // base64 ed25519 release signature
+	ReleaseNotes         string                         `json:"release_notes,omitempty"`
+	Channel              string                         `json:"channel,omitempty"`
+	UpdateGroup          string                         `json:"update_group,omitempty"`
+	AutoUpdate           *bool                          `json:"auto_update,omitempty"`
+	Artifacts            []platformtypes.Artifact       `json:"artifacts,omitempty"`
+	SelectedArtifactKind string                         `json:"selected_artifact_kind,omitempty"`
+	DependencyValidation string                         `json:"dependency_validation,omitempty"`
+	RequiredDependencies []platformtypes.Dependency     `json:"required_dependencies,omitempty"`
 }
 
 // UpdateReportRequest is the current update-result request. Kind and Stage are
@@ -126,6 +129,7 @@ type UpdateReportRequest struct {
 
 // UpdateOffer normalizes the current policy and legacy response formats.
 type UpdateOffer struct {
+	UpdaterRequirements  *updatecapability.Requirements
 	PolicyAuthorization  json.RawMessage
 	ProtocolVersion      string
 	Product              string
@@ -304,6 +308,7 @@ func (c *Client) CheckUpdate(
 	}
 	return &UpdateOffer{
 		PolicyAuthorization:  response.PolicyAuthorization,
+		UpdaterRequirements:  response.UpdaterRequirements,
 		Product:              product,
 		CurrentVersion:       request.CurrentVersion,
 		LatestVersion:        response.LatestVersion,

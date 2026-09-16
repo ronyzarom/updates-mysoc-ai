@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/updatecapability"
 	"io"
 	"log"
 	"net"
@@ -239,6 +240,24 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var updaterRequirements *updatecapability.Requirements
+	if raw := r.FormValue("updater_requirements"); raw != "" {
+		dec := json.NewDecoder(strings.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&updaterRequirements); err != nil || updaterRequirements == nil {
+			writeError(w, 400, "invalid updater_requirements")
+			return
+		}
+		var extra any
+		if err := dec.Decode(&extra); err != io.EOF {
+			writeError(w, 400, "trailing updater_requirements data")
+			return
+		}
+		if err := updaterRequirements.Validate(); err != nil {
+			writeError(w, 400, err.Error())
+			return
+		}
+	}
 	// Independent publication uses one file and its signed identity/dependency metadata.
 	if metadata := r.FormValue("artifact_metadata"); metadata != "" {
 		if !s.config.Server.DualArtifactAlpha {
@@ -278,7 +297,7 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "artifact filename/size mismatch")
 			return
 		}
-		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{ProductName: productName, Version: version, Channel: channel, TargetGroups: targetGroups, ReleaseNotes: releaseNotes, ArtifactKind: artifactKind}, []releases.VariantUpload{{Artifact: a, File: f}})
+		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{UpdaterRequirements: updaterRequirements, ProductName: productName, Version: version, Channel: channel, TargetGroups: targetGroups, ReleaseNotes: releaseNotes, ArtifactKind: artifactKind}, []releases.VariantUpload{{Artifact: a, File: f}})
 		if err != nil {
 			writeError(w, 400, err.Error())
 			return
@@ -329,7 +348,7 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 			}
 			uploads = append(uploads, releases.VariantUpload{Artifact: variant, File: f})
 		}
-		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{ProductName: productName, Version: version, Channel: channel, ReleaseNotes: releaseNotes, TargetGroups: targetGroups}, uploads)
+		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{UpdaterRequirements: updaterRequirements, ProductName: productName, Version: version, Channel: channel, ReleaseNotes: releaseNotes, TargetGroups: targetGroups}, uploads)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -347,15 +366,16 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 
 	svc := s.releaseService()
 	release, err := svc.CreateRelease(r.Context(), releases.CreateReleaseRequest{
-		ProductName:  productName,
-		Version:      version,
-		Channel:      channel,
-		ReleaseNotes: releaseNotes,
-		TargetGroups: targetGroups,
-		Filename:     header.Filename,
-		FileSize:     header.Size,
-		File:         file,
-		ArtifactKind: artifactKind,
+		UpdaterRequirements: updaterRequirements,
+		ProductName:         productName,
+		Version:             version,
+		Channel:             channel,
+		ReleaseNotes:        releaseNotes,
+		TargetGroups:        targetGroups,
+		Filename:            header.Filename,
+		FileSize:            header.Size,
+		File:                file,
+		ArtifactKind:        artifactKind,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -871,6 +891,7 @@ func (s *Server) handleDecommission(w http.ResponseWriter, r *http.Request) {
 // Accepts the format sent by siemcore-updater and creates/updates instances
 
 type UpdateCheckRequest struct {
+	DeploymentRole             string             `json:"deployment_role,omitempty"`
 	PolicyAuthorizationVersion string             `json:"policy_authorization_version,omitempty"`
 	InstanceID                 string             `json:"instance_id"`
 	CurrentVersion             string             `json:"current_version"`
@@ -1027,6 +1048,12 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if release != nil {
+		if err := release.Manifest.UpdaterRequirements.Check(req.DeploymentRole, req.UpdaterVersion, req.Capabilities); err != nil {
+			writeError(w, http.StatusPreconditionFailed, "updater prerequisites: "+err.Error())
+			return
+		}
+	}
 	if info != nil && info.UpdateAvailable {
 		// Build absolute download URL
 		scheme := r.Header.Get("X-Forwarded-Proto")
@@ -1041,15 +1068,16 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		absoluteURL := fmt.Sprintf("%s://%s%s", scheme, host, info.DownloadURL)
 
 		response := map[string]interface{}{
-			"update_available": true,
-			"latest_version":   info.LatestVersion,
-			"download_url":     absoluteURL,
-			"update_url":       absoluteURL, // Alias for compatibility with siemcore-updater
-			"sha256":           info.Checksum,
-			"signature":        info.Signature,
-			"release_notes":    info.ReleaseNotes,
-			"channel":          info.Channel,
-			"update_group":     updateGroup,
+			"updater_requirements": release.Manifest.UpdaterRequirements,
+			"update_available":     true,
+			"latest_version":       info.LatestVersion,
+			"download_url":         absoluteURL,
+			"update_url":           absoluteURL, // Alias for compatibility with siemcore-updater
+			"sha256":               info.Checksum,
+			"signature":            info.Signature,
+			"release_notes":        info.ReleaseNotes,
+			"channel":              info.Channel,
+			"update_group":         updateGroup,
 		}
 		if req.PolicyAuthorizationVersion == "mysoc-policy-authorization-v1" && product == "siemcore" && updateGroup == "alpha" {
 			if grant := s.policyGrant(req.InstanceID, info.LatestVersion); len(grant) > 0 {

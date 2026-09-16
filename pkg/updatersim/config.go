@@ -272,6 +272,7 @@ type FilesystemConfig struct {
 
 // ProductConfig identifies one simulated managed product.
 type ProductConfig struct {
+	DeploymentRole       string   `yaml:"deployment_role,omitempty"`
 	PrerequisiteVerifier []string `yaml:"prerequisite_verifier,omitempty"`
 	Name                 string   `yaml:"name"`
 	CurrentVersion       string   `yaml:"current_version"`
@@ -589,16 +590,18 @@ func (c *Config) Product(name string) (*ProductConfig, bool) {
 // PodMaintenanceConfig explicitly enables the negotiated pod executor. Omitted
 // configurations keep the normal legacy installation flow.
 type PodMaintenanceConfig struct {
-	Recovery         *PodRecoveryConfig `yaml:"recovery,omitempty"`
-	PodID            string             `yaml:"pod_id"`
-	NodeID           string             `yaml:"node_id"`
-	JournalDirectory string             `yaml:"journal_directory"`
-	AdapterCommand   []string           `yaml:"adapter_command"`
+	AdvertiseCapabilities bool               `yaml:"advertise_capabilities,omitempty"`
+	Recovery              *PodRecoveryConfig `yaml:"recovery,omitempty"`
+	PodID                 string             `yaml:"pod_id"`
+	NodeID                string             `yaml:"node_id"`
+	JournalDirectory      string             `yaml:"journal_directory"`
+	AdapterCommand        []string           `yaml:"adapter_command"`
 }
 
 // PodRecoveryConfig is explicitly provisioned; neither advertisements nor a
 // release offer can inject an observer key or authorize expired recovery.
 type PodRecoveryConfig struct {
+	NextOperationFile   string `yaml:"next_operation_file,omitempty"`
 	Protocol            string `yaml:"protocol"`
 	ObserverPublicKey   string `yaml:"observer_public_key"`
 	AuthorizationFile   string `yaml:"authorization_file,omitempty"`

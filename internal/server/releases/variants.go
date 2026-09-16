@@ -31,6 +31,9 @@ func (s *Service) CreateDualRelease(ctx context.Context, req CreateReleaseReques
 	if len(req.TargetGroups) == 0 {
 		return nil, fmt.Errorf("explicit target groups required")
 	}
+	if err := req.UpdaterRequirements.Validate(); err != nil {
+		return nil, err
+	}
 	variants := make([]types.Artifact, len(uploads))
 	for i, u := range uploads {
 		variants[i] = u.Artifact
@@ -90,7 +93,7 @@ func (s *Service) CreateDualRelease(ctx context.Context, req CreateReleaseReques
 			bootstrap = a
 		}
 	}
-	release := &types.Release{ProductName: req.ProductName, Version: req.Version, Channel: req.Channel, ReleaseNotes: req.ReleaseNotes, TargetGroups: req.TargetGroups, ArtifactPath: primaryPath, ArtifactSize: bootstrap.Size, Checksum: bootstrap.Checksum, Signature: bootstrap.Signature, Manifest: types.Manifest{ArtifactKind: req.ArtifactKind, Product: req.ProductName, Version: req.Version, Channel: req.Channel, ArtifactVariants: variants, Artifacts: []types.Artifact{{Name: bootstrap.Name, Arch: bootstrap.Arch, Size: bootstrap.Size, Checksum: bootstrap.Checksum}}}}
+	release := &types.Release{ProductName: req.ProductName, Version: req.Version, Channel: req.Channel, ReleaseNotes: req.ReleaseNotes, TargetGroups: req.TargetGroups, ArtifactPath: primaryPath, ArtifactSize: bootstrap.Size, Checksum: bootstrap.Checksum, Signature: bootstrap.Signature, Manifest: types.Manifest{UpdaterRequirements: req.UpdaterRequirements, ArtifactKind: req.ArtifactKind, Product: req.ProductName, Version: req.Version, Channel: req.Channel, ArtifactVariants: variants, Artifacts: []types.Artifact{{Name: bootstrap.Name, Arch: bootstrap.Arch, Size: bootstrap.Size, Checksum: bootstrap.Checksum}}}}
 	if err := s.repo.Create(ctx, release); err != nil {
 		return nil, err
 	}

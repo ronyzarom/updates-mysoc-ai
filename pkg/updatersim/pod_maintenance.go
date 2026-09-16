@@ -88,6 +88,23 @@ func (s *Simulator) resumePendingPod(ctx context.Context) (bool, error) {
 	if cfg == nil {
 		return false, nil
 	}
+	if cfg.Recovery != nil && cfg.Recovery.NextOperationFile != "" {
+		if cfg.Recovery.Protocol != podmaintenance.RecoveryProtocol {
+			return true, fmt.Errorf("unsupported recovery configuration for next-operation")
+		}
+		auth, err := podmaintenance.ReadRecoveryAuthorization(cfg.Recovery.NextOperationFile)
+		if err != nil {
+			return true, err
+		}
+		key, err := signing.ParsePublicKeyHex(cfg.Recovery.ObserverPublicKey)
+		if err != nil {
+			return true, err
+		}
+		next := podmaintenance.TransitionCoordinator{Directory: cfg.JournalDirectory, Adapter: podmaintenance.CommandAdapter{Command: cfg.AdapterCommand, Timeout: s.config.Simulation.Filesystem.CommandTimeout.Duration}, ObserverKey: key, ReleaseKey: s.publicKey}
+		if err = next.Advance(ctx, auth); err != nil {
+			return true, err
+		}
+	}
 	j, err := podmaintenance.ReadJournal(cfg.JournalDirectory)
 	if os.IsNotExist(err) {
 		return false, nil

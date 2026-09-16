@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/updatecapability"
 	"time"
 )
 
@@ -103,14 +104,15 @@ type Release struct {
 
 // Manifest contains release metadata
 type Manifest struct {
-	ArtifactKind     string     `json:"artifact_kind,omitempty"`
-	Product          string     `json:"product"`
-	Version          string     `json:"version"`
-	Channel          string     `json:"channel"`
-	Artifacts        []Artifact `json:"artifacts"`
-	ArtifactVariants []Artifact `json:"artifact_variants,omitempty"`
-	Dependencies     []string   `json:"dependencies,omitempty"`
-	Changelog        string     `json:"changelog,omitempty"`
+	UpdaterRequirements *updatecapability.Requirements `json:"updater_requirements,omitempty"`
+	ArtifactKind        string                         `json:"artifact_kind,omitempty"`
+	Product             string                         `json:"product"`
+	Version             string                         `json:"version"`
+	Channel             string                         `json:"channel"`
+	Artifacts           []Artifact                     `json:"artifacts"`
+	ArtifactVariants    []Artifact                     `json:"artifact_variants,omitempty"`
+	Dependencies        []string                       `json:"dependencies,omitempty"`
+	Changelog           string                         `json:"changelog,omitempty"`
 }
 
 // Artifact represents a downloadable file in a release

@@ -174,7 +174,7 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 	request := UpdateCheckRequest{
 		InstanceID:       s.config.Instance.ID,
 		CurrentVersion:   product.CurrentVersion,
-		UpdaterVersion:   s.config.Instance.UpdaterVersion,
+		UpdaterVersion:   s.retryBuild(),
 		OS:               operatingSystem,
 		Arch:             architecture,
 		Hostname:         s.config.Instance.Hostname,
@@ -182,6 +182,11 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 		ProductTier:      s.config.Instance.ProductTier,
 		ParentInstanceID: s.config.Instance.ParentID,
 	}
+	role, podCaps, capErr := s.podCapabilities(ctx, product.Name)
+	if capErr != nil {
+		return nil, capErr
+	}
+	request.DeploymentRole = role
 	if product.Name == "siemcore" && policyConsumerAvailable() {
 		request.PolicyAuthorizationVersion = "mysoc-policy-authorization-v1"
 	}
@@ -197,6 +202,7 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 		request.InstalledVersion = evidence.InstalledVersion
 		request.CachedDependencies = evidence.Dependencies
 	}
+	request.Capabilities = append(request.Capabilities, podCaps...)
 	offer, err := s.client.CheckUpdate(ctx, product.Name, request)
 	if err == nil {
 		return offer, nil
@@ -347,6 +353,9 @@ func (s *Simulator) processOfferAttempt(
 		return nil
 	}
 
+	if err := s.verifyOfferRequirements(ctx, offer); err != nil {
+		return fmt.Errorf("updater requirements: %w", err)
+	}
 	// verifyAndDownload enforces the origin release signature before touching
 	// the artifact. In the cascade this is what prevents any intermediate hop
 	// from substituting a payload: the signature is minted only by the updates
@@ -389,6 +398,9 @@ func (s *Simulator) processOfferAttempt(
 
 	if err := s.verifyDualOffer(ctx, offer); err != nil {
 		return s.recordDualFailure(offer, err)
+	}
+	if err := s.verifyOfferRequirements(ctx, offer); err != nil {
+		return fmt.Errorf("updater requirements before execution: %w", err)
 	}
 	if err := s.applyPolicyGrant(ctx, offer); err != nil {
 		// Policy failure has not applied the application: never invoke app rollback.

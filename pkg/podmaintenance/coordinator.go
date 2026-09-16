@@ -108,6 +108,9 @@ func writeDurableJSON(path string, value any) error {
 	if e != nil {
 		return e
 	}
+	return writeDurableBytes(path, raw)
+}
+func writeDurableBytes(path string, raw []byte) error {
 	f, e := os.CreateTemp(filepath.Dir(path), ".maintenance-")
 	if e != nil {
 		return e
