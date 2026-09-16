@@ -1,8 +1,9 @@
 # Boundary 1.0.0.2 — local review candidate
 
-Signed review candidate. Native replay and filesystem/systemd qualification passed
-on the isolated qualification VM. No live pod journal has been edited; 1.0.0.1
-remains deployed on the pod. No product release has been published.
+Signed boundary deployed to B only through GCP OS Config on 2026-09-16.
+Native replay, signature/tamper and filesystem/systemd qualification passed.
+B's exact failed transaction is now preflight-refused with original evidence
+preserved. A/witness were not changed. No product release was published.
 
 ## Exact incident reconciliation
 
@@ -107,3 +108,21 @@ the updater after cycle-lock acquisition, invokes the versioned installer under
 all three locks, then restores the updater's prior active state. No pod service,
 VM, DB, ownership, routing or ring changes are performed. The product hold must
 be independently verified and preserved by the deployment coordinator.
+
+## B-only deployment result
+
+OS Config `boundary-2-b-recovery-20260916` reported COMPLIANT at12:16:12Z.
+Independent host readback verified terminal preflight-refused, no pending unit,
+preserved original journal/evidence, installed manifest hashes, unchanged
+configuration/policy/sudo hashes, and updater active after restart12:15:44Z.
+Wrapper SHA256: `64eaa766f846aea9cc9e7864c8d947b016f247aaad328b1fe3dab63725e2dfa3`.
+Current application remains3.3.152.30, product transaction absent, B standby
+with customer processing/DB/Redis stopped. No availability/rollback success is
+claimed. B/witness product holds and A's stopped state were preserved.
+
+The first attempt refused a busy updater cycle lock before mutation. The
+reviewed envelope now waits at most45s by retrying the same nonblocking exclusive
+lock; timeout still refuses. It never stops the updater before acquiring that
+lock. Delivery regular-file/symlink and retry tests bring the unit suite to36.
+Only the updater service restarted. No product services, VM, DB, routing,
+maintenance or release-target changes were made by delivery.
