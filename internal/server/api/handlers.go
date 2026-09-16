@@ -871,20 +871,21 @@ func (s *Server) handleDecommission(w http.ResponseWriter, r *http.Request) {
 // Accepts the format sent by siemcore-updater and creates/updates instances
 
 type UpdateCheckRequest struct {
-	InstanceID         string             `json:"instance_id"`
-	CurrentVersion     string             `json:"current_version"`
-	UpdaterVersion     string             `json:"updater_version"`
-	OS                 string             `json:"os"`
-	Arch               string             `json:"arch"`
-	Hostname           string             `json:"hostname"`
-	Channel            string             `json:"channel"`
-	ProductTier        string             `json:"product_tier,omitempty"`       // canonical tier (defaults to {product} when it is a tier)
-	ParentInstanceID   string             `json:"parent_instance_id,omitempty"` // parent node's instance_id
-	Lifecycle          string             `json:"lifecycle,omitempty"`
-	InstalledVersion   string             `json:"installed_version,omitempty"`
-	CachedDependencies []types.Dependency `json:"cached_dependencies,omitempty"`
-	ProtocolVersion    string             `json:"protocol_version,omitempty"`
-	Capabilities       []string           `json:"capabilities,omitempty"`
+	PolicyAuthorizationVersion string             `json:"policy_authorization_version,omitempty"`
+	InstanceID                 string             `json:"instance_id"`
+	CurrentVersion             string             `json:"current_version"`
+	UpdaterVersion             string             `json:"updater_version"`
+	OS                         string             `json:"os"`
+	Arch                       string             `json:"arch"`
+	Hostname                   string             `json:"hostname"`
+	Channel                    string             `json:"channel"`
+	ProductTier                string             `json:"product_tier,omitempty"`       // canonical tier (defaults to {product} when it is a tier)
+	ParentInstanceID           string             `json:"parent_instance_id,omitempty"` // parent node's instance_id
+	Lifecycle                  string             `json:"lifecycle,omitempty"`
+	InstalledVersion           string             `json:"installed_version,omitempty"`
+	CachedDependencies         []types.Dependency `json:"cached_dependencies,omitempty"`
+	ProtocolVersion            string             `json:"protocol_version,omitempty"`
+	Capabilities               []string           `json:"capabilities,omitempty"`
 }
 
 func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
@@ -1050,6 +1051,12 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 			"channel":          info.Channel,
 			"update_group":     updateGroup,
 		}
+		if req.PolicyAuthorizationVersion == "mysoc-policy-authorization-v1" && product == "siemcore" && updateGroup == "alpha" {
+			if grant := s.policyGrant(req.InstanceID, info.LatestVersion); len(grant) > 0 {
+				response["policy_authorization"] = grant
+			}
+		}
+
 		if dualSelected {
 			response["protocol_version"] = artifactprotocol.Version
 			response["artifacts"] = info.Artifacts

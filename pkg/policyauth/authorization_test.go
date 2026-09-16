@@ -24,7 +24,7 @@ func fixture(t *testing.T) (Payload, Expected, ed25519.PublicKey, ed25519.Privat
 	policy := []byte(`{"policy_revision":3}`)
 	sum := sha256.Sum256(policy)
 	p := Payload{Protocol: Protocol, Hostname: "testing-fixture", Product: "siemcore", OldPolicySHA256: hex.EncodeToString(sum[:]), PolicyRevision: 4, FromVersion: "3.3.152.26", TargetVersion: "3.3.152.32", ArtifactSHA256: strings.Repeat("a", 64), ArtifactSignature: base64.StdEncoding.EncodeToString(make([]byte, 64)), SourceCommit: strings.Repeat("b", 40), IssuedAt: now.Unix() - 1, ExpiresAt: now.Unix() + 300}
-	e := Expected{p.Hostname, p.FromVersion, p.TargetVersion, p.ArtifactSHA256, p.ArtifactSignature, p.SourceCommit, policy, 3}
+	e := Expected{p.Hostname, p.FromVersion, p.TargetVersion, p.ArtifactSHA256, p.ArtifactSignature, p.SourceCommit, policy, 3, ""}
 	return p, e, pub, priv, now
 }
 func TestVerifyAndPythonConsumerCompatibility(t *testing.T) {

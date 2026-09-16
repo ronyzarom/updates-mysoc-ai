@@ -38,7 +38,7 @@ def candidate(old, old_raw, payload, hostname, now):
     require(len(base64.b64decode(payload['artifact_signature'],validate=True))==64,'invalid artifact signature')
     new=copy.deepcopy(old);new['policy_revision']=payload['policy_revision']
     new['allowed_transitions'].append([before,target])
-    new['releases'][target]={'artifact':'/var/lib/siemcore-cascade-updater/artifacts/'+target+'.artifact','sha256':payload['artifact_sha256'],'signature':payload['artifact_signature']}
+    new['releases'][target]={'artifact':'/var/lib/siemcore-cascade-updater/artifacts/siemcore-'+target+'.artifact','sha256':payload['artifact_sha256'],'signature':payload['artifact_signature']}
     mounts=old.get('expected_mounts_by_version',{}).get(before,old.get('expected_mounts'))
     require(mounts is not None,'missing baseline mount policy')
     new.setdefault('expected_mounts_by_version',{})[target]=copy.deepcopy(mounts)

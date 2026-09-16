@@ -695,6 +695,10 @@ func (r *Relay) handleChildCheck(w http.ResponseWriter, req *http.Request) {
 		"channel":          offer.Channel,
 		"update_group":     offer.UpdateGroup,
 	}
+	if len(offer.PolicyAuthorization) > 0 {
+		response["policy_authorization"] = offer.PolicyAuthorization
+	}
+
 	if offer.ProtocolVersion != "" {
 		response["protocol_version"] = offer.ProtocolVersion
 		response["artifacts"] = offer.Artifacts

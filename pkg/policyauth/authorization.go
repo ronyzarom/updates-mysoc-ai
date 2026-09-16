@@ -43,6 +43,7 @@ type Expected struct {
 	Hostname, FromVersion, TargetVersion, ArtifactSHA256, ArtifactSignature, SourceCommit string
 	Policy                                                                                []byte
 	Revision                                                                              int64
+	PolicyDigest                                                                          string
 }
 
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -93,10 +94,14 @@ func newer(from, to string) bool {
 }
 func Validate(p Payload, expected Expected, now time.Time) error {
 	sum := sha256.Sum256(expected.Policy)
+	policyDigest := expected.PolicyDigest
+	if policyDigest == "" {
+		policyDigest = hex.EncodeToString(sum[:])
+	}
 	if p.Protocol != Protocol || p.Product != "siemcore" || !hostPattern.MatchString(p.Hostname) || p.Hostname != expected.Hostname {
 		return errors.New("authorization identity mismatch")
 	}
-	if p.OldPolicySHA256 != hex.EncodeToString(sum[:]) || expected.Revision < 0 || p.PolicyRevision <= 0 || p.PolicyRevision-1 != expected.Revision {
+	if !hex64.MatchString(policyDigest) || p.OldPolicySHA256 != policyDigest || expected.Revision < 0 || p.PolicyRevision <= 0 || p.PolicyRevision-1 != expected.Revision {
 		return errors.New("authorization predecessor policy mismatch")
 	}
 	if p.FromVersion != expected.FromVersion || p.TargetVersion != expected.TargetVersion || !newer(p.FromVersion, p.TargetVersion) {

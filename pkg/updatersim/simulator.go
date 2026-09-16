@@ -182,6 +182,9 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 		ProductTier:      s.config.Instance.ProductTier,
 		ParentInstanceID: s.config.Instance.ParentID,
 	}
+	if product.Name == "siemcore" && policyConsumerAvailable() {
+		request.PolicyAuthorizationVersion = "mysoc-policy-authorization-v1"
+	}
 	if len(product.PrerequisiteVerifier) > 0 {
 		request.ProtocolVersion = artifactprotocol.Version
 		request.Capabilities = []string{artifactprotocol.Capability, artifactprotocol.IndependentCapability}
@@ -238,6 +241,11 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 		return ErrCycleInProgress
 	}
 	defer s.cycleMu.Unlock()
+	releaseCycle, lockErr := s.policyCycleLock()
+	if lockErr != nil {
+		return lockErr
+	}
+	defer releaseCycle()
 
 	if mode == "" {
 		mode = s.config.Simulation.Mode
@@ -376,6 +384,12 @@ func (s *Simulator) processOfferAttempt(
 	if err := s.verifyDualOffer(ctx, offer); err != nil {
 		return s.recordDualFailure(offer, err)
 	}
+	if err := s.applyPolicyGrant(ctx, offer); err != nil {
+		// Policy failure has not applied the application: never invoke app rollback.
+		s.recordAttempt(update, false, "policy authorization: "+err.Error())
+		return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "policy_authorization", Stage: "prerequisite"}))
+	}
+
 	if err := s.executor.Apply(ctx, update); err != nil {
 		return s.failAndRollback(ctx, update, fmt.Errorf("apply: %w", err))
 	}

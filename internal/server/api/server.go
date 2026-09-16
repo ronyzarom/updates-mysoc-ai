@@ -230,6 +230,7 @@ func (s *Server) setupRoutes() {
 		// Admin endpoints
 		// =====================
 		r.Route("/admin", func(r chi.Router) {
+			r.With(s.adminAuth).Post("/instances/{id}/policy-authorizations", s.handleIssuePolicyAuthorization)
 			// License management - reads and writes require admin authorization.
 			r.With(s.adminAuth).Get("/licenses", s.handleListLicenses)
 			r.With(s.adminAuth).Get("/licenses/{id}", s.handleGetLicense)

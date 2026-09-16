@@ -17,6 +17,11 @@ func (s *Simulator) RunTargetedRelease(ctx context.Context, product, target, exp
 		return ErrCycleInProgress
 	}
 	defer s.cycleMu.Unlock()
+	releaseCycle, lockErr := s.policyCycleLock()
+	if lockErr != nil {
+		return lockErr
+	}
+	defer releaseCycle()
 	p, ok := s.config.Product(product)
 	if !ok || expected == "" || target == "" || p.CurrentVersion != expected {
 		return fmt.Errorf("targeted release current-version guard failed")
