@@ -1,0 +1,8 @@
+{
+  "logs": {
+    "siemcore-pod-boundary-ce8a9787f28a4029beb0937c02e23d56.service.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "siemcore-pod-boundary-ce8a9787f28a4029beb0937c02e23d56.service.stdout.stderr": "a573ec7fdc67adda32cea11c56be801711d08c171b65fb3728869e034c957385",
+    "siemcore-pod-boundary-d68201082f0f4c368c03e1318e50d6f4.service.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "siemcore-pod-boundary-d68201082f0f4c368c03e1318e50d6f4.service.stdout.stderr": "a6ef5bc0d7b299c238fd380d4d0f2170dab1eff8f82701e23f3cf13269f63afd"
+  }
+}
