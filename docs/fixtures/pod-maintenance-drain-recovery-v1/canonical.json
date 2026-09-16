@@ -1,0 +1,327 @@
+{
+  "authorization": {
+    "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+    "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+  },
+  "authorization_payload_decoded": {
+    "action": "resume-drain",
+    "authorization_id": "synthetic-drain-recovery-id",
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "expires_at": "2026-09-17T12:10:00Z",
+    "generation": 42,
+    "issued_at": "2026-09-17T12:00:00Z",
+    "protocol": "pod-maintenance-drain-recovery-v1"
+  },
+  "authorize_drain_recovery_request": {
+    "authorization": {
+      "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+      "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+    },
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "generation": 42,
+    "protocol": "pod-maintenance-drain-recovery-v1"
+  },
+  "notice": "CANONICAL CONTRACT FIXTURE ONLY; executor not implemented/enabled. Test key must never be trusted on a host.",
+  "observer_test_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+  "resume_drain_request": {
+    "authorization": {
+      "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+      "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+    },
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "generation": 42,
+    "protocol": "pod-maintenance-drain-recovery-v1"
+  },
+  "signature_domain": "mysoc-pod-drain-recovery-v1\n",
+  "status_request": {
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "generation": 42,
+    "protocol": "pod-maintenance-drain-recovery-v1"
+  },
+  "status_response": {
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "generation": 42,
+    "ingress_stopped": true,
+    "lease_released": false,
+    "observed_at": "2026-09-17T12:00:00Z",
+    "original_deadline_expired": true,
+    "phase": "draining",
+    "processing_stopped": true,
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "valid_until": "2026-09-17T12:00:30Z",
+    "watchdog_exited": false,
+    "watchdog_retired": false
+  },
+  "vectors": [
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+      },
+      "expected": "signature-and-scope-valid; mutation still needs fresh authority/evidence",
+      "name": "valid-scope"
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJjb21wbGV0ZSIsImF1dGhvcml6YXRpb25faWQiOiJzeW50aGV0aWMtZHJhaW4tcmVjb3ZlcnktaWQiLCJiaW5kaW5nIjp7ImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsImFydGlmYWN0X3NoYTI1NiI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJhcnRpZmFjdF9zaWduYXR1cmUiOiJhY0diWEJtOHkvUlN2aklNYkJHeTZZYVJZTVhQUW55bEpGNVdVaVk3cjFHMEM5SU5jR3lqNGR3RC9Vd211NGhMcHlhZ09acVBLM3FQQjhuMXlEWVNEUT09IiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiIsImZyb21fdmVyc2lvbiI6IjMuMy4xNTIuMzUiLCJub2RlX2lkIjoiMSIsIm9wZXJhdGlvbl9pZCI6ImZpeHR1cmUtb3JpZ2luYWwtb3BlcmF0aW9uIiwicG9kX2lkIjoicXVhbGlmaWNhdGlvbi1wb2QiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJjMmNiMjllMmQyNzg1MjM0NTdhOTFiOTY0MzY0MmUzY2I1NTdiODBkZGMxOTcwN2QyODdlMmM3ZjAwNmIwN2JjIiwicHJvZHVjdCI6InNpZW1jb3JlIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtdjEiLCJ0YXJnZXRfdmVyc2lvbiI6IjMuMy4xNTIuMzYiLCJ1cGRhdGVyX2lkIjoicXVhbGlmaWNhdGlvbi11cGRhdGVyLTEifSwiY2FwdHVyZWRfb3duZXIiOnsibm9kZV9pZCI6IjEiLCJvd25lcl9nZW5lcmF0aW9uIjo0MSwid2F0Y2hkb2dfZ2VuZXJhdGlvbiI6NDF9LCJleHBpcmVzX2F0IjoiMjAyNi0wOS0xN1QxMjoxMDowMFoiLCJnZW5lcmF0aW9uIjo0MiwiaXNzdWVkX2F0IjoiMjAyNi0wOS0xN1QxMjowMDowMFoiLCJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1kcmFpbi1yZWNvdmVyeS12MSJ9",
+        "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+      },
+      "expected": "reject-signature",
+      "name": "tampered-action"
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6NTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6NDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "f/LRqWZvZjbSseU/BbKJhEqzC4JmmUWV6XAdyaKy2gYwRa3zBASNTW29uOo5vHFnp+PpnqHevbk9adYc4EHDAQ=="
+      },
+      "expected": "reject-mutation-expired; read-only-status-allowed",
+      "name": "expired"
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTE6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "UujHjqtF2DAtUNlpSZ1/pn9yOA8JO6qdLybKx61QsBZsRLQUyK4KwOtHJeEraFczeTyZ5K5102IaMRhJzWt2Dg=="
+      },
+      "expected": "reject-replayed-id",
+      "ledger_payload_sha256": "108ea10ad6d943304c3ddc5242ca95fda5bd4e8001fe36373327f4f3eecd856a",
+      "name": "same-id-changed-signed-bytes"
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+      },
+      "expected": "reject-revoked",
+      "ledger_state": "revoked",
+      "name": "same-id-revoked"
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+      },
+      "expected": "resume-same-operation-only-after-fresh-checks",
+      "ledger_state": "in-progress",
+      "name": "same-id-crash-retry"
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+      },
+      "expected": "reject-evidence-older-than-5s",
+      "name": "stale-node-evidence",
+      "node_evidence_observed_at": "2026-09-17T11:59:54Z"
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+      },
+      "expected": "reject-retirement-retain-barrier",
+      "name": "newer-watchdog",
+      "observed_watchdog_generation": 42
+    },
+    {
+      "authorization": {
+        "payload_base64": "eyJhY3Rpb24iOiJyZXN1bWUtZHJhaW4iLCJhdXRob3JpemF0aW9uX2lkIjoic3ludGhldGljLWRyYWluLXJlY292ZXJ5LWlkIiwiYmluZGluZyI6eyJhcnRpZmFjdF9wYXRoIjoiL3JldGFpbmVkL3RhcmdldC50YXIuZ3oiLCJhcnRpZmFjdF9zaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiYWNHYlhCbTh5L1JTdmpJTWJCR3k2WWFSWU1YUFFueWxKRjVXVWlZN3IxRzBDOUlOY0d5ajRkd0QvVXdtdTRoTHB5YWdPWnFQSzNxUEI4bjF5RFlTRFE9PSIsImRlYWRsaW5lIjoiMjAyNi0wOS0xN1QxMDowMDowMFoiLCJmcm9tX3ZlcnNpb24iOiIzLjMuMTUyLjM1Iiwibm9kZV9pZCI6IjEiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9yaWdpbmFsLW9wZXJhdGlvbiIsInBvZF9pZCI6InF1YWxpZmljYXRpb24tcG9kIiwicHJldmlvdXNfYXJ0aWZhY3Rfc2hhMjU2IjoiYzJjYjI5ZTJkMjc4NTIzNDU3YTkxYjk2NDM2NDJlM2NiNTU3YjgwZGRjMTk3MDdkMjg3ZTJjN2YwMDZiMDdiYyIsInByb2R1Y3QiOiJzaWVtY29yZSIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwidGFyZ2V0X3ZlcnNpb24iOiIzLjMuMTUyLjM2IiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIn0sImNhcHR1cmVkX293bmVyIjp7Im5vZGVfaWQiOiIxIiwib3duZXJfZ2VuZXJhdGlvbiI6NDEsIndhdGNoZG9nX2dlbmVyYXRpb24iOjQxfSwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTI6MTA6MDBaIiwiZ2VuZXJhdGlvbiI6NDIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTI6MDA6MDBaIiwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtZHJhaW4tcmVjb3ZlcnktdjEifQ==",
+        "signature": "QatdDzwMnSxhuCD92BJfA3fY7Uo5Izat5pn8HuBvUfKGYTpLlvguYK8u7BWugeyRdTEqcA9dwKtXFCnLX7BWDw=="
+      },
+      "expected": "reject-lease-release-retain-barrier",
+      "name": "different-owner",
+      "observed_owner_node_id": "2"
+    }
+  ],
+  "verification_time": "2026-09-17T12:00:00Z",
+  "authorize_drain_recovery_response": {
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "generation": 42,
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "authorization_id": "synthetic-drain-recovery-id",
+    "observed_at": "2026-09-17T12:00:00Z",
+    "valid_until": "2026-09-17T12:00:05Z",
+    "phase": "draining",
+    "authorized": true,
+    "permission_expires": "2026-09-17T12:10:00Z"
+  },
+  "resume_drain_response": {
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "generation": 42,
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "authorization_id": "synthetic-drain-recovery-id",
+    "observed_at": "2026-09-17T12:00:00Z",
+    "valid_until": "2026-09-17T12:00:05Z",
+    "phase": "paused",
+    "processing_stopped": true,
+    "ingress_stopped": true,
+    "quiescent": true,
+    "watchdog_retired": true,
+    "watchdog_exited": true,
+    "lease_released": true,
+    "node_evidence_observed_at": "2026-09-17T12:00:00Z"
+  },
+  "uncertain_termination_response": {
+    "protocol": "pod-maintenance-drain-recovery-v1",
+    "binding": {
+      "artifact_path": "/retained/target.tar.gz",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_signature": "acGbXBm8y/RSvjIMbBGy6YaRYMXPQnylJF5WUiY7r1G0C9INcGyj4dwD/Uwmu4hLpyagOZqPK3qPB8n1yDYSDQ==",
+      "deadline": "2026-09-17T10:00:00Z",
+      "from_version": "3.3.152.35",
+      "node_id": "1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "previous_artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "product": "siemcore",
+      "protocol": "pod-maintenance-v1",
+      "target_version": "3.3.152.36",
+      "updater_id": "qualification-updater-1"
+    },
+    "generation": 42,
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 41,
+      "watchdog_generation": 41
+    },
+    "authorization_id": "synthetic-drain-recovery-id",
+    "observed_at": "2026-09-17T12:00:00Z",
+    "valid_until": "2026-09-17T12:00:05Z",
+    "phase": "blocked",
+    "processing_stopped": false,
+    "ingress_stopped": true,
+    "quiescent": false,
+    "watchdog_retired": false,
+    "watchdog_exited": false,
+    "lease_released": false,
+    "node_evidence_observed_at": "2026-09-17T12:00:00Z",
+    "reason": "processing-termination-unknown"
+  }
+}

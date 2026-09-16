@@ -57,8 +57,10 @@ A new signed next-artifact receipt is independently verified before authorizatio
 
 Observer acknowledges exact claims with allowed=true and current valid_until no
 later than authorization expiry. It must check prior operation terminal acceptance,
-no in-flight work/lease/watchdog ambiguity and authority to begin the specified
-next operation. This authorization only changes local operation bookkeeping; the
+no unresolved prior maintenance work or ambiguous ownership and authority to
+begin the specified next operation. An accepted ACTIVE may retain its valid
+processing lease/watchdog; absence of that lease is NOT a prerequisite. The next
+maintenance operation captures and drains the current owner. This authorization only changes local operation bookkeeping; the
 new intent still needs a fresh observer begin/paused acknowledgement to mutate.
 
 Under the same exclusive lock, original operation.json and recovery-v2.json are
