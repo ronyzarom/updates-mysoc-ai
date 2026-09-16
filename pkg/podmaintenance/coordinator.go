@@ -101,7 +101,10 @@ func sameTarget(a, b Binding) bool {
 	return reflect.DeepEqual(a, b)
 }
 func writeJournal(path string, j Journal) error {
-	raw, e := json.Marshal(j)
+	return writeDurableJSON(path, j)
+}
+func writeDurableJSON(path string, value any) error {
+	raw, e := json.Marshal(value)
 	if e != nil {
 		return e
 	}
@@ -158,6 +161,11 @@ func (c *Coordinator) Run(ctx context.Context, target Binding) error {
 		return e
 	}
 	defer unlock()
+	if _, err := os.Lstat(filepath.Join(c.Directory, "recovery-v2.json")); err == nil {
+		return errors.New("v2 recovery journal requires v2 reconciliation; no v1 fallback")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	path := filepath.Join(c.Directory, "operation.json")
 	j := Journal{}
 	if info, err := os.Lstat(path); err == nil {

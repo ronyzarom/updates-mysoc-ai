@@ -589,8 +589,18 @@ func (c *Config) Product(name string) (*ProductConfig, bool) {
 // PodMaintenanceConfig explicitly enables the negotiated pod executor. Omitted
 // configurations keep the normal legacy installation flow.
 type PodMaintenanceConfig struct {
-	PodID            string   `yaml:"pod_id"`
-	NodeID           string   `yaml:"node_id"`
-	JournalDirectory string   `yaml:"journal_directory"`
-	AdapterCommand   []string `yaml:"adapter_command"`
+	Recovery         *PodRecoveryConfig `yaml:"recovery,omitempty"`
+	PodID            string             `yaml:"pod_id"`
+	NodeID           string             `yaml:"node_id"`
+	JournalDirectory string             `yaml:"journal_directory"`
+	AdapterCommand   []string           `yaml:"adapter_command"`
+}
+
+// PodRecoveryConfig is explicitly provisioned; neither advertisements nor a
+// release offer can inject an observer key or authorize expired recovery.
+type PodRecoveryConfig struct {
+	Protocol            string `yaml:"protocol"`
+	ObserverPublicKey   string `yaml:"observer_public_key"`
+	AuthorizationFile   string `yaml:"authorization_file,omitempty"`
+	ArtifactReceiptFile string `yaml:"artifact_receipt_file,omitempty"`
 }

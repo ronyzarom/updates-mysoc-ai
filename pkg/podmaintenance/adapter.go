@@ -45,8 +45,18 @@ type CommandAdapter struct {
 
 func (a CommandAdapter) Call(ctx context.Context, action string, r Request) (Response, error) {
 	var result Response
+
+	err := a.invoke(ctx, action, r, &result)
+	return result, err
+}
+func (a CommandAdapter) CallRecovery(ctx context.Context, action string, r RecoveryRequest) (RecoveryResponse, error) {
+	var result RecoveryResponse
+	err := a.invoke(ctx, action, r, &result)
+	return result, err
+}
+func (a CommandAdapter) invoke(ctx context.Context, action string, request any, result any) error {
 	if len(a.Command) == 0 || !filepath.IsAbs(a.Command[0]) {
-		return result, errors.New("missing adapter command")
+		return errors.New("missing adapter command")
 	}
 	t := a.Timeout
 	if t <= 0 {
@@ -54,9 +64,9 @@ func (a CommandAdapter) Call(ctx context.Context, action string, r Request) (Res
 	}
 	ctx, cancel := context.WithTimeout(ctx, t)
 	defer cancel()
-	raw, e := json.Marshal(r)
+	raw, e := json.Marshal(request)
 	if e != nil {
-		return result, e
+		return e
 	}
 	args := append(append([]string{}, a.Command[1:]...), action)
 	cmd := exec.CommandContext(ctx, a.Command[0], args...)
@@ -66,12 +76,9 @@ func (a CommandAdapter) Call(ctx context.Context, action string, r Request) (Res
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	if e = cmd.Run(); e != nil {
-		return result, e
+		return e
 	}
-	if e = decode(out.Bytes(), &result); e != nil {
-		return result, e
-	}
-	return result, nil
+	return decode(out.Bytes(), result)
 }
 
 // encoding/json otherwise accepts duplicate keys with last-value-wins semantics.

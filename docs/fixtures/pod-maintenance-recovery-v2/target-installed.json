@@ -1,0 +1,474 @@
+{
+  "actions": {
+    "acceptance": {
+      "request": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization": {
+          "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+          "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+        },
+        "artifact": {
+          "product": "siemcore",
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "path": "/retained/target.tar.gz"
+        }
+      },
+      "response": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization_id": "fixture-observer-authorization-1",
+        "phase": "completed",
+        "permission_expires": "2026-09-17T11:05:00Z",
+        "acceptance": {
+          "health": {
+            "version": "3.3.152.36",
+            "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+            "role": "STBY",
+            "management_ready": true,
+            "processing_disabled": true,
+            "traffic_disabled": true,
+            "authority_valid": true,
+            "replication_status": "ready"
+          },
+          "active_ip_owned": false,
+          "service_healthy": true,
+          "processing_authority_valid": false
+        }
+      }
+    },
+    "authorize-recovery": {
+      "request": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization": {
+          "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+          "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+        },
+        "artifact": {
+          "product": "siemcore",
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "path": "/retained/target.tar.gz"
+        }
+      },
+      "response": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization_id": "fixture-observer-authorization-1",
+        "phase": "paused",
+        "permission_expires": "2026-09-17T11:05:00Z"
+      }
+    },
+    "capabilities": {
+      "request": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization": {
+          "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+          "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+        },
+        "artifact": {
+          "product": "siemcore",
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "path": "/retained/target.tar.gz"
+        }
+      },
+      "response": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "capabilities": [
+          "pod-maintenance-recovery-v2"
+        ],
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization_id": "fixture-observer-authorization-1",
+        "phase": "paused",
+        "permission_expires": "2026-09-17T11:05:00Z"
+      }
+    },
+    "complete": {
+      "request": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization": {
+          "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+          "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+        },
+        "artifact": {
+          "product": "siemcore",
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "path": "/retained/target.tar.gz"
+        },
+        "health": {
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "role": "STBY",
+          "management_ready": true,
+          "processing_disabled": true,
+          "traffic_disabled": true,
+          "authority_valid": true,
+          "replication_status": "ready"
+        }
+      },
+      "response": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization_id": "fixture-observer-authorization-1",
+        "phase": "completed",
+        "permission_expires": "2026-09-17T11:05:00Z"
+      }
+    },
+    "health": {
+      "request": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization": {
+          "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+          "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+        },
+        "artifact": {
+          "product": "siemcore",
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "path": "/retained/target.tar.gz"
+        }
+      },
+      "response": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization_id": "fixture-observer-authorization-1",
+        "phase": "paused",
+        "permission_expires": "2026-09-17T11:05:00Z",
+        "health": {
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "role": "STBY",
+          "management_ready": true,
+          "processing_disabled": true,
+          "traffic_disabled": true,
+          "authority_valid": true,
+          "replication_status": "ready"
+        }
+      }
+    },
+    "recover": {
+      "request": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization": {
+          "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+          "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+        },
+        "artifact": {
+          "product": "siemcore",
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "path": "/retained/target.tar.gz"
+        }
+      },
+      "response": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization_id": "fixture-observer-authorization-1",
+        "phase": "paused",
+        "permission_expires": "2026-09-17T11:05:00Z"
+      }
+    },
+    "status": {
+      "request": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization": {
+          "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+          "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+        },
+        "artifact": {
+          "product": "siemcore",
+          "version": "3.3.152.36",
+          "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "path": "/retained/target.tar.gz"
+        }
+      },
+      "response": {
+        "protocol": "pod-maintenance-recovery-v2",
+        "binding": {
+          "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+          "artifact_path": "/retained/target.tar.gz",
+          "protocol": "pod-maintenance-v1",
+          "operation_id": "fixture-original-operation",
+          "pod_id": "qualification-pod",
+          "node_id": "1",
+          "updater_id": "qualification-updater-1",
+          "product": "siemcore",
+          "from_version": "3.3.152.35",
+          "target_version": "3.3.152.36",
+          "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+          "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "deadline": "2026-09-17T10:00:00Z"
+        },
+        "generation": 42,
+        "outcome": "target-installed",
+        "authorization_id": "fixture-observer-authorization-1",
+        "phase": "paused",
+        "permission_expires": "2026-09-17T11:05:00Z"
+      }
+    }
+  },
+  "artifact": {
+    "product": "siemcore",
+    "version": "3.3.152.36",
+    "sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+    "signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+    "path": "/retained/target.tar.gz"
+  },
+  "artifact_content_base64": "c3ludGhldGljIHByZWRlY2Vzc29yIGZpeHR1cmUK",
+  "authorization": {
+    "payload_base64": "eyJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1yZWNvdmVyeS12MiIsImF1dGhvcml6YXRpb25faWQiOiJmaXh0dXJlLW9ic2VydmVyLWF1dGhvcml6YXRpb24tMSIsImJpbmRpbmciOnsiYXJ0aWZhY3Rfc2lnbmF0dXJlIjoiRWxYRDV5WVcvVkZ4aEI4dTVlcFRzWEpOVkx0bVAzNkEzOTRBYzI4dEx0WTlOTEljUTF6UnE5ckg3QTBZQjBrbnlQblVyRDRqcUlPT2J4elBFRzkzQUE9PSIsImFydGlmYWN0X3BhdGgiOiIvcmV0YWluZWQvdGFyZ2V0LnRhci5neiIsInByb3RvY29sIjoicG9kLW1haW50ZW5hbmNlLXYxIiwib3BlcmF0aW9uX2lkIjoiZml4dHVyZS1vcmlnaW5hbC1vcGVyYXRpb24iLCJwb2RfaWQiOiJxdWFsaWZpY2F0aW9uLXBvZCIsIm5vZGVfaWQiOiIxIiwidXBkYXRlcl9pZCI6InF1YWxpZmljYXRpb24tdXBkYXRlci0xIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImMyY2IyOWUyZDI3ODUyMzQ1N2E5MWI5NjQzNjQyZTNjYjU1N2I4MGRkYzE5NzA3ZDI4N2UyYzdmMDA2YjA3YmMiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI2LTA5LTE3VDEwOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiYWN0aW9uIjoicmVzdW1lLXRhcmdldCIsImlzc3VlZF9hdCI6IjIwMjYtMDktMTdUMTE6MDA6MDBaIiwiZXhwaXJlc19hdCI6IjIwMjYtMDktMTdUMTE6MTA6MDBaIn0=",
+    "signature": "qAze20ujfn20b72x2bObMIJBQbdrMdNS9dGO3YJiL8oZk3hA60J7A+CCNBKt7vKAebPuqevFYTdUDGrqdFOzCg=="
+  },
+  "authorization_payload_decoded": {
+    "protocol": "pod-maintenance-recovery-v2",
+    "authorization_id": "fixture-observer-authorization-1",
+    "binding": {
+      "artifact_signature": "ElXD5yYW/VFxhB8u5epTsXJNVLtmP36A394Ac28tLtY9NLIcQ1zRq9rH7A0YB0knyPnUrD4jqIOObxzPEG93AA==",
+      "artifact_path": "/retained/target.tar.gz",
+      "protocol": "pod-maintenance-v1",
+      "operation_id": "fixture-original-operation",
+      "pod_id": "qualification-pod",
+      "node_id": "1",
+      "updater_id": "qualification-updater-1",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "c2cb29e2d278523457a91b9643642e3cb557b80ddc19707d287e2c7f006b07bc",
+      "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deadline": "2026-09-17T10:00:00Z"
+    },
+    "generation": 42,
+    "action": "resume-target",
+    "issued_at": "2026-09-17T11:00:00Z",
+    "expires_at": "2026-09-17T11:10:00Z"
+  },
+  "notice": "SYNTHETIC ONLY. Test keys are public fixtures; never trust them on any host. Not a release or live grant.",
+  "test_keys": {
+    "observer_public_key": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+    "release_public_key": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29"
+  }
+}
