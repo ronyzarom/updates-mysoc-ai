@@ -16,3 +16,12 @@ class Files(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d,patch.object(p,'protected',lambda *a:None):
    f=Path(d)/'message';p.write_private(f,b'one');p.write_private(f,b'two')
    self.assertEqual(f.read_bytes(),b'two');self.assertEqual(f.stat().st_mode&0o777,0o600)
+
+ def test_busy_lock_retries_without_stopping_service(self):
+  with patch.object(p.fcntl,'flock',side_effect=[BlockingIOError(),None]) as lock,patch.object(p.time,'sleep'),patch.object(p.subprocess,'run') as run:
+   p.acquire_cycle_lock(123)
+   self.assertEqual(lock.call_count,2);run.assert_not_called()
+ def test_busy_lock_deadline_refuses(self):
+  with patch.object(p.fcntl,'flock',side_effect=BlockingIOError()),patch.object(p.time,'monotonic',side_effect=[0,46]),patch.object(p.time,'sleep') as sleep:
+   with self.assertRaises(BlockingIOError):p.acquire_cycle_lock(123)
+   sleep.assert_not_called()

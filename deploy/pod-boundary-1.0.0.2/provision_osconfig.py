@@ -3,7 +3,7 @@
 Run by reviewed GCP OS Config assignment with receipt/archive/expected.json.
 Requires central product hold independently verified by rollout coordinator.
 """
-import base64,fcntl,hashlib,json,os,stat,subprocess,tarfile,tempfile,urllib.request
+import base64,fcntl,hashlib,json,os,stat,subprocess,tarfile,tempfile,time,urllib.request
 from pathlib import Path
 VERSION='1.0.0.2'
 PACKAGE_SHA='ba508630db07192ceda951957755c0fed076798823c61547af06943b0be2aa2e'
@@ -60,6 +60,16 @@ def verify_package(base):
  if seen!=expected:raise ValueError('incomplete package')
  return package,receipt
 
+def acquire_cycle_lock(fd, wait_seconds=45):
+ deadline=time.monotonic()+wait_seconds
+ while True:
+  try:
+   fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+   return
+  except BlockingIOError:
+   if time.monotonic()>=deadline:raise
+   time.sleep(1)
+
 def main():
  if os.geteuid()!=0:raise ValueError('root required')
  protected(BASE)
@@ -80,7 +90,7 @@ def main():
  lockpath=Path('/var/lib/siemcore-cascade-updater/state.json.cycle-lock')
  fd=os.open(lockpath,os.O_RDWR|os.O_NOFOLLOW)
  try:
-  fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+  acquire_cycle_lock(fd)
   if os.fstat(fd).st_ino!=lockpath.stat(follow_symlinks=False).st_ino:raise ValueError('cycle lock changed')
   if active=='active':subprocess.run(['systemctl','stop',service],check=True,timeout=45)
  finally:
