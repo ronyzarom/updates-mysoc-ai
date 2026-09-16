@@ -56,3 +56,26 @@ Do not use a startup-script reboot of active pod nodes. OS Config route still ne
 agent, IAM/API and targeted-assignment verification; availability is not authorization.
 Verify signed package externally; files.json provides internal integrity only.
 There is no automatic publishing, scheduling, installation or ring promotion here.
+
+## Native qualification result — 2026-09-16
+
+Passed via OS Config on disposable Ubuntu24.04 VM updater-boundary-qual-20260916,
+instance6826523492612546857, me-west1-b. No SSH writes, production changes or
+currentpod restarts. Tests: installer wrongidentity/activeupdater refusal and
+first/repeated provisioning; real systemd command; runtime timeout kills child
+in a new session; killed outer supervisor recovered through durable unit stop;
+delayed revoked worker refusal. Ten adapter boundary tests also passed onLinux.
+Actual OSConfig compliance report and serial result retained in the main workspace
+at docs/verification/pod-boundary-native-20260916.
+
+This upgrades native supervision/installer qualification only. It does not
+qualify live product compensation, signed .32→.30 artifact rollback, database
+recovery or availability. The exact .32 archive has a detached existing-key
+qualification signature; no release row or ring offer was created.
+
+OSConfig minimal prerequisites verified: enabled API and Google serviceagent,
+installed OSConfig agent, attached VM serviceaccount (no projectroles required
+for that identity), instance enable-osconfig=TRUE, and GoogleAPI connectivity.
+Currentpod already has serviceaccounts; projectmetadata is PER-VM and individual
+enablement was absent. Do not change currentpod metadata or deploy this boundary
+until remaining signed-artifact gates pass.
