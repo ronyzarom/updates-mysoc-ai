@@ -1,0 +1,49 @@
+{
+  "fixture_only": true,
+  "deployment_qualified": false,
+  "pinned_public_key_hex": "c1518d654ea5f2b1085cc8f9baa913b3110b1d2238de6603eb9ef10952494e20",
+  "registry": {
+    "protocol": "pod-bootstrap-v1",
+    "pod_id": "fixture-pod",
+    "installation_id": "f7f780ce-6cd9-482a-a431-ef74757cfa79",
+    "operation_id": "fixture-bootstrap-1",
+    "release": {
+      "product": "siemcore",
+      "version": "0.0.0.1",
+      "architecture": "amd64",
+      "sha256": "a0be7da1ad269c8506d01b3a7cf04bf58442faf262f2f1fcf5e0fbbcdeb7180d",
+      "public_key": "wVGNZU6l8rEIXMj5uqkTsxELHSI43mYD657xCVJJTiA=",
+      "signature": "+/VM+CgukboyPx2sP20vY2BWQ739I2PdPWYwDq2pe1xgLQbQZkvUpHiUcRBeLD2+wMCd75S2yYyLCHg0JDqqDA=="
+    },
+    "nodes": [
+      {
+        "node_id": "1",
+        "updater_id": "fixture-updater-1",
+        "machine_id": "fixture-machine-1",
+        "infrastructure_id": "fixture-vm-1",
+        "certificate_sha256": "7e360675d41fd296cd60de131ca30e1f3679fa92e0d4e817d8965ce3e8841078"
+      },
+      {
+        "node_id": "2",
+        "updater_id": "fixture-updater-2",
+        "machine_id": "fixture-machine-2",
+        "infrastructure_id": "fixture-vm-2",
+        "certificate_sha256": "37a4204cd3ab15ca026fd1a555d1c5c01d79350fe5b0abe59ead710d10f89864"
+      },
+      {
+        "node_id": "witness",
+        "updater_id": "fixture-updater-witness",
+        "machine_id": "fixture-machine-witness",
+        "infrastructure_id": "fixture-vm-witness",
+        "certificate_sha256": "23999fcf79e0072b7b570f23aacd3b59f74ec3fd3febc54fb71317abb875170c"
+      }
+    ]
+  },
+  "registry_sha256": "40d62bc0234d9364d24db93c2df38ad6aa6e51877ab2018fc60b5f750652394c",
+  "certificate_inputs": {
+    "1": "Y2VydGlmaWNhdGUtMQ==",
+    "2": "Y2VydGlmaWNhdGUtMg==",
+    "witness": "Y2VydGlmaWNhdGUtd2l0bmVzcw=="
+  },
+  "certificate_input_warning": "Synthetic bytes for Authenticate unit boundary only, not X.509 or TLS qualification."
+}
