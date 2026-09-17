@@ -1,0 +1,56 @@
+#0 building with "colima" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 108B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/siemcore:pod-bootstrap-native-fixture
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/siemcore:pod-bootstrap-native-fixture@sha256:95a767c304c981d3412adee04fc7144223367e86e1f23d99a66dfcfe9202e3db
+#4 resolve docker.io/library/siemcore:pod-bootstrap-native-fixture@sha256:95a767c304c981d3412adee04fc7144223367e86e1f23d99a66dfcfe9202e3db done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 74.40MB 0.2s done
+#5 DONE 0.2s
+
+#4 [1/2] FROM docker.io/library/siemcore:pod-bootstrap-native-fixture@sha256:95a767c304c981d3412adee04fc7144223367e86e1f23d99a66dfcfe9202e3db
+#4 CACHED
+
+#6 [2/2] COPY siemcore /app/siemcore
+#6 DONE 0.1s
+
+#7 exporting to image
+#7 exporting layers
+#7 exporting layers 1.2s done
+#7 exporting manifest sha256:a9d7e569c9a4eacab938a3db5c5e4fafd140156df575e52fde25770f0a75f10b done
+#7 exporting config sha256:509754bc3225f6f62c5f6e45919c255505bd246e971ee24a21c19e78ea09ad25 done
+#7 exporting attestation manifest sha256:73d8980fce175c5619d25dec63328fe3906dd5c17daebae8c515786ec005bf3b done
+#7 exporting manifest list sha256:b5dd92045651b83a4e7aafcbd085bd7ced244d68af61e46493c77e1ce2ee0dbc done
+#7 naming to docker.io/library/siemcore:combined-bootstrap-fixture done
+#7 unpacking to docker.io/library/siemcore:combined-bootstrap-fixture
+#7 unpacking to docker.io/library/siemcore:combined-bootstrap-fixture 0.2s done
+#7 DONE 1.4s
+Retained fixture siemcore-combined-bootstrap-fixture volume=siemcore-combined-bootstrap-data root=/var/lib/docker/volumes/siemcore-combined-bootstrap-data/_data image=sha256:b5dd92045651b83a4e7aafcbd085bd7ced244d68af61e46493c77e1ce2ee0dbc
+{"product":"siemcore","version":"3.3.152.35","sha256":"e39075d58bceeec2853e8f05fb9ef49d41467986c2db71c1b792000f36224fc0","signature":"lGihK1+WE/pDyyuUz4lCRXnsZcj25KTzwY9TIUsP1ffaA655xiRoMiX5PUAJ0TF8Hlz8MgusRTOIN98aKvKxDg==","path":"/var/lib/siemcore-pod-artifacts/e39075d58bceeec2853e8f05fb9ef49d41467986c2db71c1b792000f36224fc0.tar.gz"}
+{"product":"siemcore","version":"3.3.152.99","sha256":"7491046e1349648081555c4f6be0b72dfd3e6a5483e2e5ea381076b92effee2b","signature":"J6sZcKmld9Sktn/rhlU3L1w9sKBoZWezzV40ubSV+NCTGWYK2jtNS05MG42zolUrdim+cgCud2JLk+08OYjWCw==","path":"/var/lib/siemcore-pod-artifacts/7491046e1349648081555c4f6be0b72dfd3e6a5483e2e5ea381076b92effee2b.tar.gz"}
+Fixture ready; no live credentials, databases or network ports published
+COMBINED_HANDOFF=/var/lib/docker/volumes/siemcore-combined-bootstrap-data/_data/handoff.json
+PASS stage 1 1 runtime
+PASS stage 2 2 runtime
+PASS stage 3 1 schema
+PASS stage 4 2 schema
+PASS stage 5 2 seed
+PASS stage 6 1 runtime
+PASS combined real Observer/runtime/schema/selected seed/retry; disabled connector preserved, raw logs excluded, marker applied; barrier retained, no active assignment
+PASS stage 7 1 readiness
+PASS stage 8 2 readiness
+PASS read-only source and target readiness; marker unchanged; bootstrap barrier retained
+PASS stage 9 1 management
+PASS stage 10 2 management
+PASS authenticated Updates app/archiver paused observations on A/B; barrier retained, no assignment

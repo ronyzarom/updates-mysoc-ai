@@ -352,3 +352,9 @@ all nonpath data-binding fields unchanged and every credential byte identical.
 A separate test-only runner image provides the preinstalled Docker CLI at the
 product's fixed `/usr/bin/docker` path.101 localtests found100pass1Linux-onlyskip;
 actual ten-stage transport integration is pending the fresh product fixture.
+
+Fresh ten-stage combined qualification now passed with the current full-source
+binary, including internal five-second observation deadlines and real paused
+app/archiver observations on both nodes. Management receipts1627bytes each.
+Evidence: `docs/verification/pod-management-runner-20260917`. This qualifies the
+observation transport, not the full app installer/controller or activation.
