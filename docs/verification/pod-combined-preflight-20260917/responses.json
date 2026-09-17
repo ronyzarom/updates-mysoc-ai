@@ -1,0 +1,53 @@
+[
+  {
+    "sequence": 1,
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "1",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "e4d254c8e7692bea492c3c081ec533ca738ccdd8b09de58ea9485ed8cdc272fd",
+        "artifact_sha256": "fdc2b5bc07d333d45a17534cbf5365944924e4dbe47a2cdab2b4535e14aecb04"
+      },
+      "configuration_sha256": "ab284f24cf344e2ace5ebef0d38effe24970bcdaeefd28840d964c1a95d75620",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  },
+  {
+    "sequence": 2,
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "2",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "45cb134a189ee3f45cacb4be7d9cdffb8c27254e15724e4636bf2dd8c1b56167",
+        "artifact_sha256": "fdc2b5bc07d333d45a17534cbf5365944924e4dbe47a2cdab2b4535e14aecb04"
+      },
+      "configuration_sha256": "53236a6ff79e147c0f2046086c465114a9fdfebe33d2721de26a23fa060e8958",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  },
+  {
+    "sequence": 3,
+    "exit_code": 1,
+    "receipt": null
+  }
+]
