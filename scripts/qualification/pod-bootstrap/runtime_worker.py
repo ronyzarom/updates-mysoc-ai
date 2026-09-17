@@ -88,6 +88,9 @@ def bounded_child(action,timeout):
         selector.close();os.close(readfd)
         # Stop only the worker/process group, never daemon containers/data/barrier.
         completed,_=os.waitpid(pid,os.WNOHANG)
+        # Descendants can survive a failed direct child; always close its group.
+        try:os.killpg(pid,signal.SIGKILL)
+        except (ProcessLookupError,PermissionError):pass
         if not completed:
             try:os.killpg(pid,signal.SIGKILL)
             except (ProcessLookupError,PermissionError):

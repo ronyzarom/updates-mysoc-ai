@@ -17,8 +17,10 @@ import runtime_worker
 import readiness
 import management
 import selective_sync
+import application_runner
 
-p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');p.add_argument('--application',action='store_true');args=p.parse_args()
+if args.application and not args.management:p.error('--application requires --management')
 if args.management and not args.readiness:p.error('--management requires --readiness')
 root=Path(args.root)
 d=protocol.strict_json(client.protected(root/'handoff.json'))
@@ -29,7 +31,7 @@ if handoff.registry_hash(registry)!=d['registry_sha256']:raise ValueError('regis
 docker='/usr/local/bin/docker'
 
 
-def bundle():
+def bundle(module_name='pod-data-runtime-v1',extracted=None):
     artifact=d['artifact']
     for field in ('product','version','sha256','signature'):
         if artifact[field]!=registry['release'][field]:raise ValueError('artifact release mismatch')
@@ -45,9 +47,15 @@ def bundle():
         for field in ('product','version','architecture'):
             if manifest[field]!=registry['release'][field]:raise ValueError('manifest release mismatch')
         if manifest['runtime_image_id']!=d['image_id']:raise ValueError('signed common image mismatch')
-        member=archive.getmember('bundle/'+runtime_worker.MODULE_PATH)
+        member=archive.getmember('bundle/'+runtime_worker.MODULES[module_name])
         if not member.isfile() or member.size>1024*1024:raise ValueError('invalid module member')
         module=archive.extractfile(member).read()
+        if extracted is not None:
+            files={}
+            for entry in entries:
+                if not entry.name.startswith('bundle/') and entry.name!='bundle':raise ValueError('unexpected archive root')
+                if entry.isfile():files[entry.name[len('bundle/'):]]=archive.extractfile(entry).read()
+            application_runner.verify_tree(extracted,files)
     return manifest,module,artifact['sha256']
 
 
@@ -120,7 +128,8 @@ def management_observation(node_id,node,journal):
 
 order=[('1','runtime'),('2','runtime'),('1','schema'),('2','schema'),('2','seed'),('1','runtime')]
 if args.readiness:order += [('1','readiness'),('2','readiness')]
-if args.management:order += [('1','management'),('2','management')]
+if args.application:order += [('1','application'),('1','management'),('2','application'),('2','management')]
+elif args.management:order += [('1','management'),('2','management')]
 for sequence,(node_id,stage) in enumerate(order,1):
     deadline=time.monotonic()+570;request_path=root/('request-%d.json'%sequence)
     while not request_path.exists():
@@ -128,7 +137,7 @@ for sequence,(node_id,stage) in enumerate(order,1):
         time.sleep(.1)
     try:
         request=protocol.strict_json(client.protected(request_path));node=d['nodes'][node_id]
-        field=('schema_config' if node_id=='1' else 'seed_config') if stage=='readiness' else {'runtime':'runtime_input','schema':'schema_config','seed':'seed_config','management':'management_config'}[stage]
+        field=('schema_config' if node_id=='1' else 'seed_config') if stage=='readiness' else {'runtime':'runtime_input','schema':'schema_config','seed':'seed_config','management':'management_config','application':'application_input'}[stage]
         if request!={'sequence':sequence,'node_id':node_id,'stage':stage,'input_file':node[field]}:
             raise ValueError('unexpected stage order or path')
         original=client.protected(node['original_input'])
@@ -138,7 +147,12 @@ for sequence,(node_id,stage) in enumerate(order,1):
         sync=selective_sync.validate(original,registry,node['input_sha256'],node_id,config if 'seed' in config else None)
         authorize=authorizer(node_id,node)
         journal=Path(node['journal_directory'])
-        if stage=='management':
+        if stage=='application':
+            expected=dict(operation_id=registry['operation_id'],generation=d['generation'],input_sha256=node['input_sha256'],artifact_sha256=registry['release']['sha256'])
+            if set(config)!={'config','binding'} or config['binding']!=expected or config['config']['node_id']!=node_id or config['config']['pod_id']!=registry['pod_id']:raise ValueError('application input binding mismatch')
+            prior=protocol.strict_json(client.protected(journal/'application-data-evidence.json'))
+            receipt=application_runner.invoke(d['application_bundle'],node['application_directory'],config['config'],expected,prior,journal/'application.json',lambda:bundle(application_runner.NAME,d['application_bundle']),authorize)
+        elif stage=='management':
             receipt=management_observation(node_id,node,journal)
         elif stage=='runtime':
             if set(config)!={'config','tls_material','binding'}:raise ValueError('runtime input shape')
@@ -147,6 +161,12 @@ for sequence,(node_id,stage) in enumerate(order,1):
                 raise ValueError('runtime binding mismatch')
             receipt=runtime_worker.invoke(node['runtime_directory'],config['config'],config['tls_material'],expected,
                 journal/'runtime.json',bundle,authorize,timeout=300)
+            if args.application:
+                manifest,module,_=bundle()
+                evidence=application_runner.capture(node['runtime_directory'],config,receipt,manifest,module,lambda argv:data_runner.docker_json(docker,argv))
+                path=journal/'application-data-evidence.json'
+                if path.exists() and protocol.strict_json(client.protected(path))!=evidence:raise ValueError('prior runtime evidence changed on retry')
+                client.durable(path,evidence)
         else:
             if config.get('initial_sync')!=sync:raise ValueError('initial sync mismatch')
             # Exact protected per-stage input mounted at the artifact's fixed path.

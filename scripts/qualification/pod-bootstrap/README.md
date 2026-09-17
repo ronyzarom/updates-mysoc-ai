@@ -367,3 +367,27 @@ are rejected. The selected module's bytes are verified and compiled explicitly;
 adding metadata does not execute application installation. The runtime-only path
 remains compatible.102 localtests found101pass1Linux-onlyskip. Application module
 execution awaits its exact API/config/partial-receipt and prerequisite contract.
+
+Application installation dispatch is source-only. `application_runner.py` verifies
+both signed module metadata and every extracted bundle file, uses bounded private
+subprocess output and an outer process-group deadline, retains partial state, and
+requires exact incomplete/processing-disabled receipts. Worker cleanup now also
+terminates surviving descendants after the direct worker exits.
+
+`native_combined_handoff.py --application --management --readiness` requires a
+protected top-level `application_bundle` extracted root, plus each node's
+`application_directory` and `application_input` (`{config,binding}`). It records
+`application-data-evidence.json` immediately after the authenticated runtime,
+using the verified runtime module's plan and exact compose bytes, pinned images,
+healthy container IDs and network membership. Installation compares against this
+prior journal; it never learns replacement evidence. Runtime retries must retain
+the same evidence. Stages9–12 are application1, management1, application2,
+management2. Independent management observation is mandatory.
+
+Five application-runner tests passed in the disposable Linux Python3.12 fixture,
+including root-owned bundle tamper/extra/symlink rejection. The broader local
+suite at this change passed106 tests with one Linux-only skip before the new
+root-only tree test was added. These are runner tests, not the actual product
+installer qualification. SiemCore's full signed installer fixture remains pending.
+Container-controlled host prerequisite responses cannot qualify real VM host
+acceptance. Live kits, cloud rebuild and activation remain disabled.
