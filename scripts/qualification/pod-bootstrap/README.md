@@ -304,3 +304,18 @@ independently verified target PostgreSQL network namespace and passed without
 weakening HBA or changing original input. Initial consumer now uses this path.
 Evidence and explicit qualification limits are in
 `docs/verification/pod-combined-runner-20260917`.85 local tests discovered84pass1skip.
+
+## Read-only data observation
+
+`readiness.py` and explicit runner readiness mode execute only
+`/app/siemcore pod-bootstrap-data --config /run/bootstrap/data.json --verify-readiness`.
+No mutating-command fallback is accepted. The distinct readiness-only combined
+stdout/stderr limit is32768bytes; normal data commands remain8192bytes. Receipt
+validation requires original identity/binding, exact33 sorted policy2 tables,
+matching source/target/top-level content, mirror incarnation/generation, UTC
+observations no older than5seconds, effective applied-marker age<=5minutes, and
+installation_complete/processing_allowed/activation_ready all false. Retained
+observations never skip fresh execution and have an explicit expiry. The consumer's
+optional --readiness adds exact node1/node2 observation requests7/8.93 localtests
+found92pass1Linux-onlyskip. Native8stage qualification is running separately;
+production activation remains excluded.

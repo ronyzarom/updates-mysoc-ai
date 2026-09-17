@@ -1,0 +1,409 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": {
+      "const": "pod-bootstrap-readiness-v1"
+    },
+    "operation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "node_id": {
+      "enum": [
+        "1",
+        "2"
+      ]
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "registry_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "installed_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "enum": [
+        "schema-and-state-verified",
+        "selected-mirror-verified"
+      ]
+    },
+    "installation_complete": {
+      "const": false
+    },
+    "processing_allowed": {
+      "const": false
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "policy_version": {
+      "const": 2
+    },
+    "operational_content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "tables",
+        "sha256",
+        "observed_at"
+      ],
+      "properties": {
+        "policy_version": {
+          "const": 2
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tables": {
+          "type": "array",
+          "minItems": 33,
+          "maxItems": 33,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "rows",
+              "sha256"
+            ],
+            "properties": {
+              "name": {
+                "enum": [
+                  "tenants",
+                  "users",
+                  "tenant_settings",
+                  "tenant_ip_mappings",
+                  "pod_sender_mappings",
+                  "tenant_ingest_tokens",
+                  "api_keys",
+                  "connector_configs",
+                  "connector_state",
+                  "integration_tokens",
+                  "mysoc_config",
+                  "mysoc_platform_config",
+                  "customer_siemcore_config",
+                  "mssp_customer_settings",
+                  "rules",
+                  "rule_templates",
+                  "rule_instance_storage",
+                  "unified_rule_templates",
+                  "system_rule_definitions",
+                  "system_rule_policies",
+                  "mssp_rule_definitions",
+                  "llm_config",
+                  "alert_rule_templates",
+                  "system_global_catalogs",
+                  "log_categories",
+                  "log_type_mappings",
+                  "log_retention_policies",
+                  "compliance_profiles",
+                  "compliance_requirements",
+                  "findings",
+                  "triage_findings",
+                  "archive_manifest",
+                  "pod_replication_progress"
+                ]
+              },
+              "rows": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "activation_ready": {
+      "const": false
+    },
+    "mirror": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "source",
+        "target",
+        "applied_age_ns",
+        "observed_at"
+      ],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "PodID",
+            "InstallationID",
+            "Generation"
+          ],
+          "properties": {
+            "PodID": {
+              "type": "string",
+              "minLength": 1
+            },
+            "InstallationID": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "Generation": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "policy_version",
+            "tables",
+            "sha256",
+            "observed_at"
+          ],
+          "properties": {
+            "policy_version": {
+              "const": 2
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "observed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "tables": {
+              "type": "array",
+              "minItems": 33,
+              "maxItems": 33,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "rows",
+                  "sha256"
+                ],
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "tenants",
+                      "users",
+                      "tenant_settings",
+                      "tenant_ip_mappings",
+                      "pod_sender_mappings",
+                      "tenant_ingest_tokens",
+                      "api_keys",
+                      "connector_configs",
+                      "connector_state",
+                      "integration_tokens",
+                      "mysoc_config",
+                      "mysoc_platform_config",
+                      "customer_siemcore_config",
+                      "mssp_customer_settings",
+                      "rules",
+                      "rule_templates",
+                      "rule_instance_storage",
+                      "unified_rule_templates",
+                      "system_rule_definitions",
+                      "system_rule_policies",
+                      "mssp_rule_definitions",
+                      "llm_config",
+                      "alert_rule_templates",
+                      "system_global_catalogs",
+                      "log_categories",
+                      "log_type_mappings",
+                      "log_retention_policies",
+                      "compliance_profiles",
+                      "compliance_requirements",
+                      "findings",
+                      "triage_findings",
+                      "archive_manifest",
+                      "pod_replication_progress"
+                    ]
+                  },
+                  "rows": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "policy_version",
+            "tables",
+            "sha256",
+            "observed_at"
+          ],
+          "properties": {
+            "policy_version": {
+              "const": 2
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "observed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "tables": {
+              "type": "array",
+              "minItems": 33,
+              "maxItems": 33,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "rows",
+                  "sha256"
+                ],
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "tenants",
+                      "users",
+                      "tenant_settings",
+                      "tenant_ip_mappings",
+                      "pod_sender_mappings",
+                      "tenant_ingest_tokens",
+                      "api_keys",
+                      "connector_configs",
+                      "connector_state",
+                      "integration_tokens",
+                      "mysoc_config",
+                      "mysoc_platform_config",
+                      "customer_siemcore_config",
+                      "mssp_customer_settings",
+                      "rules",
+                      "rule_templates",
+                      "rule_instance_storage",
+                      "unified_rule_templates",
+                      "system_rule_definitions",
+                      "system_rule_policies",
+                      "mssp_rule_definitions",
+                      "llm_config",
+                      "alert_rule_templates",
+                      "system_global_catalogs",
+                      "log_categories",
+                      "log_type_mappings",
+                      "log_retention_policies",
+                      "compliance_profiles",
+                      "compliance_requirements",
+                      "findings",
+                      "triage_findings",
+                      "archive_manifest",
+                      "pod_replication_progress"
+                    ]
+                  },
+                  "rows": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "applied_age_ns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300000000000
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "required": [
+    "protocol",
+    "operation_id",
+    "generation",
+    "node_id",
+    "input_sha256",
+    "registry_sha256",
+    "artifact_sha256",
+    "installed_version",
+    "phase",
+    "installation_complete",
+    "processing_allowed",
+    "observed_at",
+    "policy_version",
+    "operational_content",
+    "activation_ready"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "node_id": {
+            "const": "2"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "mirror"
+        ],
+        "properties": {
+          "phase": {
+            "const": "selected-mirror-verified"
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "mirror"
+          ]
+        },
+        "properties": {
+          "phase": {
+            "const": "schema-and-state-verified"
+          }
+        }
+      }
+    }
+  ]
+}

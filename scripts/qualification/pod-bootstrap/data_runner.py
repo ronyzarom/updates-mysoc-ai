@@ -78,7 +78,7 @@ def mount_path(value, socket_uid=None):
     return str(p)
 
 
-def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,peer_namespace=None):
+def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,peer_namespace=None,readiness=False):
     """Verifier callbacks are mandatory: image presence is not signature verification.
 
     verify_artifact_image must independently verify signed artifact, image identity,
@@ -86,6 +86,7 @@ def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_ru
     Observer operation authorization, runtime readiness, mount contents and peers.
     Both must raise on failure. No permissive default implementation exists.
     """
+    if type(readiness) is not bool:raise ValueError('explicit readiness mode required')
     if not Path(docker).is_absolute() or not re.fullmatch(r'sha256:[0-9a-f]{64}',image_id):
         raise ValueError('absolute Docker binary and immutable image ID required')
     if not re.fullmatch(r'[0-9a-f]{64}',network_id) or set(mounts)!=MOUNTS:
@@ -130,23 +131,26 @@ def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_ru
     for target in sorted(sources):
         argv+=['--mount','type=bind,src='+sources[target]+',dst='+target+',readonly']
     argv += [image_id,*COMMAND[1:]]
+    if readiness:argv.append('--verify-readiness')
     return name,argv
 
 
 class Runner:
-    def __init__(self,docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,timeout=300,peer_namespace=None):
+    def __init__(self,docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,timeout=300,peer_namespace=None,readiness=False):
         if type(timeout) is not int or not 1<=timeout<=600:
             raise ValueError('bounded qualification timeout required')
-        self.settings=(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,peer_namespace)
+        self.settings=(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,peer_namespace,readiness)
+        self.command=COMMAND+(('--verify-readiness',) if readiness else ())
         self.timeout=timeout
+        self.output_limit=32768 if readiness else 8192
         self.container_name=None
     def __call__(self,command):
-        if tuple(command)!=COMMAND:raise ValueError('unexpected artifact command')
+        if tuple(command)!=self.command:raise ValueError('unexpected artifact command')
         docker=self.settings[0]
         name,argv=prepare(*self.settings)
         self.container_name=name
         try:
-            return bounded(argv,self.timeout)
+            return bounded(argv,self.timeout,self.output_limit)
         finally:
             # CLI termination alone does not stop a detached daemon-side process.
             # Keep the stopped container for qualification evidence; never remove

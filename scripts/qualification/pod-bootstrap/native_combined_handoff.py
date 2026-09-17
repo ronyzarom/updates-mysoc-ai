@@ -14,9 +14,10 @@ import data_stage
 import handoff
 import protocol
 import runtime_worker
+import readiness
 import selective_sync
 
-p=argparse.ArgumentParser();p.add_argument('--root',required=True);args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');args=p.parse_args()
 root=Path(args.root)
 d=protocol.strict_json(client.protected(root/'handoff.json'))
 if d['fixture_only'] is not True or d['root']!=str(root):raise ValueError('exact disposable fixture required')
@@ -63,7 +64,7 @@ def authorizer(node_id,node):
     return authorize
 
 
-def data_factory(node_id,node,config,authorize):
+def data_factory(node_id,node,config,authorize,readiness_mode=False):
     def artifact(image):
         manifest,module,_=bundle()
         if image!=d['image_id']:raise ValueError('image drift')
@@ -88,9 +89,10 @@ def data_factory(node_id,node,config,authorize):
                         ip_address='172.30.97.'+str(10+int(node_id)))
     return data_runner.Runner(docker,d['image_id'],d['network_id'],
         {'/run/bootstrap':node['bootstrap_root'],'/run/tls':node['tls_root'],'/run/siemcore-postgres':node['socket_root']},
-        artifact,authorize,dependency,timeout=300,peer_namespace=peer_namespace)
+        artifact,authorize,dependency,timeout=300,peer_namespace=peer_namespace,readiness=readiness_mode)
 
 order=[('1','runtime'),('2','runtime'),('1','schema'),('2','schema'),('2','seed'),('1','runtime')]
+if args.readiness:order += [('1','readiness'),('2','readiness')]
 for sequence,(node_id,stage) in enumerate(order,1):
     deadline=time.monotonic()+570;request_path=root/('request-%d.json'%sequence)
     while not request_path.exists():
@@ -98,14 +100,14 @@ for sequence,(node_id,stage) in enumerate(order,1):
         time.sleep(.1)
     try:
         request=protocol.strict_json(client.protected(request_path));node=d['nodes'][node_id]
-        field={'runtime':'runtime_input','schema':'schema_config','seed':'seed_config'}[stage]
+        field=('schema_config' if node_id=='1' else 'seed_config') if stage=='readiness' else {'runtime':'runtime_input','schema':'schema_config','seed':'seed_config'}[stage]
         if request!={'sequence':sequence,'node_id':node_id,'stage':stage,'input_file':node[field]}:
             raise ValueError('unexpected stage order or path')
         original=client.protected(node['original_input'])
         document=protocol.strict_json(original)
         if document.get('registry')!=registry or document.get('node_id')!=node_id:raise ValueError('original registry/node mismatch')
         config=protocol.strict_json(client.protected(node[field]))
-        sync=selective_sync.validate(original,registry,node['input_sha256'],node_id,config if stage=='seed' else None)
+        sync=selective_sync.validate(original,registry,node['input_sha256'],node_id,config if 'seed' in config else None)
         authorize=authorizer(node_id,node)
         journal=Path(node['journal_directory'])
         if stage=='runtime':
@@ -117,10 +119,14 @@ for sequence,(node_id,stage) in enumerate(order,1):
                 journal/'runtime.json',bundle,authorize,timeout=300)
         else:
             if config.get('initial_sync')!=sync:raise ValueError('initial sync mismatch')
-            plan=data_stage.prepare(config,registry,d['registry_sha256'],node_id,d['generation'],node['input_sha256'])
             # Exact protected per-stage input mounted at the artifact's fixed path.
             client.durable(Path(node['bootstrap_root'])/'data.json',config)
-            receipt=data_stage.invoke_fixture(plan,journal/(stage+'.json'),data_factory(node_id,node,config,authorize))
+            if stage=='readiness':
+                plan=readiness.prepare(config,registry,d['registry_sha256'],node_id,d['generation'],node['input_sha256'],original)
+                receipt=readiness.observe(plan,journal/'readiness.json',data_factory(node_id,node,config,authorize,readiness_mode=True))
+            else:
+                plan=data_stage.prepare(config,registry,d['registry_sha256'],node_id,d['generation'],node['input_sha256'])
+                receipt=data_stage.invoke_fixture(plan,journal/(stage+'.json'),data_factory(node_id,node,config,authorize))
         result=dict(exit_code=0,stdout=base64.b64encode(json.dumps(receipt,separators=(',',':')).encode()).decode())
     except Exception as error:
         print(json.dumps(dict(sequence=sequence,error_type=type(error).__name__)),flush=True)
