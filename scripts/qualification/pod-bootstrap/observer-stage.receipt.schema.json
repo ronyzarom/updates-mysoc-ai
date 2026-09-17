@@ -1,0 +1,59 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": {
+      "const": "pod-bootstrap-observer-v1"
+    },
+    "operation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "node_id": {
+      "const": "witness"
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "registry_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "installed_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "const": "observer-management-verified"
+    },
+    "installation_complete": {
+      "const": false
+    },
+    "processing_allowed": {
+      "const": false
+    }
+  },
+  "required": [
+    "protocol",
+    "operation_id",
+    "generation",
+    "node_id",
+    "input_sha256",
+    "registry_sha256",
+    "artifact_sha256",
+    "installed_version",
+    "phase",
+    "installation_complete",
+    "processing_allowed"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -218,3 +218,19 @@ VMs or publish releases. Runner factories must present each exact planned config
 at the protected container path and recheck runtime/authorization before execution.
 63 local tests pass; the new multi-stage coordination is fixture-tested, while the
 preceding live local handoff qualified the schema-stage runner specifically.
+
+## Observer management receipt
+
+`observer_stage.py` implements the source-owned `pod-bootstrap-observer-v1`
+config/receipt shapes. It prepares the verified host binary command with both
+`--health` and `--receipt-config`, immutable witness/updater/pod/operation bindings,
+and recorded drain/update configuration digests. A plain configuration-validation
+exit0 is never sufficient. Only `observer-management-verified` with exact release,
+registry, input, node and generation and both completion/processing flags false is
+accepted. Interrupted verification retains an incomplete receipt; same-operation
+retry is allowed, changed plans/settings require reconciliation. No authority
+service installation/start or host runtime launcher is supplied by this adapter.
+The future verified runner must check artifact/configuration integrity and bound
+execution; product owns systemd MainPID, executable continuity, TLS/quorum and
+pre/post authorization checks. Native whole-service qualification remains pending.
+67 local tests pass; Observer adapter testing is fixture-only.

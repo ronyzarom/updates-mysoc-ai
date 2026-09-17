@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": {
+      "const": "pod-bootstrap-observer-v1"
+    },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "pod-bootstrap-v1"
+        },
+        "pod_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "installation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "release": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "product": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "architecture": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1
+            },
+            "public_key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "signature": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "product",
+            "version",
+            "architecture",
+            "sha256",
+            "public_key",
+            "signature"
+          ]
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "updater_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "machine_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "infrastructure_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "certificate_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "node_id",
+              "updater_id",
+              "machine_id",
+              "infrastructure_id",
+              "certificate_sha256"
+            ]
+          }
+        }
+      },
+      "required": [
+        "protocol",
+        "pod_id",
+        "installation_id",
+        "operation_id",
+        "release",
+        "nodes"
+      ]
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node_id": {
+          "const": "witness"
+        },
+        "updater_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "machine_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "infrastructure_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "node_id",
+        "updater_id",
+        "machine_id",
+        "infrastructure_id",
+        "certificate_sha256"
+      ]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "host_machine_id_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invitation_file": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "protocol",
+    "registry",
+    "node",
+    "generation",
+    "input_sha256",
+    "host_machine_id_file",
+    "invitation_file"
+  ]
+}
