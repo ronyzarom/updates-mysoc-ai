@@ -24,3 +24,19 @@ fail on changed/missing selected file credentials. Scope approval comes from
 product tenant layout, not observations or arbitrary request assertions. Each
 data node uses its installed identity; Observer receives bounded observations
 and no credentials. Provisioning and actual GCP runtime acceptance remain gates.
+
+## Opt-in product installer v2 review
+
+Reviewed `pod-application-install-v2`: v1 fields plus explicit protected profile
+path and digest; exact profile bytes join the configuration's hashed assets
+before journal creation, and the installed root0600 copy must remain identical
+on retry. Existing v1 field/digest paths are unchanged. Independently passed all
+six product Python module tests with real Compose and focused Go archive readiness
+tests. A1201-byte UTF-8 prefix was correctly rejected by the current source
+(the product fixed byte-count validation during review).
+
+Compatible for a fresh candidate; not qualified by the existing v1 native run.
+Updates runner remains v1 until original-registration fields for the fresh v2
+candidate are agreed and bound. No retrofit of existing inputs/journals and no
+live/schema4 enablement. Native v2 installation, retry and installed listener
+integration remain required.
