@@ -19,7 +19,8 @@ import management
 import selective_sync
 import application_runner
 
-p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');p.add_argument('--application',action='store_true');args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');p.add_argument('--application',action='store_true');p.add_argument('--resume-application',action='store_true');p.add_argument('--resume-stage',type=int,choices=(9,10,11,12),default=9);args=p.parse_args()
+if args.resume_application and not args.application:p.error('--resume-application requires --application')
 if args.application and not args.management:p.error('--application requires --management')
 if args.management and not args.readiness:p.error('--management requires --readiness')
 root=Path(args.root)
@@ -28,7 +29,7 @@ if d['fixture_only'] is not True or d['root']!=str(root):raise ValueError('exact
 registry=d['registry'];pin=bytes.fromhex(client.protected(d['release_public_key_file']).decode().strip())
 client.validate_registry(registry,pin,'arm64')
 if handoff.registry_hash(registry)!=d['registry_sha256']:raise ValueError('registry fingerprint mismatch')
-docker='/usr/local/bin/docker'
+docker='/usr/local/bin/docker' if Path('/usr/local/bin/docker').exists() else '/usr/bin/docker'
 
 
 def bundle(module_name='pod-data-runtime-v1',extracted=None):
@@ -130,7 +131,16 @@ order=[('1','runtime'),('2','runtime'),('1','schema'),('2','schema'),('2','seed'
 if args.readiness:order += [('1','readiness'),('2','readiness')]
 if args.application:order += [('1','application'),('1','management'),('2','application'),('2','management')]
 elif args.management:order += [('1','management'),('2','management')]
+if args.resume_application:
+    for sequence in range(1,args.resume_stage):
+        path=root/('response-%d.json'%sequence)
+        retry=root/('response-%d-retry.json'%sequence)
+        if retry.exists():path=retry
+        if protocol.strict_json(client.protected(path))['exit_code']!=0:raise ValueError('earlier stage not successful')
+    if protocol.strict_json(client.protected(root/('response-%d.json'%args.resume_stage)))['exit_code']!=1:raise ValueError('explicit failed stage required')
+    if (root/('response-%d-retry.json'%args.resume_stage)).exists():raise ValueError('retry evidence already exists')
 for sequence,(node_id,stage) in enumerate(order,1):
+    if args.resume_application and sequence<args.resume_stage:continue
     deadline=time.monotonic()+570;request_path=root/('request-%d.json'%sequence)
     while not request_path.exists():
         if time.monotonic()>deadline:raise TimeoutError('combined request missing')
@@ -181,6 +191,8 @@ for sequence,(node_id,stage) in enumerate(order,1):
     except Exception as error:
         print(json.dumps(dict(sequence=sequence,error_type=type(error).__name__)),flush=True)
         result=dict(exit_code=1,stdout='')
-    client.durable(root/('response-%d.json'%sequence),result)
+    response=root/('response-%d-retry.json'%sequence if args.resume_application and sequence==args.resume_stage else 'response-%d.json'%sequence)
+    if response.exists():raise ValueError('refusing to overwrite fixture response')
+    client.durable(response,result)
     print(json.dumps(dict(sequence=sequence,node_id=node_id,stage=stage,exit_code=result['exit_code'])),flush=True)
     if result['exit_code']:break

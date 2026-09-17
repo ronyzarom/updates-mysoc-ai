@@ -1,0 +1,16 @@
+{
+  "artifact_sha256": "8b1daf97b825b0edc81091b8ad9683e5d89577646256ee28a92a48e9d055307c",
+  "image_id": "sha256:020cf32cb1d49eaca172d048b63d0e07f80dbd6ace1688d4d5ad5f973b844f4c",
+  "responses": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0,
+    "9": 1
+  },
+  "host_prerequisites": "controlled fixture responses; real VM acceptance not qualified"
+}

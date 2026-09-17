@@ -391,3 +391,13 @@ root-only tree test was added. These are runner tests, not the actual product
 installer qualification. SiemCore's full signed installer fixture remains pending.
 Container-controlled host prerequisite responses cannot qualify real VM host
 acceptance. Live kits, cloud rebuild and activation remain disabled.
+
+The full twelve-stage application fixture now completed with real signed
+installer execution and independent management observation on both nodes.
+Original stage9/10 execution-environment failures are retained alongside same-
+operation successful retries; `--resume-application --resume-stage N` resumes
+only a failed application/management stage after checking all earlier responses,
+and never overwrites original responses. Evidence is in
+`docs/verification/pod-application-runner-20260917`. Controlled host-prerequisite
+responses and outstanding post-mutation interruption testing remain explicit
+limitations; this does not authorize cloud teardown or live-kit delivery.
