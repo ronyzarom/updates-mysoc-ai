@@ -89,3 +89,15 @@ The existing source review found legacy-only grant calls/permission branches;
 SiemCore owns their correction. Updates will verify the complete signed helper
 bytes in the matching candidate/kit, not introduce a separate RBAC implementation.
 Schema4 remains disabled and no live quorum permissions were modified.
+
+Fresh independent-data updater quorum credentials are accepted as a separate
+identity namespace: node1 -> CN `updater-1`, node2 -> `updater-2`, witness ->
+`updater-observer`. They do not replace registered updater/machine IDs or pinned
+bootstrap-listener client certificates. Provision distinct scoped quorum client
+credentials; do not fall back to controller or Observer authority credentials.
+Updated artifact source requests read-only grants for these new principals,
+including owner-resume/cloud-operation keys. Native tests must verify effective
+permissions and repeat-run behavior because etcd grants/role memberships are
+additive: successful scoped reads, rejected protected put/delete/transactions,
+and rejected access to other PODs. This source review does not claim RBAC test
+completion or enable schema4 delivery.
