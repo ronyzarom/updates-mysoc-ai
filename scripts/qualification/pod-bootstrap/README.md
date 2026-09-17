@@ -401,3 +401,9 @@ and never overwrites original responses. Evidence is in
 `docs/verification/pod-application-runner-20260917`. Controlled host-prerequisite
 responses and outstanding post-mutation interruption testing remain explicit
 limitations; this does not authorize cloud teardown or live-kit delivery.
+
+Installed retry stages13/14 passed. Explicit `--lost-completion-test` requires
+successful stages1–14, then kills only the qualification worker after actual
+installer completion and verification. Stage15 retains incomplete caller state;
+stage16 retries the original installation and17 observes management. Results
+were expected failure/success/success, with no signed artifact modification.

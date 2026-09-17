@@ -19,7 +19,9 @@ import management
 import selective_sync
 import application_runner
 
-p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');p.add_argument('--application',action='store_true');p.add_argument('--resume-application',action='store_true');p.add_argument('--resume-stage',type=int,choices=(9,10,11,12),default=9);args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');p.add_argument('--application',action='store_true');p.add_argument('--resume-application',action='store_true');p.add_argument('--resume-stage',type=int,choices=(9,10,11,12),default=9);p.add_argument('--installed-retry',action='store_true');p.add_argument('--lost-completion-test',action='store_true');args=p.parse_args()
+if args.lost_completion_test and (not args.application or args.installed_retry or args.resume_application):p.error('--lost-completion-test requires --application and excludes other retry flags')
+if args.installed_retry and (not args.application or args.resume_application):p.error('--installed-retry requires --application and excludes --resume-application')
 if args.resume_application and not args.application:p.error('--resume-application requires --application')
 if args.application and not args.management:p.error('--application requires --management')
 if args.management and not args.readiness:p.error('--management requires --readiness')
@@ -131,6 +133,24 @@ order=[('1','runtime'),('2','runtime'),('1','schema'),('2','schema'),('2','seed'
 if args.readiness:order += [('1','readiness'),('2','readiness')]
 if args.application:order += [('1','application'),('1','management'),('2','application'),('2','management')]
 elif args.management:order += [('1','management'),('2','management')]
+if args.lost_completion_test:
+    order += [('1','application'),('1','management'),('1','application'),('1','application'),('1','management')]
+    for sequence in range(1,15):
+        path=root/('response-%d.json'%sequence)
+        retry=root/('response-%d-retry.json'%sequence)
+        if retry.exists():path=retry
+        if protocol.strict_json(client.protected(path))['exit_code']!=0:raise ValueError('fault test requires successful earlier stages')
+    for sequence in (15,16,17):
+        if (root/('response-%d.json'%sequence)).exists():raise ValueError('fault evidence already exists')
+if args.installed_retry:
+    order += [('1','application'),('1','management')]
+    for sequence in range(1,13):
+        path=root/('response-%d.json'%sequence)
+        retry=root/('response-%d-retry.json'%sequence)
+        if retry.exists():path=retry
+        if protocol.strict_json(client.protected(path))['exit_code']!=0:raise ValueError('installed retry requires successful earlier stages')
+    for sequence in (13,14):
+        if (root/('response-%d.json'%sequence)).exists():raise ValueError('installed retry evidence already exists')
 if args.resume_application:
     for sequence in range(1,args.resume_stage):
         path=root/('response-%d.json'%sequence)
@@ -140,6 +160,8 @@ if args.resume_application:
     if protocol.strict_json(client.protected(root/('response-%d.json'%args.resume_stage)))['exit_code']!=1:raise ValueError('explicit failed stage required')
     if (root/('response-%d-retry.json'%args.resume_stage)).exists():raise ValueError('retry evidence already exists')
 for sequence,(node_id,stage) in enumerate(order,1):
+    if args.lost_completion_test and sequence<15:continue
+    if args.installed_retry and sequence<13:continue
     if args.resume_application and sequence<args.resume_stage:continue
     deadline=time.monotonic()+570;request_path=root/('request-%d.json'%sequence)
     while not request_path.exists():
@@ -161,7 +183,7 @@ for sequence,(node_id,stage) in enumerate(order,1):
             expected=dict(operation_id=registry['operation_id'],generation=d['generation'],input_sha256=node['input_sha256'],artifact_sha256=registry['release']['sha256'])
             if set(config)!={'config','binding'} or config['binding']!=expected or config['config']['node_id']!=node_id or config['config']['pod_id']!=registry['pod_id']:raise ValueError('application input binding mismatch')
             prior=protocol.strict_json(client.protected(journal/'application-data-evidence.json'))
-            receipt=application_runner.invoke(d['application_bundle'],node['application_directory'],config['config'],expected,prior,journal/'application.json',lambda:bundle(application_runner.NAME,d['application_bundle']),authorize)
+            receipt=application_runner.invoke(d['application_bundle'],node['application_directory'],config['config'],expected,prior,journal/'application.json',lambda:bundle(application_runner.NAME,d['application_bundle']),authorize,fixture_lose_completion=args.lost_completion_test and sequence==15)
         elif stage=='management':
             receipt=management_observation(node_id,node,journal)
         elif stage=='runtime':
@@ -195,4 +217,8 @@ for sequence,(node_id,stage) in enumerate(order,1):
     if response.exists():raise ValueError('refusing to overwrite fixture response')
     client.durable(response,result)
     print(json.dumps(dict(sequence=sequence,node_id=node_id,stage=stage,exit_code=result['exit_code'])),flush=True)
+    if args.lost_completion_test and sequence==15:
+        state=protocol.strict_json(client.protected(journal/'application.json'))
+        if result['exit_code']!=1 or state.get('status')!='incomplete':raise ValueError('lost completion did not retain incomplete state')
+        continue
     if result['exit_code']:break

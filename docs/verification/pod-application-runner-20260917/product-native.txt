@@ -1,0 +1,67 @@
+#0 building with "colima" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 108B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/siemcore:pod-bootstrap-native-fixture
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/siemcore:pod-bootstrap-native-fixture@sha256:95a767c304c981d3412adee04fc7144223367e86e1f23d99a66dfcfe9202e3db
+#4 resolve docker.io/library/siemcore:pod-bootstrap-native-fixture@sha256:95a767c304c981d3412adee04fc7144223367e86e1f23d99a66dfcfe9202e3db done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 74.40MB 0.2s done
+#5 DONE 0.2s
+
+#6 [2/2] COPY siemcore /app/siemcore
+#6 CACHED
+
+#7 exporting to image
+#7 exporting layers done
+#7 exporting manifest sha256:a9d7e569c9a4eacab938a3db5c5e4fafd140156df575e52fde25770f0a75f10b done
+#7 exporting config sha256:509754bc3225f6f62c5f6e45919c255505bd246e971ee24a21c19e78ea09ad25 done
+#7 exporting attestation manifest sha256:27a5297b1fae7c37448e00f3dedac9abc309a4597f6969389e82e92d1359d407 0.0s done
+#7 exporting manifest list sha256:020cf32cb1d49eaca172d048b63d0e07f80dbd6ace1688d4d5ad5f973b844f4c done
+#7 naming to docker.io/library/siemcore:combined-bootstrap-fixture done
+#7 unpacking to docker.io/library/siemcore:combined-bootstrap-fixture done
+#7 DONE 0.0s
+Retained fixture siemcore-combined-bootstrap-fixture volume=siemcore-combined-bootstrap-data root=/var/lib/docker/volumes/siemcore-combined-bootstrap-data/_data image=sha256:020cf32cb1d49eaca172d048b63d0e07f80dbd6ace1688d4d5ad5f973b844f4c
+{"product":"siemcore","version":"3.3.152.35","sha256":"10f1974960757faa16c9e6f7bc4829252b2ef6320e735af2f3f8bec4d16923ce","signature":"rlZvSIpqfI1tbMsQIb2wkOx2iYmg2JkH6cUXSaxXpLfRrDSu8DnspEPxL4UwVUKYL+bUefrWUaecYrRYVsVADQ==","path":"/var/lib/siemcore-pod-artifacts/10f1974960757faa16c9e6f7bc4829252b2ef6320e735af2f3f8bec4d16923ce.tar.gz"}
+{"product":"siemcore","version":"3.3.152.99","sha256":"8b1daf97b825b0edc81091b8ad9683e5d89577646256ee28a92a48e9d055307c","signature":"EbCyE+SyjAkWPBSxyrQHdDNCNX6RqlCWgBZZfRz/5DjCmRgY4YKYd6uDngM3SdlIHpTjF4eKLHzIcXB2exslBg==","path":"/var/lib/siemcore-pod-artifacts/8b1daf97b825b0edc81091b8ad9683e5d89577646256ee28a92a48e9d055307c.tar.gz"}
+Fixture ready; no live credentials, databases or network ports published
+COMBINED_HANDOFF=/var/lib/docker/volumes/siemcore-combined-bootstrap-data/_data/handoff.json
+PASS stage 1 1 runtime
+PASS stage 2 2 runtime
+PASS stage 3 1 schema
+PASS stage 4 2 schema
+PASS stage 5 2 seed
+PASS stage 6 1 runtime
+PASS combined real Observer/runtime/schema/selected seed/retry; disabled connector preserved, raw logs excluded, marker applied; barrier retained, no active assignment
+PASS stage 7 1 readiness
+PASS stage 8 2 readiness
+PASS read-only source and target readiness; marker unchanged; bootstrap barrier retained
+Traceback (most recent call last):
+  File "/opt/combined.py", line 160, in <module>
+    receipt=invoke(id,'application',node['application_input'])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/combined.py", line 119, in invoke
+    result=json.loads(response.read_text());assert result['exit_code']==0,(sequence,result['exit_code'])
+                                                   ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (9, 1)
+PASS resumed stage 9 1 application
+Traceback (most recent call last):
+  File "/opt/application_resume.py", line 29, in <module>
+    response=json.loads(path.read_text());assert response['exit_code']==0,(sequence,response['exit_code'])
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (10, 1)
+PASS resumed stage 9 1 application
+PASS resumed stage 10 1 management
+PASS resumed stage 11 2 application
+PASS resumed stage 12 2 management
+PASS actual app installation on both nodes, independent management observations, original barrier retained; host responses simulated

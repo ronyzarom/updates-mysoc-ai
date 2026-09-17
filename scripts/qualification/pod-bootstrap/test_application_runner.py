@@ -40,12 +40,12 @@ class ApplicationRunnerTests(unittest.TestCase):
             extra.unlink();path.unlink();path.symlink_to('/etc/passwd')
             with self.assertRaises(ValueError):a.verify_tree(root,{'helper.py':b'pass'})
 
-    def invoke(self,root,receipt):
+    def invoke(self,root,receipt,lose=False):
         raw=('def install(*args, **kwargs):\n    return '+repr(receipt)+'\n').encode()
         entry=dict(name=a.NAME,path=a.runtime_worker.MODULES[a.NAME],sha256=hashlib.sha256(raw).hexdigest(),size=len(raw),python='>=3.10,<3.13',dependencies=[])
         manifest=dict(product='siemcore',version=self.config['version'],runtime_image_id=self.config['runtime_image_id'],bootstrap_host_modules=[dict(entry,name='pod-data-runtime-v1',path=a.runtime_worker.MODULE_PATH),entry])
         with patch.object(a.sys,'platform','linux'),patch.object(a.os,'geteuid',return_value=0),patch.object(a.sys,'version_info',(3,12)),patch.object(a,'configuration_hash',return_value='f'*64),patch.object(a.client,'protected',side_effect=lambda path:Path(path).read_bytes()):
-            return a.invoke('/root/bundle','/root/app',self.config,self.binding,self.prior,root/'journal',lambda:(manifest,raw,'b'*64),lambda:None,timeout=3)
+            return a.invoke('/root/bundle','/root/app',self.config,self.binding,self.prior,root/'journal',lambda:(manifest,raw,'b'*64),lambda:None,timeout=3,fixture_lose_completion=lose)
     def receipt(self):
         return dict(protocol=a.NAME,pod_id='pod',node_id='1',version=self.config['version'],runtime_image_id=self.config['runtime_image_id'],binding=self.binding,configuration_sha256='f'*64,phase='management-installed-paused',installation_complete=False,processing_allowed=False,activation_ready=False)
     def test_partial_receipt_and_retry_intent(self):
@@ -55,6 +55,13 @@ class ApplicationRunnerTests(unittest.TestCase):
             state=json.loads((root/'journal').read_text());self.assertEqual(state['status'],'awaiting-management-observation')
             self.config['version']='3.3.152.100'
             with self.assertRaises(ValueError):self.invoke(root,self.receipt())
+    def test_lost_completion_retains_incomplete_and_same_operation_retries(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            with self.assertRaises(ValueError):self.invoke(root,self.receipt(),lose=True)
+            self.assertEqual(json.loads((root/'journal').read_text())['status'],'incomplete')
+            self.assertEqual(self.invoke(root,self.receipt()),self.receipt())
+
     def test_activation_or_changed_receipt_rejected_and_incomplete_retained(self):
         for key,value in [('processing_allowed',True),('activation_ready',True),('installation_complete',True),('phase','complete')]:
             with self.subTest(key=key),tempfile.TemporaryDirectory() as temp:

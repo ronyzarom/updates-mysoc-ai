@@ -28,3 +28,19 @@ controlled fixture responses; this does NOT establish real VM host acceptance.
 This run also does not qualify interrupted application installation after a
 partial mutation, final activation, or customer routing. No cloud rebuild,
 production database operation, live-kit publication or rollout occurred.
+
+## Same-operation retry and lost completion
+
+Stages13/14 repeat the actual node1 installer and independently observe management;
+both passed. Product reports exact journal/environment/TLS-key hashes, all four
+data-container IDs, raw-log exclusion and disabled connectors preserved.
+
+Stages15–17 explicitly inject SIGKILL in the qualification worker after the signed
+installer returns and authorization/bundle checks pass, but before receipt
+transmission. Stage15 fails as expected and retains `status=incomplete` with
+`potential_partial_commit=true`. Stage16 repeats the unchanged operation and
+installer successfully; stage17 independently observes paused management.
+The fault hook exists only in the qualification runner, not in the signed product.
+`lost-completion.json` records expected exit codes1/0/0. This qualifies recovery
+from a committed installation with lost completion; it does not cover every
+possible mid-installation or host-power-loss point.

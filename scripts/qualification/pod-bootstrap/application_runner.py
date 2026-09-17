@@ -112,7 +112,8 @@ def configuration_hash(config):
     return hashlib.sha256(json.dumps(dict(config=config,assets=assets,secret_hashes={k:hashlib.sha256(v.encode()).hexdigest() for k,v in secrets.items()},archive_sha256=hashlib.sha256(archive).hexdigest(),archive_credential_sha256=hashlib.sha256(key).hexdigest()),sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
-def invoke(bundle,directory,config,binding,prior,journal,verify_bundle,authorize,timeout=300):
+def invoke(bundle,directory,config,binding,prior,journal,verify_bundle,authorize,timeout=300,fixture_lose_completion=False):
+    if type(fixture_lose_completion) is not bool:raise ValueError('explicit fixture fault flag required')
     if sys.platform!='linux' or os.geteuid()!=0:raise ValueError('Linux root application worker required')
     validate_prior(config,binding,prior)
     manifest,raw,digest=verify_bundle()
@@ -135,6 +136,7 @@ def invoke(bundle,directory,config,binding,prior,journal,verify_bundle,authorize
         authorize()
         result=module.install(bundle,directory,config,binding,authorize,verify,run=supervised)
         authorize();verify()
+        if fixture_lose_completion:os.kill(os.getpid(),signal.SIGKILL)
         return result
     receipt=runtime_worker.bounded_child(work,timeout)
     if receipt!=expected:raise ValueError('application receipt mismatch; retain partial state')
