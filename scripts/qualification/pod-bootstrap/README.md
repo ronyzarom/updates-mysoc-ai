@@ -177,3 +177,15 @@ was launched by Updates in this test run. Image trust, mount contents, isolated
 network peers, effective runtime readiness and valid authorization must all be
 established by the forthcoming end-to-end qualification harness before invocation.
 No kit delivery or VM changes are enabled by this module.
+
+PostgreSQL socket compatibility correction: only the `/run/siemcore-postgres`
+mount leaf may use an independently verified dependency UID and exact01775/03775
+mode. New mandatory `verify_socket_dependency` callback must verify the pinned
+PostgreSQL image/runtime identity and return its nonroot UID; no hardcoded UID
+establishes trust. Ancestors remain root-owned and nonwritable. The leaf must
+contain the expected `.s.PGSQL.5432` socket (optionally its regular lock file),
+owned by that UID, with no symlinks, unexpected entries or hard links. Other mount
+leaves remain root-owned private. The runtime verifier must also establish that
+root-owned read-only TLS copies match PostgreSQL's TLS bytes; the PostgreSQL-owned
+private key directory cannot be mounted directly for the capability-free command.
+54 tests pass, including narrow socket exception and rejection boundaries.

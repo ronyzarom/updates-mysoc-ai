@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import selectors
 import signal
+import stat
 import subprocess
 import time
 import uuid
@@ -48,18 +49,36 @@ def docker_json(docker,args):
     return json.loads(raw)
 
 
-def mount_path(value):
+def mount_path(value, socket_uid=None):
     p=Path(value)
     if not p.is_absolute() or '..' in p.parts or ',' in str(p):
         raise ValueError('absolute unambiguous mount source required')
-    for parent in (p,*p.parents):
+    for parent in p.parents:
         st=parent.lstat()
-        if not parent.is_dir() or parent.is_symlink() or st.st_uid!=0 or st.st_mode&0o022:
-            raise ValueError('protected root-owned mount directory required')
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid!=0 or st.st_mode&0o022:
+            raise ValueError('protected root-owned mount ancestors required')
+    st=p.lstat()
+    if not stat.S_ISDIR(st.st_mode):raise ValueError('mount leaf must be a real directory')
+    if socket_uid is None:
+        if st.st_uid!=0 or stat.S_IMODE(st.st_mode)&0o077:
+            raise ValueError('private root-owned mount directory required')
+    else:
+        if type(socket_uid) is not int or socket_uid<=0:
+            raise ValueError('independently verified nonroot PostgreSQL UID required')
+        if st.st_uid!=socket_uid or stat.S_IMODE(st.st_mode) not in (0o1775,0o3775):
+            raise ValueError('PostgreSQL socket directory owner/mode mismatch')
+        children={child.name:child for child in p.iterdir()}
+        if '.s.PGSQL.5432' not in children or set(children)-{'.s.PGSQL.5432','.s.PGSQL.5432.lock'}:
+            raise ValueError('exact PostgreSQL socket directory required')
+        for name,child in children.items():
+            info=child.lstat()
+            expected=stat.S_ISSOCK if name=='.s.PGSQL.5432' else stat.S_ISREG
+            if not expected(info.st_mode) or info.st_uid!=socket_uid or info.st_nlink!=1:
+                raise ValueError('unexpected socket identity or symlink')
     return str(p)
 
 
-def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime):
+def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency):
     """Verifier callbacks are mandatory: image presence is not signature verification.
 
     verify_artifact_image must independently verify signed artifact, image identity,
@@ -71,10 +90,14 @@ def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_ru
         raise ValueError('absolute Docker binary and immutable image ID required')
     if not re.fullmatch(r'[0-9a-f]{64}',network_id) or set(mounts)!=MOUNTS:
         raise ValueError('fixed network ID and exact mount set required')
-    if not callable(verify_artifact_image) or not callable(authorize_runtime):
+    if not all(callable(fn) for fn in (verify_artifact_image,authorize_runtime,verify_socket_dependency)):
         raise ValueError('independent artifact and runtime verifiers required')
-    sources={target:mount_path(source) for target,source in mounts.items()}
     verify_artifact_image(image_id)
+    socket_uid=verify_socket_dependency()
+    if type(socket_uid) is not int or socket_uid<=0:
+        raise ValueError('verified PostgreSQL dependency UID required')
+    sources={target:mount_path(source,socket_uid=socket_uid if target=='/run/siemcore-postgres' else None)
+             for target,source in mounts.items()}
     image=docker_json(docker,['image','inspect',image_id])
     if len(image)!=1 or image[0]['Id']!=image_id or image[0].get('Os')!='linux':
         raise ValueError('verified local Linux image missing')
@@ -96,10 +119,10 @@ def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_ru
 
 
 class Runner:
-    def __init__(self,docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,timeout=300):
+    def __init__(self,docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,timeout=300):
         if type(timeout) is not int or not 1<=timeout<=600:
             raise ValueError('bounded qualification timeout required')
-        self.settings=(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime)
+        self.settings=(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency)
         self.timeout=timeout
         self.container_name=None
     def __call__(self,command):
