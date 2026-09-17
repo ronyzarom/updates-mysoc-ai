@@ -31,3 +31,20 @@ signed installer fixture with interruption/retry, independently observe both
 paused runtimes, and preserve all incomplete/processing-disabled flags. Full
 bundle verification must cover every invoked shell/Python helper and template;
 verifying only the selected module is insufficient.
+
+## Follow-up verification
+
+SiemCore added mandatory `data_compose_sha256`, checked against exact protected
+bytes before parsing, and exact mount-count validation alongside target/source/RW
+checks. The contract explicitly requires this digest to be captured at the prior
+authenticated runtime stage, never learned during application installation.
+Both reproduced negative cases now reject. Independently reran all five tests
+with `POD_COMPOSE_NATIVE_TEST=1`: five passed, including real Compose rendering
+with requested TLS publication still producing no published ports.
+
+The two review findings are resolved at module level. Caller integration must
+persist the Compose digest and immutable runtime evidence in the original
+verified data-stage receipt, then load that evidence unchanged for installation.
+This is contract acceptance for fixture integration, not execution enablement or
+full installer qualification. The actual installer/interruption/retry fixture
+and independent paused-management observation remain required.
