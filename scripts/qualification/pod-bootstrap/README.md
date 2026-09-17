@@ -341,3 +341,14 @@ before/after. No service installation/start, grants or routing changes occur.
 99 tests discovered98pass1Linux-onlyskip. Management callback is fixture-tested;
 real host/common-image integration with independent expectation derivation remains
 pending. Installation and host acceptance are still separate product contracts.
+
+The combined consumer now supports `--management` only with `--readiness`, adding
+exact node1/node2 management requests9/10. The handoff supplies a signed-bundle host
+binary, protected management config, reviewed role environment overrides and an
+explicit container-to-host credential materialization list. The consumer verifies
+archive binary bytes independently on every callback, combines only immutable
+image defaults with reviewed overrides, and accepts only path rebasing that leaves
+all nonpath data-binding fields unchanged and every credential byte identical.
+A separate test-only runner image provides the preinstalled Docker CLI at the
+product's fixed `/usr/bin/docker` path.101 localtests found100pass1Linux-onlyskip;
+actual ten-stage transport integration is pending the fresh product fixture.

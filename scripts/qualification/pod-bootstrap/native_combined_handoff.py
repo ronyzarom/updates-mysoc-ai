@@ -15,9 +15,11 @@ import handoff
 import protocol
 import runtime_worker
 import readiness
+import management
 import selective_sync
 
-p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');args=p.parse_args()
+if args.management and not args.readiness:p.error('--management requires --readiness')
 root=Path(args.root)
 d=protocol.strict_json(client.protected(root/'handoff.json'))
 if d['fixture_only'] is not True or d['root']!=str(root):raise ValueError('exact disposable fixture required')
@@ -91,8 +93,34 @@ def data_factory(node_id,node,config,authorize,readiness_mode=False):
         {'/run/bootstrap':node['bootstrap_root'],'/run/tls':node['tls_root'],'/run/siemcore-postgres':node['socket_root']},
         artifact,authorize,dependency,timeout=300,peer_namespace=peer_namespace,readiness=readiness_mode)
 
+
+def management_observation(node_id,node,journal):
+    def expectations():
+        bundle()  # Authenticate manifest/image/module under the retained test signature.
+        raw=client.protected(d['artifact']['path'],limit=256*1024*1024)
+        if hashlib.sha256(raw).hexdigest()!=registry['release']['sha256']:raise ValueError('bundle changed')
+        with tarfile.open(fileobj=io.BytesIO(raw),mode='r:gz') as archive:
+            member=archive.getmember('bundle/pod/bin/siemcore')
+            if not member.isfile() or member.size>128*1024*1024:raise ValueError('invalid host binary member')
+            binary_hash=hashlib.sha256(archive.extractfile(member).read()).hexdigest()
+        image=data_runner.docker_json(docker,['image','inspect',d['image_id']])[0]
+        if image['Id']!=d['image_id'] or image['Architecture']!=registry['release']['architecture']:
+            raise ValueError('immutable image defaults mismatch')
+        overrides=protocol.strict_json(client.protected(node['management_environment_overrides']))
+        hashes=management.reviewed_environment_hashes(image['Config'].get('Env') or [],overrides)
+        return dict(binary_sha256=binary_hash,runtime_image_id=d['image_id'],environment_sha256=hashes)
+    config=protocol.strict_json(client.protected(node['management_config']))
+    original=protocol.strict_json(client.protected(node['schema_config']))
+    host=protocol.strict_json(client.protected(config['data_binding_file']))
+    management.verify_materialization(original,host,node['bootstrap_root'],node['management_materialization'])
+    expected=expectations()
+    plan=management.prepare(d['host_binary'],node['management_config'],registry,d['registry_sha256'],node_id,
+        d['generation'],node['input_sha256'],expected['runtime_image_id'],expected['environment_sha256'])
+    return management.observe(plan,journal/'management.json',management.Runner(plan,expectations))
+
 order=[('1','runtime'),('2','runtime'),('1','schema'),('2','schema'),('2','seed'),('1','runtime')]
 if args.readiness:order += [('1','readiness'),('2','readiness')]
+if args.management:order += [('1','management'),('2','management')]
 for sequence,(node_id,stage) in enumerate(order,1):
     deadline=time.monotonic()+570;request_path=root/('request-%d.json'%sequence)
     while not request_path.exists():
@@ -100,7 +128,7 @@ for sequence,(node_id,stage) in enumerate(order,1):
         time.sleep(.1)
     try:
         request=protocol.strict_json(client.protected(request_path));node=d['nodes'][node_id]
-        field=('schema_config' if node_id=='1' else 'seed_config') if stage=='readiness' else {'runtime':'runtime_input','schema':'schema_config','seed':'seed_config'}[stage]
+        field=('schema_config' if node_id=='1' else 'seed_config') if stage=='readiness' else {'runtime':'runtime_input','schema':'schema_config','seed':'seed_config','management':'management_config'}[stage]
         if request!={'sequence':sequence,'node_id':node_id,'stage':stage,'input_file':node[field]}:
             raise ValueError('unexpected stage order or path')
         original=client.protected(node['original_input'])
@@ -110,7 +138,9 @@ for sequence,(node_id,stage) in enumerate(order,1):
         sync=selective_sync.validate(original,registry,node['input_sha256'],node_id,config if 'seed' in config else None)
         authorize=authorizer(node_id,node)
         journal=Path(node['journal_directory'])
-        if stage=='runtime':
+        if stage=='management':
+            receipt=management_observation(node_id,node,journal)
+        elif stage=='runtime':
             if set(config)!={'config','tls_material','binding'}:raise ValueError('runtime input shape')
             expected=dict(operation_id=registry['operation_id'],generation=d['generation'],input_sha256=node['input_sha256'],artifact_sha256=registry['release']['sha256'])
             if config['binding']!=expected or config['config']['node_id']!=node_id or config['config']['pod_id']!=registry['pod_id']:

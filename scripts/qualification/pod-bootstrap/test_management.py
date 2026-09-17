@@ -52,3 +52,27 @@ class ManagementTests(unittest.TestCase):
         for _ in range(2):m.observe(self.plan,self.root/'observation.json',runner,clock=lambda:self.now)
         self.assertEqual(len(calls),2)
         self.assertIs(json.loads((self.root/'observation.json').read_text())['activation_ready'],False)
+    def test_expected_environment_comes_from_defaults_plus_reviewed_overrides(self):
+        overrides={'app':{'ROLE':'','SECRET':'fixture'},'archiver':{'ROLE':'archiver','SECRET':'fixture'}}
+        result=m.reviewed_environment_hashes(['PATH=/bin','ROLE=default'],overrides)
+        self.assertEqual(result['app'],m.environment_digest(['PATH=/bin','ROLE=','SECRET=fixture']))
+        self.assertEqual(result['archiver'],m.environment_digest(['PATH=/bin','ROLE=archiver','SECRET=fixture']))
+        with self.assertRaises(ValueError):m.reviewed_environment_hashes(['A=1','A=2'],overrides)
+        overrides['app']['BAD']='value\nINJECTED=1'
+        with self.assertRaises(ValueError):m.reviewed_environment_hashes(['PATH=/bin'],overrides)
+    def test_host_materialization_preserves_all_nonpath_binding_fields(self):
+        original=json.loads(self.data.read_text());host=copy.deepcopy(original);bootstrap=self.root/'bootstrap';bootstrap.mkdir()
+        mappings=[]
+        pairs=[(original,host,k) for k in ('database_connection_file','host_machine_id_file','release_public_key','authorization_key','invitation_file')]
+        pairs += [(original['observer']['tls'],host['observer']['tls'],k) for k in ('ca','certificate','key')]
+        for source,target,key in pairs:
+            name=source[key].split('/')[-1];path=bootstrap/name;path.write_bytes(('fixture-'+name).encode())
+            target[key]=str(path)
+            mappings.append(dict(container_path=source[key],source_file=str(path),host_file=str(path),sha256=m.hashlib.sha256(path.read_bytes()).hexdigest()))
+        m.verify_materialization(original,host,str(bootstrap),mappings)
+        changed=copy.deepcopy(host);changed['generation']+=1
+        with self.assertRaises(ValueError):m.verify_materialization(original,changed,str(bootstrap),mappings)
+        with self.assertRaises(ValueError):m.verify_materialization(original,host,str(bootstrap),mappings[:-1])
+        with self.assertRaises(ValueError):m.verify_materialization(original,host,str(bootstrap),mappings+[mappings[0]])
+        (bootstrap/mappings[0]['source_file'].split('/')[-1]).write_text('changed')
+        with self.assertRaises(ValueError):m.verify_materialization(original,host,str(bootstrap),mappings)

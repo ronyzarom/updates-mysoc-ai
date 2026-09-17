@@ -101,3 +101,49 @@ def observe(plan,journal,runner,clock=time.time_ns):
     client.durable(journal,dict(plan=plan,status='observation-only',receipt=receipt,
         expires_at_ns=readiness.nanos(receipt['observed_at'])+5*10**9,activation_ready=False))
     return receipt
+
+
+def reviewed_environment_hashes(image_defaults,role_overrides):
+    """Merge signed-image defaults and reviewed input overrides, never live env."""
+    environment_digest(image_defaults)  # rejects duplicate/default malformed keys
+    if not isinstance(role_overrides,dict) or set(role_overrides)!={'app','archiver'}:
+        raise ValueError('exact reviewed role overrides required')
+    defaults=dict(entry.split('=',1) for entry in image_defaults)
+    result={}
+    for role,overrides in role_overrides.items():
+        if not isinstance(overrides,dict) or any(not isinstance(k,str) or not isinstance(v,str) or '=' in k for k,v in overrides.items()):
+            raise ValueError('explicit string environment overrides required')
+        environment_digest([k+'='+v for k,v in overrides.items()])
+        combined=dict(defaults);combined.update(overrides)
+        result[role]=environment_digest([k+'='+v for k,v in combined.items()])
+    return result
+
+
+def verify_materialization(original,host,bootstrap_root,mappings):
+    """Only reviewed credential paths may be rebased; all other fields immutable."""
+    import copy
+    if not isinstance(mappings,list):raise ValueError('explicit materialization list required')
+    by_path={}
+    for item in mappings:
+        if set(item)!={'container_path','source_file','host_file','sha256'} or item['container_path'] in by_path:
+            raise ValueError('ambiguous materialization mapping')
+        container=Path(item['container_path'])
+        if container.parent!=Path('/run/bootstrap') or '..' in container.parts:
+            raise ValueError('unexpected container credential reference')
+        source=Path(bootstrap_root)/container.name
+        if str(source)!=item['source_file'] or not Path(item['host_file']).is_absolute() or '..' in Path(item['host_file']).parts:
+            raise ValueError('unexpected host materialization path')
+        raw=client.protected(source)
+        if hashlib.sha256(raw).hexdigest()!=item['sha256'] or client.protected(item['host_file'])!=raw:
+            raise ValueError('materialized credential bytes differ')
+        by_path[item['container_path']]=item['host_file']
+    transformed=copy.deepcopy(original);used=set()
+    def replace(obj,key):
+        source=obj[key]
+        if source not in by_path:raise ValueError('missing materialization mapping')
+        obj[key]=by_path[source];used.add(source)
+    for key in ('database_connection_file','host_machine_id_file','release_public_key','authorization_key','invitation_file'):
+        replace(transformed,key)
+    for key in ('ca','certificate','key'):replace(transformed['observer']['tls'],key)
+    if used!=set(by_path) or transformed!=host:
+        raise ValueError('host binding changed beyond reviewed file references')
