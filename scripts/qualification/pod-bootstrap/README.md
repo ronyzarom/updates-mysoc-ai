@@ -129,3 +129,27 @@ same-invitation authorize retry. Its signature and current lifetime are rechecke
 immediately before retry. Generic409, mismatches and expired invitations block.
 37 local tests pass. Automatic renewal remains unimplemented; a changed invitation
 requires explicit reconciliation rather than silently replacing the local intent.
+
+## Product data-stage adapter
+
+`data_stage.py` prepares the exact artifact-owned command and validates config and
+receipt shapes against snapshots of SiemCore's `pod-bootstrap-data-v1` contract.
+It enforces original registry/node/generation/input and release receipt bindings,
+expected schema/seed phase, and false installation/processing flags. Fixture
+invocation durably records potential partial commit before calling the injected
+runner; failed exit, timeout or invalid output retains it. Same-operation retries
+preserve binding; changed config requires reconciliation. It never removes product
+receipts, data, replication slots or the Observer barrier.
+
+There is deliberately no Docker/process launcher, CLI entrypoint or kit wiring for
+this adapter. The eventual qualified runner must verify the signed image, establish
+protected read-only mounts (including matching TLS and host identity), exclude the
+Docker socket, restrict networking, verify runtime readiness and current Observer
+authorization, and bound process lifetime/output. Source config validation alone
+does not establish these prerequisites. Product source schemas were copied from
+`deploy/cluster/updater/contracts/pod-bootstrap-data-v1.{config,receipt}.schema.json`.
+
+45 local tests pass with Python 3.13, cryptography44.0.3 and jsonschema4.26.0.
+Data-stage tests use an injected runner, not a live PostgreSQL/container deployment.
+Full signed A/B/Observer installer qualification and runtime/activation stages remain
+outstanding. Normal installation/update paths are unchanged.

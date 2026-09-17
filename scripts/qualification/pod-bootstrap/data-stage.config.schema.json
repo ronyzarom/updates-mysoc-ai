@@ -1,0 +1,264 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": {
+      "const": "pod-bootstrap-data-v1"
+    },
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "pod-bootstrap-v1"
+        },
+        "pod_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "installation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "release": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "product": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "architecture": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1
+            },
+            "public_key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "signature": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "product",
+            "version",
+            "architecture",
+            "sha256",
+            "public_key",
+            "signature"
+          ]
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "updater_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "machine_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "infrastructure_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "certificate_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "node_id",
+              "updater_id",
+              "machine_id",
+              "infrastructure_id",
+              "certificate_sha256"
+            ]
+          }
+        }
+      },
+      "required": [
+        "protocol",
+        "pod_id",
+        "installation_id",
+        "operation_id",
+        "release",
+        "nodes"
+      ]
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updater_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "machine_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "infrastructure_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "node_id",
+        "updater_id",
+        "machine_id",
+        "infrastructure_id",
+        "certificate_sha256"
+      ]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "database_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "database_connection_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "host_machine_id_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "release_public_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorization_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invitation_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ca": {
+              "type": "string",
+              "minLength": 1
+            },
+            "certificate": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "ca",
+            "certificate",
+            "key"
+          ]
+        },
+        "certificate_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "endpoint",
+        "tls",
+        "certificate_sha256"
+      ]
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_address": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publisher_connection_file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "apply_connection_file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "source_node_id",
+        "source_address",
+        "publisher_connection_file",
+        "apply_connection_file"
+      ]
+    }
+  },
+  "required": [
+    "protocol",
+    "registry",
+    "node",
+    "generation",
+    "input_sha256",
+    "database_name",
+    "database_connection_file",
+    "host_machine_id_file",
+    "release_public_key",
+    "authorization_key",
+    "invitation_file",
+    "observer"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
