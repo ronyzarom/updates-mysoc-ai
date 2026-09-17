@@ -1,0 +1,44 @@
+{
+  "siemcore-app-a": {
+    "image": "siemcore:3.3.152.36",
+    "image_id": "sha256:bd04a84ea6c2865305080a479db487d3a27be8463477525f5090f81cf4f71bdf",
+    "health": "healthy",
+    "restart_count": 0,
+    "started": "2026-09-17T07:03:53.929880269Z",
+    "migration_error_lines": 0,
+    "migration_summary": {
+      "applied": 0,
+      "failed": 0,
+      "skipped": 104
+    }
+  },
+  "siemcore-archiver-app-a": {
+    "image": "siemcore:3.3.152.36",
+    "image_id": "sha256:bd04a84ea6c2865305080a479db487d3a27be8463477525f5090f81cf4f71bdf",
+    "health": "healthy",
+    "restart_count": 0,
+    "started": "2026-09-17T07:03:54.835010958Z",
+    "migration_error_lines": 0
+  },
+  "state": {
+    "updater_version": "1.16.1.24",
+    "product_versions": {
+      "siemcore": "3.3.152.36"
+    },
+    "last_update_attempt": {
+      "artifact_digest": "231bf4006d5f96c62843db1c8bbf7cfef2b33684af6fbffe0edccbc18507eb8b",
+      "from_version": "3.3.152.26",
+      "target_version": "3.3.152.36",
+      "success": true,
+      "timestamp": "2026-09-17T07:04:01.613759658Z"
+    }
+  },
+  "original_configuration_restored": true,
+  "journal": {
+    "stage": "applied",
+    "from_version": "3.3.152.26",
+    "target": "3.3.152.36"
+  },
+  "retained26_sha_matches": true,
+  "migration_log_review": "Two initial keyword matches were info summaries containing failed:0; neither was an error."
+}

@@ -1,0 +1,14 @@
+{
+  "alpha_siemcore_flags_match_preflight": true,
+  "expected_auto_update_flags": {
+    "bezeq-pod-test-a-5053012748838117322": false,
+    "bezeq-pod-test-a-6560860442296916583": true,
+    "bezeq-pod-test-a-7631443060152631202": true,
+    "bezeq-pod-test-b-5012156962629255074": false,
+    "bezeq-pod-test-b-6272051641424551474": false,
+    "bezeq-pod-test-witness-8675763460526905958": true,
+    "bezeq-pod-test-witness-8916397017694216169": false,
+    "siemcore-bench-20260912-01": false,
+    "siemcore-testing-01": true
+  }
+}
