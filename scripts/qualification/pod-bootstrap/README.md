@@ -153,3 +153,27 @@ does not establish these prerequisites. Product source schemas were copied from
 Data-stage tests use an injected runner, not a live PostgreSQL/container deployment.
 Full signed A/B/Observer installer qualification and runtime/activation stages remain
 outstanding. Normal installation/update paths are unchanged.
+
+## Bounded qualification runner
+
+Product corrected the common bundle executable to `/app/siemcore` (the earlier
+`/app/cyfox-siemcore` path belonged to the legacy image). Adapter and runner now
+use `/app/siemcore pod-bootstrap-data --config /run/bootstrap/data.json`.
+
+`data_runner.py` supplies a qualification-only process runner with mandatory
+artifact-image and runtime/authorization verification callbacks. There are no
+permissive default verifiers or production entrypoint. It requires an existing
+immutable local Linux image ID and internal bridge network ID; pulls are disabled.
+Only protected root-owned bootstrap, TLS and PostgreSQL socket directories may be
+mounted, read-only. No Docker socket, privileged mode or implicit image volumes.
+The process has memory/CPU/PID limits, read-only rootfs, dropped capabilities and
+no-new-privileges. Combined output and wall time are bounded. Interrupted daemon
+containers are killed and checked stopped, then retained for evidence; data,
+slots, receipts and barriers are never removed. Stderr is not included in receipts.
+
+51 local tests pass. These include real local subprocess output/deadline checks
+and fixture-based Docker command/inspection/termination checks. No signed image
+was launched by Updates in this test run. Image trust, mount contents, isolated
+network peers, effective runtime readiness and valid authorization must all be
+established by the forthcoming end-to-end qualification harness before invocation.
+No kit delivery or VM changes are enabled by this module.

@@ -5,7 +5,7 @@ from pathlib import Path
 import client
 import protocol
 
-ARGV=('/app/cyfox-siemcore','pod-bootstrap-data','--config','/run/bootstrap/data.json')
+ARGV=('/app/siemcore','pod-bootstrap-data','--config','/run/bootstrap/data.json')
 LIMIT=8192
 
 
