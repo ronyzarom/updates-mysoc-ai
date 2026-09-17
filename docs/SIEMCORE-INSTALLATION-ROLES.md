@@ -6,6 +6,45 @@ Installation identity is recorded through `--server-type` (`normal`, `pod-active
 installation may derive these fields from the protected `--greenfield-input` JSON.
 Bootstrap is an artifact type, not a pod role.
 
+## Agreed role lifecycle contract (2026-09-17)
+
+This is the required product behavior, not a claim that all executors are implemented
+or deployed. Observer is the third POD role, with its own bootstrap and update
+sequence. Normal remains independent of POD credentials, observer availability,
+maintenance barriers and role transitions.
+
+| Workflow | Required sequence |
+| --- | --- |
+| Bootstrap — Normal | Verify prerequisites → initialize fresh database/configuration → install → verify health → enable processing. |
+| Bootstrap — Observer | Verify prerequisites → establish pod identity, quorum and credentials → initialize durable authority/maintenance state → verify authenticated access → make authority service ready. |
+| Bootstrap — POD data nodes | Register immutable identities → start management with processing disabled → initialize independent databases → synchronize selected tables → verify readiness → observer assigns active → transfer role IPs → enable active processing. |
+| Update — Normal | Verify signed artifact/prerequisites → drain → update → restart → verify health. |
+| Update — POD Active | Obtain and durably record observer maintenance ACK → explicitly start drain → verify paused → update → verify health → complete maintenance → obtain fresh active permission → resume. |
+| Update — POD STBY | Obtain and durably record observer maintenance ACK → verify processing disabled → update → verify standby health and replication compatibility → complete → remain standby. |
+| Update — Observer | Verify compatibility → persist maintenance protection and updater operation → update/restart authority service → reconcile existing assignments, generations and barriers → verify quorum/authentication → complete maintenance. |
+
+Observer UPDATE must never invoke bootstrap initialization, create a new assignment,
+reset token generations, discard durable barriers, or replace uncertain state with
+defaults. Missing/incompatible authority state is a recovery error, not an empty
+installation. Its dedicated restart/reconciliation path must work across its own
+authority-service outage; the data-node path cannot assume the observer remains
+available during observer self-maintenance.
+
+Serialize all updates within a pod, including Observer updates. Maintenance blocks
+automatic takeover but never extends processing permission indefinitely. If the
+observer cannot renew permission during its restart, the active pauses at expiry.
+The initial implementation accepts this controlled interruption; it must not claim
+uninterrupted processing. Resume requires fresh authority after reconciliation.
+
+The current shared data-node maintenance implementation pauses both data nodes.
+The STBY sequence above does not claim that the active can already remain processing
+during a standby update. That requires separate product qualification. Observer
+execution currently fails closed pending its qualified dedicated lifecycle.
+
+These workflows do not authorize production database copying/restoration, release
+publication, readiness enabling, or deployment. Fresh bootstrap and updating an
+existing installation remain distinct operations.
+
 ## Role selection
 
 | Host | Example input file | Fields inside `application` |

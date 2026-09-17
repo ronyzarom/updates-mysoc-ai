@@ -68,6 +68,7 @@ coordinator termination is not proof that product mutation stopped.
 | --- | --- | --- |
 | readiness | readiness | ReadinessRequest / ReadinessResponse |
 | maintenance-v1 | capabilities, begin-or-resume, status, apply, recover, health, complete, acceptance | Request / Response |
+| observer-maintenance | capabilities, prepare, status, apply, reconcile, health, complete, acceptance | ObserverRequest / ObserverResponse |
 | recovery-v2 | capabilities, status, authorize-recovery, recover, health, complete, acceptance | RecoveryRequest / RecoveryResponse |
 | next-operation | authorize-next-operation | NextOperationRequest / NextOperationResponse |
 | drain-discovery | status | DrainRequest / DrainResponse |

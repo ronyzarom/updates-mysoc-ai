@@ -2,6 +2,7 @@ package updatersim
 
 import (
 	"fmt"
+	"github.com/cyfox-labs/updates-mysoc-ai/pkg/podmaintenance"
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
 
@@ -34,6 +35,9 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 		p.ServerType = saved.ServerType
 		p.PodID = saved.PodID
 		p.NodeID = saved.NodeID
+	}
+	if cfg.Simulation.Filesystem.ObserverMaintenance != nil && p.ServerType != "pod-observer" {
+		return fmt.Errorf("observer executor requires explicit observer installation")
 	}
 	if p.ServerType == "" {
 		return nil
@@ -79,6 +83,9 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 }
 func (s *Simulator) validateSiemCoreExecution() error {
 	p, ok := s.config.Product("siemcore")
+	if s.config.Simulation.Filesystem.ObserverMaintenance != nil && (!ok || p.ServerType != "pod-observer") {
+		return fmt.Errorf("observer executor cannot handle normal or data nodes")
+	}
 	if !ok || p.ServerType == "" {
 		return nil
 	}
@@ -97,7 +104,10 @@ func (s *Simulator) validateSiemCoreExecution() error {
 			return fmt.Errorf("pod server requires matching coordinated executor; normal fallback refused")
 		}
 	case "witness":
-		return fmt.Errorf("pod-observer requires qualified observer-specific executor; data-node update refused")
+		o := s.config.Simulation.Filesystem.ObserverMaintenance
+		if m != nil || o == nil || !o.Enabled || o.Protocol != podmaintenance.ObserverProtocol || o.PodID != p.PodID || o.NodeID != "witness" || p.NodeID != "witness" {
+			return fmt.Errorf("pod-observer requires enabled matching observer-specific executor; no fallback")
+		}
 	}
 	return nil
 }

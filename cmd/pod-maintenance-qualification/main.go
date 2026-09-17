@@ -64,7 +64,7 @@ func execute(path string) error {
 	switch c.Mode {
 	case "readiness":
 		_, e = adapter.Readiness(ctx, p.ReadinessRequest{Protocol: p.ReadinessProtocol, PodID: c.Binding.PodID, NodeID: c.Binding.NodeID, UpdaterID: c.Binding.UpdaterID})
-	case "maintenance-v1":
+	case "maintenance-v1", "observer-maintenance":
 		key, err := signing.ParsePublicKeyHex(c.ReleaseKey)
 		if err != nil {
 			return err
@@ -85,7 +85,11 @@ func execute(path string) error {
 		if hex.EncodeToString(h.Sum(nil)) != c.Binding.ArtifactSHA256 {
 			return fmt.Errorf("qualification artifact checksum mismatch")
 		}
-		e = (&p.Coordinator{Directory: c.Directory, Adapter: adapter}).Run(ctx, c.Binding)
+		if c.Mode == "observer-maintenance" {
+			e = (&p.ObserverCoordinator{Directory: c.Directory, Adapter: adapter}).Run(ctx, p.ObserverBinding(c.Binding))
+		} else {
+			e = (&p.Coordinator{Directory: c.Directory, Adapter: adapter}).Run(ctx, c.Binding)
+		}
 	case "drain-discovery", "drain-recovery":
 		observer, err := signing.ParsePublicKeyHex(c.ObserverKey)
 		if err != nil {
@@ -151,7 +155,7 @@ func execute(path string) error {
 		return fmt.Errorf("unsupported qualification mode")
 	}
 	files := map[string]string{}
-	for _, name := range []string{"operation.json", "drain-v1.json", "recovery-v2.json", "next-operation.json"} {
+	for _, name := range []string{"observer-operation.json", "operation.json", "drain-v1.json", "recovery-v2.json", "next-operation.json"} {
 		if raw, err := os.ReadFile(filepath.Join(c.Directory, name)); err == nil {
 			h := sha256.Sum256(raw)
 			files[name] = hex.EncodeToString(h[:])

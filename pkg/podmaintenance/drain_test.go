@@ -51,6 +51,7 @@ func TestDrainProcessHelper(t *testing.T) {
 					f.Close()
 					self, _ := os.FindProcess(os.Getpid())
 					self.Kill()
+					os.Exit(99) // Never finish successfully if signal delivery is delayed.
 				}
 			}
 		}

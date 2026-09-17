@@ -266,6 +266,10 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	}
 
 	if mode == ModeReal {
+		if pending, err := s.resumePendingObserver(ctx); pending {
+			_, heartbeatErr := s.SendHeartbeat(ctx)
+			return errors.Join(err, heartbeatErr)
+		}
 		if pending, err := s.resumePendingPod(ctx); pending {
 			_, heartbeatErr := s.SendHeartbeat(ctx)
 			return errors.Join(err, heartbeatErr)
@@ -416,7 +420,12 @@ func (s *Simulator) processOfferAttempt(
 		return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "policy_authorization", Stage: "prerequisite"}))
 	}
 
-	if update.Product == "siemcore" && s.config.Simulation.Filesystem.PodMaintenance != nil {
+	if update.Product == "siemcore" && s.config.Simulation.Filesystem.ObserverMaintenance != nil {
+		if err := s.applyObserverMaintenance(ctx, update); err != nil {
+			s.recordAttempt(update, false, "observer maintenance: "+err.Error())
+			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "observer_maintenance", Stage: "maintenance"}))
+		}
+	} else if update.Product == "siemcore" && s.config.Simulation.Filesystem.PodMaintenance != nil {
 		if err := s.applyPodMaintenance(ctx, update); err != nil {
 			s.recordAttempt(update, false, "pod maintenance: "+err.Error())
 			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "pod_maintenance", Stage: "maintenance"}))
