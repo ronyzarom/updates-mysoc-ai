@@ -2,7 +2,7 @@
 import hashlib
 from pathlib import Path
 
-MODES = {'readiness', 'maintenance-v1', 'recovery-v2', 'next-operation', 'drain-discovery', 'drain-recovery'}
+MODES = {'observer-maintenance', 'readiness', 'maintenance-v1', 'recovery-v2', 'next-operation', 'drain-discovery', 'drain-recovery'}
 
 
 def argv(value):

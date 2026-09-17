@@ -27,6 +27,12 @@ class ProductFixtureTests(unittest.TestCase):
         proxy=dict(isolated=True,adapter_command=self.case['adapter_command'])
         self.assertEqual(m.validate_case(self.plan,self.case,proxy),self.plan['product_binaries'])
 
+    def test_observer_mode_uses_same_product_provenance_checks(self):
+        self.case["mode"]="observer-maintenance"
+        self.assertEqual(m.validate_case(self.plan,self.case),self.plan["product_binaries"])
+        self.case["adapter_command"]=["/fixture/unpinned-observer"]
+        with self.assertRaises(ValueError):m.validate_case(self.plan,self.case)
+
     def test_changed_executable_rejected(self):
         self.binary.write_bytes(b'changed')
         with self.assertRaises(ValueError):m.validate_case(self.plan,self.case)

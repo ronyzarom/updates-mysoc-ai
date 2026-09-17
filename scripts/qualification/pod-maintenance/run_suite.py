@@ -37,7 +37,7 @@ try:
           proxy=pathlib.Path(step['proxy_config']);pc=json.loads(proxy.read_text());pc['fault']=step['fault'];proxy.write_text(json.dumps(pc))
         result=run([args.driver,'--config',str(config)],case/f'run-{number:03d}.log',step.get('timeout_seconds',60))
         passed=(result==0)==(step['expected']=='success');entry={'returncode':result,'expected':step['expected'],'matched':passed,'config_sha256':digest(config),'product_binaries':product_pins,'journals':{}}
-        for name in ('operation.json','drain-v1.json','recovery-v2.json','next-operation.json'):
+        for name in ('observer-operation.json','operation.json','drain-v1.json','recovery-v2.json','next-operation.json'):
           path=pathlib.Path(c['directory'])/name
           if path.exists():
             raw=path.read_bytes();(case/f'run-{number:03d}-{name}').write_bytes(raw);entry['journals'][name]=hashlib.sha256(raw).hexdigest()

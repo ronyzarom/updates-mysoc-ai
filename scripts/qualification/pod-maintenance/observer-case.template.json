@@ -1,0 +1,28 @@
+{
+  "isolated": true,
+  "test_id": "observer-real-adapter-restart",
+  "evidence_tier": "native-with-synthetic-host",
+  "mode": "observer-maintenance",
+  "directory": "/root/observer-qualification/updater-journal",
+  "adapter_command": [
+    "/root/observer-qualification/bin/siemcore",
+    "<product-provided-observer-adapter-subcommand>",
+    "--config",
+    "/root/observer-qualification/observer-adapter.json"
+  ],
+  "timeout_seconds": 55,
+  "release_public_key": "<disposable-release-public-key-hex>",
+  "binding": {
+    "protocol": "pod-observer-maintenance-v1",
+    "pod_id": "observer-qualification-pod",
+    "node_id": "witness",
+    "updater_id": "observer-qualification-updater",
+    "product": "siemcore",
+    "from_version": "3.3.152.35",
+    "target_version": "3.3.152.36",
+    "artifact_path": "/root/observer-qualification/artifacts/target.tar.gz",
+    "artifact_sha256": "<actual-target-archive-sha256>",
+    "artifact_signature": "<actual-target-release-signature>",
+    "previous_artifact_sha256": "<actual-retained-predecessor-sha256>"
+  }
+}
