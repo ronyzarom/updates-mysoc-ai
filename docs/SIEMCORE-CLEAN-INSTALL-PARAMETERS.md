@@ -261,3 +261,16 @@ identity and release receipt encoding); it never creates users or starts service
 It does not verify a downloaded artifact signature, test cloud access, or prove
 application readiness. The installer performs this check before host changes.
 The signed product executor validates detailed application configuration.
+
+### Schema-4 scoped quorum identity mapping — not enabled
+
+For the independent-data POD path, node `1` uses updater quorum certificate CN
+`updater-1`, node `2` uses `updater-2`, and node `witness` uses
+`updater-observer`. These are read-only, POD-scoped certificate principals, not
+registered updater machine IDs. Controller CNs are `1` and `2`; Observer authority
+uses a separate privileged credential. Bootstrap API certificate pins remain a
+separate binding. No public package includes private credentials.
+
+This mapping is reserved for the matching qualified schema-4 kit. Existing
+schema2/3 input and credential handling is unchanged. The current kit still
+rejects schema4; accepting this mapping does not enable delivery or activation.

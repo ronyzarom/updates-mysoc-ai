@@ -135,3 +135,29 @@ installs stay simulated. Opt out with `self_update: { disabled: true }`.
 - swf children are bound to relay tokens issued at first contact.
 - Update results (success/failure) flow up the cascade automatically and are
   visible on the operator dashboard within one heartbeat interval per hop.
+
+## Independent-data POD quorum credentials (schema 4 preview)
+
+Schema 4 is not enabled in this kit. The matching qualified kit must use the
+following quorum client certificate common names; this table does not change
+legacy schema 2/3 credential handling or Normal installations.
+
+| Canonical node ID | Updater quorum client CN | Controller quorum client CN |
+| --- | --- | --- |
+| `1` | `updater-1` | `1` |
+| `2` | `updater-2` | `2` |
+| `witness` | `updater-observer` | None; Observer authority uses its separate credential |
+
+Updater quorum credentials are read-only for the selected POD. They are separate
+from registered updater IDs, bootstrap listener client certificates, controller
+credentials, and the privileged `observer` authority credential. Never substitute
+these CNs into the registered machine identity, reuse privileged credentials, or
+fall back to legacy write-capable updater principals. Original registered input
+bytes and their digest remain unchanged.
+
+The signed product artifact owns quorum grant configuration. Qualification must
+verify effective permissions and repeated setup, including rejection of wider
+role memberships, cross-POD access, and updater authority writes. SiemCore's local
+TLS etcd v3.6.4 qualification passed those checks; this is not evidence that the
+complete schema-4 kit, activation, routing or real-host installation is qualified.
+Credentials must be provisioned per host outside public installation packages.
