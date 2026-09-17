@@ -79,3 +79,10 @@ checker and sets SIEMCORE_MANAGED_PREREQUISITES=1 before app installation. The a
 installer now skips host tuning for that flag. This may make a previously valid
 Normal clean install fail on defaults. Product must separate the corrected POD
 admission behavior or qualify/prove preserved Normal behavior before a candidate.
+
+Compatibility follow-up: SiemCore removed the unconditional greenfield host gate
+and scoped the read-only helper to canonical supervised nodes1/2 with managed
+prerequisites. Updates independently ran the actual product shell regression suite:
+5tests passed in9.347s, including Normal/legacy cases with no added host probes.
+This resolves the identified source-level gate regression; it is not a new live
+Normal-install or release qualification claim.
