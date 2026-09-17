@@ -85,6 +85,21 @@ func execute(path string) error {
 			return fmt.Errorf("qualification artifact checksum mismatch")
 		}
 		e = (&p.Coordinator{Directory: c.Directory, Adapter: adapter}).Run(ctx, c.Binding)
+	case "drain-discovery", "drain-recovery":
+		observer, err := signing.ParsePublicKeyHex(c.ObserverKey)
+		if err != nil {
+			return err
+		}
+		drain := &p.DrainCoordinator{Directory: c.Directory, Adapter: adapter, ObserverKey: observer}
+		var journal p.DrainJournal
+		if c.Mode == "drain-discovery" {
+			journal, e = drain.Discover(ctx)
+		} else {
+			journal, e = drain.Run(ctx, c.Authorization)
+		}
+		if e == nil {
+			outcome = "drain-" + journal.Phase
+		}
 	case "recovery-v2", "next-operation":
 		observer, err := signing.ParsePublicKeyHex(c.ObserverKey)
 		if err != nil {

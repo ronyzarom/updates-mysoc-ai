@@ -193,6 +193,15 @@ func (c *RecoveryCoordinator) Run(ctx context.Context, authorization RecoveryAut
 	if original.Generation == 0 {
 		return "", errors.New("recovery requires acknowledged original generation")
 	}
+	// A drain grant never authorizes artifact recovery. Even a separately
+	// signed v2 grant must wait for a retained paused drain receipt.
+	if drain, err := ReadDrainJournal(c.Directory); err == nil {
+		if drain.Protocol != DrainProtocol || drain.Phase != "paused" || drain.Evidence == nil || !paused(*drain.Evidence) || !reflect.DeepEqual(drain.Binding, original.Binding) || drain.Generation != original.Generation {
+			return "", errors.New("drain has not reached a verified paused state")
+		}
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
 	claims, e := DecodeRecoveryAuthorization(authorization, c.ObserverKey)
 	if e != nil {
 		return "", e

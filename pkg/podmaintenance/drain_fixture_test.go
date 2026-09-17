@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// This tests canonical signing vectors only. There is intentionally no drain
-// recovery executor or advertised runtime capability in this package yet.
+// Canonical signing vectors remain independent of runtime capability advertisement.
 func TestCanonicalDrainSigningVectors(t *testing.T) {
 	raw, e := os.ReadFile("../../docs/fixtures/pod-maintenance-drain-recovery-v1/canonical.json")
 	if e != nil {

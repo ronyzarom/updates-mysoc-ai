@@ -109,3 +109,35 @@ These are canonical protocol/signing fixtures plus validation vectors. No drain
 executor, live grant, capability advertisement or deployment is supplied here.
 Native product/observer/updater integration and crash, expiry, revocation,
 newer-owner/watchdog and emergency-isolation tests remain necessary.
+
+## Updates coordinator implementation (P1, opt-in source only)
+
+`pkg/podmaintenance/drain.go` provides `DrainCoordinator.Discover` and `Run`.
+The caller must supply the protected pinned observer transport. The production
+SiemCore adapter argv is `/usr/local/libexec/siemcore pod-drain-adapter --config
+/etc/siemcore-pod-controller/drain-adapter.json`, followed by the action. Nonzero
+exit (including the service's generic HTTP 409 refusal) always fails closed.
+The observer owns the authoritative persistent revocation ledger and rechecks it
+on every mutation; the updater does not infer a revocation reason from HTTP 409.
+
+Discovery first records `drain-v1.json`, blocking ordinary v1 fallback. Authenticated
+exact-binding evidence is persisted there before the original journal's generation
+is filled in. Binding, original deadline, and original phase remain unchanged.
+A retry uses the retained positive generation; it never begins a new operation.
+Signed grants are retained by ID with exact decoded-payload hash, signature, and
+supersession history. Recovery only authorizes/resumes drain; paused is its only
+successful terminal state. Paused status reconciliation works after grant expiry.
+No artifact application, barrier clearing, completion, activation, or promotion
+can be invoked by this coordinator.
+
+The isolated qualification driver accepts `drain-discovery` and `drain-recovery`
+modes with the same adapter argv and canonical authorization envelope. Process
+tests in `drain_test.go` exercise actual coordinator/adapter subprocesses, SIGKILL
+at durable checkpoints and lost responses, retries, revocation refusal, expiry,
+invalid discovery, and zero-generation mutation rejection. These use a synthetic
+adapter and are component evidence, not real-host qualification.
+
+Capability advertisement, updater startup integration, and deployment remain OFF.
+A discovered lost-begin journal retains phase `intent`: a subsequent separately
+signed v2 handoff and drain-evidence archival integration are still required before
+that operation can apply a product artifact. The private `.25` binary is unchanged.

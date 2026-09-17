@@ -169,6 +169,9 @@ func (c *Coordinator) Run(ctx context.Context, target Binding) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	if _, err := os.Lstat(filepath.Join(c.Directory, "drain-v1.json")); !os.IsNotExist(err) {
+		return errors.New("drain recovery requires separate reconciliation; no v1 fallback")
+	}
 	path := filepath.Join(c.Directory, "operation.json")
 	j := Journal{}
 	if info, err := os.Lstat(path); err == nil {
