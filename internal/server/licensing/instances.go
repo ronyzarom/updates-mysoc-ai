@@ -1020,6 +1020,9 @@ func (r *InstanceRepository) SetUpdateGroup(ctx context.Context, id string, grou
 // UpdateHeartbeat updates the last heartbeat for an instance
 // clientIP is the IP address of the connecting client (can be empty)
 func (r *InstanceRepository) UpdateHeartbeat(ctx context.Context, instanceID string, heartbeat *types.Heartbeat, clientIP string) error {
+	if err := heartbeat.Installation.Validate(); err != nil {
+		return err
+	}
 	heartbeatData, err := json.Marshal(heartbeat)
 	if err != nil {
 		return fmt.Errorf("failed to marshal heartbeat: %w", err)
@@ -1030,7 +1033,7 @@ func (r *InstanceRepository) UpdateHeartbeat(ctx context.Context, instanceID str
 	// Build base update
 	query := `
 		UPDATE instances
-		SET last_heartbeat = $2, last_heartbeat_data = $3, status = 'online', deleted_at = NULL,
+		SET last_heartbeat = $2, last_heartbeat_data = CASE WHEN jsonb_typeof(instances.last_heartbeat_data->'installation') = 'object' THEN $3::jsonb || jsonb_build_object('installation', instances.last_heartbeat_data->'installation') ELSE $3::jsonb END, status = 'online', deleted_at = NULL,
 		    last_ip_address = $4, last_ip_seen_at = $5, updated_at = $5
 		WHERE instance_id = $1
 	`
@@ -1040,7 +1043,7 @@ func (r *InstanceRepository) UpdateHeartbeat(ctx context.Context, instanceID str
 	if heartbeat.LastUpdateAttempt != nil {
 		query = `
 			UPDATE instances
-			SET last_heartbeat = $2, last_heartbeat_data = $3, status = 'online', deleted_at = NULL,
+			SET last_heartbeat = $2, last_heartbeat_data = CASE WHEN jsonb_typeof(instances.last_heartbeat_data->'installation') = 'object' THEN $3::jsonb || jsonb_build_object('installation', instances.last_heartbeat_data->'installation') ELSE $3::jsonb END, status = 'online', deleted_at = NULL,
 			    last_ip_address = $4, last_ip_seen_at = $5,
 			    last_update_from_version = $6, last_update_target_version = $7,
 			    last_update_success = $8, last_update_error = $9, last_update_at = $10,
@@ -1062,6 +1065,9 @@ func (r *InstanceRepository) UpdateHeartbeat(ctx context.Context, instanceID str
 // This is used when an instance sends its first heartbeat
 // clientIP is the IP address of the connecting client (can be empty)
 func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID string, heartbeat *types.Heartbeat, licenseID, clientIP string) error {
+	if err := heartbeat.Installation.Validate(); err != nil {
+		return err
+	}
 	heartbeatData, err := json.Marshal(heartbeat)
 	if err != nil {
 		return fmt.Errorf("failed to marshal heartbeat: %w", err)
@@ -1108,7 +1114,7 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			hostname = EXCLUDED.hostname,
 			license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
 			last_heartbeat = EXCLUDED.last_heartbeat,
-			last_heartbeat_data = EXCLUDED.last_heartbeat_data,
+			last_heartbeat_data = CASE WHEN jsonb_typeof(instances.last_heartbeat_data->'installation') = 'object' THEN EXCLUDED.last_heartbeat_data::jsonb || jsonb_build_object('installation', instances.last_heartbeat_data->'installation') ELSE EXCLUDED.last_heartbeat_data::jsonb END,
 			status = 'online', deleted_at = NULL,
 			last_ip_address = EXCLUDED.last_ip_address,
 			last_ip_seen_at = EXCLUDED.last_ip_seen_at,
@@ -1136,7 +1142,7 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 				hostname = EXCLUDED.hostname,
 				license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
 				last_heartbeat = EXCLUDED.last_heartbeat,
-				last_heartbeat_data = EXCLUDED.last_heartbeat_data,
+				last_heartbeat_data = CASE WHEN jsonb_typeof(instances.last_heartbeat_data->'installation') = 'object' THEN EXCLUDED.last_heartbeat_data::jsonb || jsonb_build_object('installation', instances.last_heartbeat_data->'installation') ELSE EXCLUDED.last_heartbeat_data::jsonb END,
 				status = 'online', deleted_at = NULL,
 				last_ip_address = EXCLUDED.last_ip_address,
 				last_ip_seen_at = EXCLUDED.last_ip_seen_at,
@@ -1258,6 +1264,9 @@ const maxRollupNodes = 10000
 // and refreshes the IP sighting plus identity COALESCEs; liveness comes
 // exclusively from heartbeats (direct or rolled up through a relay).
 func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID string, heartbeat *types.Heartbeat, licenseID, clientIP string) error {
+	if err := heartbeat.Installation.Validate(); err != nil {
+		return err
+	}
 	heartbeatData, err := json.Marshal(heartbeat)
 	if err != nil {
 		return fmt.Errorf("failed to marshal heartbeat: %w", err)
@@ -1353,7 +1362,7 @@ const upsertReportedNodeSQL = `
 			WHEN EXCLUDED.status = 'decommissioned'
 				THEN COALESCE(instances.last_heartbeat_data, EXCLUDED.last_heartbeat_data)
 			WHEN instances.last_heartbeat_data IS DISTINCT FROM EXCLUDED.last_heartbeat_data
-				THEN EXCLUDED.last_heartbeat_data
+				THEN CASE WHEN jsonb_typeof(instances.last_heartbeat_data->'installation') = 'object' THEN EXCLUDED.last_heartbeat_data::jsonb || jsonb_build_object('installation', instances.last_heartbeat_data->'installation') ELSE EXCLUDED.last_heartbeat_data::jsonb END
 			ELSE instances.last_heartbeat_data END,
 		status = EXCLUDED.status,
 		deleted_at = CASE WHEN EXCLUDED.status IN ('online', 'degraded') THEN NULL ELSE instances.deleted_at END,
@@ -1550,12 +1559,16 @@ func reportedNodeUpsertArgs(reporterID, parentID, licenseID string, child *types
 		CustomerName:      child.CustomerName,
 		Hostname:          child.Hostname,
 		UpdaterVersion:    child.UpdaterVersion,
+		Installation:      child.Installation,
 		Products:          child.Products,
 		Timestamp:         lastSeen,
 		LastUpdateAttempt: child.LastUpdateAttempt,
 	}
 	if child.System != nil {
 		snapshot.System = *child.System
+	}
+	if err := snapshot.Installation.Validate(); err != nil {
+		return nil, err
 	}
 	heartbeatData, err := json.Marshal(snapshot)
 	if err != nil {

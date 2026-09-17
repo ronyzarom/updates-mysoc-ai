@@ -272,7 +272,14 @@ export interface InstanceTreeResponse {
   operators: InstanceTreeOperator[];
 }
 
+export interface InstallationIdentity {
+  kind: "normal" | "pod";
+  pod_id?: string;
+  node_id?: string;
+}
+
 export interface HeartbeatData {
+  installation?: InstallationIdentity;
   instance_id: string;
   updater_version: string;
   products: ProductStatus[];

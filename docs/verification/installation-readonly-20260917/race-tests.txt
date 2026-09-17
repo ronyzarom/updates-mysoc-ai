@@ -1,0 +1,3 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatersim	10.911s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing	1.756s
+?   	github.com/cyfox-labs/updates-mysoc-ai/pkg/types	[no test files]

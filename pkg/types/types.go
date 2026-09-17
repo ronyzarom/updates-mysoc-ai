@@ -166,20 +166,21 @@ type UpdateAttempt struct {
 
 // Heartbeat is the payload sent by updaters
 type Heartbeat struct {
-	InstanceID       string          `json:"instance_id"`
-	InstanceType     string          `json:"instance_type"`
-	ProductTier      string          `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
-	ParentInstanceID string          `json:"parent_instance_id,omitempty"` // parent node's instance_id (self-reported)
-	CustomerID       string          `json:"customer_id,omitempty"`        // end customer this node serves
-	CustomerName     string          `json:"customer_name,omitempty"`      // human-friendly customer label
-	Hostname         string          `json:"hostname"`
-	UpdaterVersion   string          `json:"updater_version"`
-	ConfigHash       string          `json:"config_hash"`
-	License          LicenseStatus   `json:"license"`
-	Products         []ProductStatus `json:"products"`
-	System           SystemMetrics   `json:"system"`
-	Security         SecurityStatus  `json:"security,omitempty"`
-	Timestamp        time.Time       `json:"timestamp"`
+	Installation     *InstallationIdentity `json:"installation,omitempty"`
+	InstanceID       string                `json:"instance_id"`
+	InstanceType     string                `json:"instance_type"`
+	ProductTier      string                `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
+	ParentInstanceID string                `json:"parent_instance_id,omitempty"` // parent node's instance_id (self-reported)
+	CustomerID       string                `json:"customer_id,omitempty"`        // end customer this node serves
+	CustomerName     string                `json:"customer_name,omitempty"`      // human-friendly customer label
+	Hostname         string                `json:"hostname"`
+	UpdaterVersion   string                `json:"updater_version"`
+	ConfigHash       string                `json:"config_hash"`
+	License          LicenseStatus         `json:"license"`
+	Products         []ProductStatus       `json:"products"`
+	System           SystemMetrics         `json:"system"`
+	Security         SecurityStatus        `json:"security,omitempty"`
+	Timestamp        time.Time             `json:"timestamp"`
 
 	// Last update attempt (included in next heartbeat after install)
 	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
@@ -248,9 +249,10 @@ type RelayGuardStats struct {
 // ChildReport is one node in a relay's fleet rollup. Parentage is implied by
 // nesting: each entry's parent is the node whose Children list contains it.
 type ChildReport struct {
-	InstanceID   string `json:"instance_id"`
-	InstanceType string `json:"instance_type,omitempty"`
-	ProductTier  string `json:"product_tier,omitempty"`
+	Installation *InstallationIdentity `json:"installation,omitempty"`
+	InstanceID   string                `json:"instance_id"`
+	InstanceType string                `json:"instance_type,omitempty"`
+	ProductTier  string                `json:"product_tier,omitempty"`
 	// ParentInstanceID is the node's declared parent. The nested full rollup
 	// leaves it empty (parentage is implied by nesting), but the flat delta
 	// inventory stream carries it so the server can reconstruct the tree

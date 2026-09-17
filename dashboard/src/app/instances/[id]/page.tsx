@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { InstallationBadge } from "@/components/InstallationBadge";
 import { CleanupChildren } from "@/components/CleanupChildren";
 import { refreshFleetQueries } from "@/lib/fleet-cache";
 import { api } from "@/lib/api";
@@ -595,6 +596,10 @@ export default function InstanceDetailPage() {
                     trust it when real host measurements came with it. */}
                 {telemetryReported ? formatUptime(heartbeat?.system?.uptime) : "Not reported"}
               </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-400">Installation</span>
+              <InstallationBadge installation={heartbeat?.installation} />
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-400">Updater Version</span>

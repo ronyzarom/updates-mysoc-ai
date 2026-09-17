@@ -1,0 +1,1 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing	1.540s

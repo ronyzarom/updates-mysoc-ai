@@ -97,3 +97,14 @@ without that adapter and observer-owned application updates fail closed.
 Remaining external gates: observer-specific signed lifecycle and shared relay
 endpoint failover qualification. The existing witness etcd/sentinel update script
 is not treated as an allocation-observer update implementation.
+
+## Read-only Normal / POD indication
+
+The updater reports `installation.kind` (`normal` or `pod`) from its persisted
+installation identity, plus `pod_id`/`node_id` for POD. This is independent of the
+active/standby role and is never inferred from directory names. The server retains
+the first recorded identity across direct and relayed heartbeats, including old
+clients omitting it later. The instance page renders a locked, read-only badge.
+There is no dashboard conversion control. Legacy instances without a recorded
+identity display **Not reported**; they are not silently classified as Normal.
+This protects administrative classification, not against a privileged host attacker.

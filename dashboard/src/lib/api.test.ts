@@ -133,7 +133,7 @@ describe("paired artifact upload", () => {
 
 
 describe("independent artifact publication", () => {
-  it.each(["bootstrap", "update"])("uploads %s without a paired file", async (kind) => {
+  it.each(["bootstrap", "update"] as const)("uploads %s without a paired file", async (kind) => {
     api.setTokens("fixture-token", "fixture-refresh");
     let body: FormData | undefined;
     vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => {

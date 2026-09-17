@@ -1,6 +1,9 @@
 package updatersim
 
-import "fmt"
+import (
+	"fmt"
+	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
+)
 
 // ServerType records installer intent, never authority to activate a node.
 // Current ACTIVE/STBY authority must still be measured by the pod adapter.
@@ -97,4 +100,21 @@ func (s *Simulator) validateSiemCoreExecution() error {
 		return fmt.Errorf("pod-observer requires qualified observer-specific executor; data-node update refused")
 	}
 	return nil
+}
+
+// Installation class is immutable metadata, never the dynamic ACTIVE/STBY role.
+func (s *Simulator) installationIdentity() *platformtypes.InstallationIdentity {
+	if s.state == nil || s.state.SiemCoreInstallation == nil {
+		return nil
+	}
+	saved := s.state.SiemCoreInstallation
+	kind := "pod"
+	if saved.ServerType == "normal" {
+		kind = "normal"
+	}
+	result := &platformtypes.InstallationIdentity{Kind: kind, PodID: saved.PodID, NodeID: saved.NodeID}
+	if result.Validate() != nil {
+		return nil
+	}
+	return result
 }

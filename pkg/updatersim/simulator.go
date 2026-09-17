@@ -557,6 +557,7 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	}
 
 	return platformtypes.Heartbeat{
+		Installation:     s.installationIdentity(),
 		InstanceID:       s.config.Instance.ID,
 		InstanceType:     s.config.Instance.Type,
 		ProductTier:      s.config.Instance.ProductTier,
