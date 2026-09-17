@@ -121,3 +121,11 @@ local tests. This is mocked endpoint integration plus real transport qualificati
 not independent evidence of the product's native endpoint tests. Explicit renewal
 reconciliation and no-authorization-409 recovery remain fail-closed manual
 integration gates. No provisioning stage execution or kit shipment is enabled.
+
+Typed missing-authorization reconciliation is now supported: only HTTP409 JSON
+`authorization_not_recorded` with the exact protocol, operation, registry,
+generation, node, original-input hash and `processing_allowed:false` permits one
+same-invitation authorize retry. Its signature and current lifetime are rechecked
+immediately before retry. Generic409, mismatches and expired invitations block.
+37 local tests pass. Automatic renewal remains unimplemented; a changed invitation
+requires explicit reconciliation rather than silently replacing the local intent.

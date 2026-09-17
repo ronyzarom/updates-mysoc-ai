@@ -25,6 +25,12 @@ PENDING = b'bootstrap blocked: all three bootstrap registrations required'
 class Blocked(Exception):
     pass
 
+class AuthorizationNotRecorded(Blocked):
+    def __init__(self, body):
+        super().__init__('authorization not recorded')
+        self.body=body
+
+
 class RegistrationsPending(Blocked):
     pass
 
@@ -95,6 +101,9 @@ class Transport:
             if len(body)>LIMIT: raise ValueError('oversized response')
             if response.status==409 and action=='all-registered' and body.strip()==PENDING:
                 raise RegistrationsPending('waiting for all three registrations')
+            if response.status==409 and action=='authorization-status':
+                # The caller must validate every typed absence binding before retrying.
+                raise AuthorizationNotRecorded(body)
             if response.status!=200:
                 raise Blocked('Observer rejected action (HTTP %d)'%response.status)
             return body  # Redirects are never followed.

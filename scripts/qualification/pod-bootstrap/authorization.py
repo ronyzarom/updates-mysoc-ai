@@ -54,6 +54,19 @@ def validate_ack(sent, action, raw, intended_authorization_id, intended_expires_
     return ack
 
 
+def validate_absence(sent, raw):
+    ack=protocol.strict_json(raw)
+    fields={'code','protocol','operation_id','registry_sha256','generation','node_id','input_sha256','processing_allowed'}
+    if not isinstance(ack,dict) or set(ack)!=fields or ack['code']!='authorization_not_recorded':
+        raise ValueError('unverified authorization absence')
+    for field in ('protocol','operation_id','registry_sha256','input_sha256'):
+        if ack[field]!=sent[field]:raise ValueError('absence binding mismatch')
+    if (type(ack['generation']) is not int or ack['generation']<=0 or ack['generation']!=sent['generation'] or
+            ack['node_id']!=sent['node']['node_id'] or ack['processing_allowed'] is not False):
+        raise ValueError('absence identity or generation mismatch')
+    return ack
+
+
 def verify_invitation(invitation, pinned_key, expected, now_ns, require_current=True):
     """Validate detached exact-byte Ed25519 signature, scope and current lifetime."""
     import base64
@@ -120,10 +133,17 @@ class Coordinator:
                          self.invitation if action=='authorize' else None)
             return validate_ack(sent,action,r.transport.call(action,sent,min(10,remaining)),
                                 claims['authorization_id'],claims['expires_at'])
+        def reconcile():
+            try:return call('authorization-status')
+            except client.AuthorizationNotRecorded as absent:
+                sent=request(r.registry,r.fingerprint,r.node_id,'authorization-status',generation,r.input_hash)
+                validate_absence(sent,absent.body)
+                # call() rechecks current signature/scope/lifetime before this exact retry.
+                return call('authorize')
         if existed:
-            ack=call('authorization-status')
+            ack=reconcile()
         else:
             try:ack=call('authorize')
-            except (OSError,http.client.HTTPException):ack=call('authorization-status')
+            except (OSError,http.client.HTTPException):ack=reconcile()
         client.durable(self.path,{'binding':binding,'phase':ack['phase']})
         return dict(ack,installation_complete=False)

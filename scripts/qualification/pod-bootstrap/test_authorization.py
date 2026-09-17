@@ -101,3 +101,38 @@ class IntegrationTests(unittest.TestCase):
         self.run_client();self.calls=[];self.now+=3600*10**9
         self.run_client()
         self.assertEqual(self.calls,['authorization-status'])
+
+    def test_typed_absence_allows_exact_still_valid_retry(self):
+        import client
+        self.run_client();self.calls=[]
+        original=self.registration.transport.call
+        def call(action,sent,timeout):
+            if action=='authorization-status':
+                self.calls.append(action)
+                raise client.AuthorizationNotRecorded(json.dumps(dict(code='authorization_not_recorded',
+                    protocol=sent['protocol'],operation_id=sent['operation_id'],registry_sha256=sent['registry_sha256'],
+                    generation=sent['generation'],node_id=sent['node']['node_id'],input_sha256=sent['input_sha256'],processing_allowed=False)))
+            return original(action,sent,timeout)
+        self.registration.transport.call=call
+        self.run_client()
+        self.assertEqual(self.calls,['authorization-status','authorize'])
+        self.calls=[];self.now+=3600*10**9
+        with self.assertRaises(ValueError):self.run_client()
+        self.assertEqual(self.calls,['authorization-status'])
+
+    def test_generic_or_mismatched_absence_never_allows_retry(self):
+        import client
+        self.run_client();self.calls=[]
+        def call(action,sent,timeout):
+            self.calls.append(action)
+            raise client.AuthorizationNotRecorded(b'bootstrap blocked: stale barrier')
+        self.registration.transport.call=call
+        with self.assertRaises(ValueError):self.run_client()
+        self.assertEqual(self.calls,['authorization-status'])
+        sent=a.request(FIXTURE['registry'],FIXTURE['registry_sha256'],'1','authorization-status',7,'a'*64)
+        ack=dict(code='authorization_not_recorded',protocol=sent['protocol'],operation_id=sent['operation_id'],
+                 registry_sha256=sent['registry_sha256'],generation=7,node_id='1',input_sha256='a'*64,processing_allowed=False)
+        a.validate_absence(sent,json.dumps(ack))
+        for field,value in [('node_id','2'),('generation',8),('input_sha256','b'*64),('processing_allowed',True)]:
+            changed=dict(ack);changed[field]=value
+            with self.subTest(field=field),self.assertRaises(ValueError):a.validate_absence(sent,json.dumps(changed))
