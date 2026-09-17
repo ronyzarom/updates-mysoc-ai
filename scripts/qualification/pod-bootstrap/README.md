@@ -257,3 +257,24 @@ expired invitation rejection. See `docs/verification/pod-observer-runner-2026091
 The runner now rechecks drain/update/receipt input hashes after execution as well
 as before.76 local tests pass. This is test-signed local qualification, not full
 three-node or production-release acceptance.
+
+## Isolated runtime module worker
+
+`runtime_worker.py` implements source-only host execution. The mandatory bundle
+verifier must first authenticate the retained signed bundle and return its exact
+manifest, module bytes and artifact checksum. The worker then validates the exact
+reviewed bootstrap_host_modules entry, normalized fixed path, SHA256/size,
+Python3.10-3.12 range, empty helper dependencies and reviewed stdlib imports. It
+loads verified in-memory bytes in a separate bounded process with sanitized
+environment/search path and a private bounded receipt pipe. The real authorization
+callback is passed to every product start() step, with an additional initial check.
+Interrupted workers retain daemon-owned runtime/data and the incomplete operation.
+Only the exact identity/binding/config+TLS checksum data-services-ready partial
+receipt is accepted.
+
+83 tests discovered on macOS:82 passed,1 Linux-only invocation skipped. All7
+worker tests passed separately in a disposable Linuxroot/Python3.12 container,
+including actual child invocation, repeated authorization callback invocation,
+immutable generation refusal, timeout/output bounds and no diagnostic leakage.
+That invocation uses synthetic test module/verifier callbacks; actual product
+module, retained signed bundle and live mTLS callback integration is still pending.
