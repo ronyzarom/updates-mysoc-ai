@@ -319,3 +319,9 @@ observations never skip fresh execution and have an explicit expiry. The consume
 optional --readiness adds exact node1/node2 observation requests7/8.93 localtests
 found92pass1Linux-onlyskip. Native8stage qualification is running separately;
 production activation remains excluded.
+
+Fresh8stage native combined run passed all stages including both read-only data
+observations; receipts measured4517/12566bytes. Evidence:
+`docs/verification/pod-readiness-runner-20260917`. Receiver5second freshness passed;
+product binary predates only its final internal5second deadline and must be rerun
+before a candidate. No overall operational readiness/activation qualification.

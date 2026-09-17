@@ -1,0 +1,867 @@
+[
+  {
+    "sequence": 1,
+    "exit_code": 0,
+    "decoded_bytes": 570,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "1",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "3fc44fcc436ff7b86554a8f02a79809565c261ddeacb2a94ece9468b5f25317a",
+        "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f"
+      },
+      "configuration_sha256": "9403122ce0fb07b8b0d1fafbd5384e73c303ba4d6c960bf1262172778995508d",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  },
+  {
+    "sequence": 2,
+    "exit_code": 0,
+    "decoded_bytes": 570,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "2",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "3e4500e54019414892a790c615b17e5f2317f854b10adc3eae0acb5e6407c37e",
+        "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f"
+      },
+      "configuration_sha256": "98ff813d906b8aaaa517f64ad69d5e59e2063197de5832bc50c41805c37c1d09",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  },
+  {
+    "sequence": 3,
+    "exit_code": 0,
+    "decoded_bytes": 476,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "1",
+      "input_sha256": "3fc44fcc436ff7b86554a8f02a79809565c261ddeacb2a94ece9468b5f25317a",
+      "registry_sha256": "eb529b3bbd1b4e066550d3c4540b118671ca96fc60ef5d6ec78dcdf00166fe09",
+      "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f",
+      "installed_version": "3.3.152.99",
+      "phase": "schema-prepared",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 4,
+    "exit_code": 0,
+    "decoded_bytes": 476,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "2",
+      "input_sha256": "3e4500e54019414892a790c615b17e5f2317f854b10adc3eae0acb5e6407c37e",
+      "registry_sha256": "eb529b3bbd1b4e066550d3c4540b118671ca96fc60ef5d6ec78dcdf00166fe09",
+      "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f",
+      "installed_version": "3.3.152.99",
+      "phase": "schema-prepared",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 5,
+    "exit_code": 0,
+    "decoded_bytes": 496,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "2",
+      "input_sha256": "3e4500e54019414892a790c615b17e5f2317f854b10adc3eae0acb5e6407c37e",
+      "registry_sha256": "eb529b3bbd1b4e066550d3c4540b118671ca96fc60ef5d6ec78dcdf00166fe09",
+      "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f",
+      "installed_version": "3.3.152.99",
+      "phase": "selected-synchronization-configured",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 6,
+    "exit_code": 0,
+    "decoded_bytes": 570,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "1",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "3fc44fcc436ff7b86554a8f02a79809565c261ddeacb2a94ece9468b5f25317a",
+        "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f"
+      },
+      "configuration_sha256": "9403122ce0fb07b8b0d1fafbd5384e73c303ba4d6c960bf1262172778995508d",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  },
+  {
+    "sequence": 7,
+    "exit_code": 0,
+    "decoded_bytes": 4517,
+    "receipt": {
+      "protocol": "pod-bootstrap-readiness-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "1",
+      "input_sha256": "3fc44fcc436ff7b86554a8f02a79809565c261ddeacb2a94ece9468b5f25317a",
+      "registry_sha256": "eb529b3bbd1b4e066550d3c4540b118671ca96fc60ef5d6ec78dcdf00166fe09",
+      "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f",
+      "installed_version": "3.3.152.99",
+      "phase": "schema-and-state-verified",
+      "installation_complete": false,
+      "processing_allowed": false,
+      "observed_at": "2026-09-17T18:17:28.506098364Z",
+      "policy_version": 2,
+      "operational_content": {
+        "policy_version": 2,
+        "tables": [
+          {
+            "name": "alert_rule_templates",
+            "rows": 0,
+            "sha256": "485407fbaa6112cef56f0753b7d7cad37d051008fd0c7aae0a7f9f98e7055000"
+          },
+          {
+            "name": "api_keys",
+            "rows": 0,
+            "sha256": "6557688a91abd67edbc6648568be546692931248c7856b46adb6e86ba55dd928"
+          },
+          {
+            "name": "archive_manifest",
+            "rows": 0,
+            "sha256": "b2a52f485220961077bc17dae54e1369a6636d9cbbc80d6dd7875fc763fe73c6"
+          },
+          {
+            "name": "compliance_profiles",
+            "rows": 0,
+            "sha256": "2f7780fb8be688ce46de9aab575dfeced7fe935be0ba909d8f1f1e632947214e"
+          },
+          {
+            "name": "compliance_requirements",
+            "rows": 0,
+            "sha256": "d1b5fbcc7938496dfbea8b38e3ca945e1e75bd6510f9d2f058143956f54c0b6e"
+          },
+          {
+            "name": "connector_configs",
+            "rows": 1,
+            "sha256": "2f5bcdb74c4b2d514f7f905fe016b73ce0680c66ecbe285e0b8947d253bccca3"
+          },
+          {
+            "name": "connector_state",
+            "rows": 0,
+            "sha256": "68d6c8fac1f15acbe02ed365dd11017fdbb3d98a9f11c669e907b63396ec0eb2"
+          },
+          {
+            "name": "customer_siemcore_config",
+            "rows": 0,
+            "sha256": "e175541e68c19d176cd38576e94d846064755bb538b2eaf7713f52ed26296a3d"
+          },
+          {
+            "name": "findings",
+            "rows": 0,
+            "sha256": "14bcab90c7332386cfcce237b51bd09f44d3f0366185a9b91002d69aa21868a6"
+          },
+          {
+            "name": "integration_tokens",
+            "rows": 0,
+            "sha256": "60bd21fa12d9305c81095731963d5ce9951c1bb89de6af113dfc59e98259f1f7"
+          },
+          {
+            "name": "llm_config",
+            "rows": 0,
+            "sha256": "7ac8d962b1c161d21dd0a697f2d90cadca2507f3dc7f928dbb15e0fc6fa04ef9"
+          },
+          {
+            "name": "log_categories",
+            "rows": 0,
+            "sha256": "ef5bedf185ef9c9eef81d5369dd420f004fc52a9657ca407e4da082762ef2950"
+          },
+          {
+            "name": "log_retention_policies",
+            "rows": 0,
+            "sha256": "61e5161fd731ebdc6991f6229a254ef245ee8b70fe12cb594930fdc6669452ba"
+          },
+          {
+            "name": "log_type_mappings",
+            "rows": 0,
+            "sha256": "baffb63b496fe13a897083299b0f43f7e6f3840444d6b502717a4161b0312f4f"
+          },
+          {
+            "name": "mssp_customer_settings",
+            "rows": 0,
+            "sha256": "8426fb55f576623d3c192040a10593b1d80de4cb25eedb897dc0f89bf3c94c05"
+          },
+          {
+            "name": "mssp_rule_definitions",
+            "rows": 0,
+            "sha256": "e1c387fe124270032300c8414efb747e010748b6119448c881cec6a3f3ca546c"
+          },
+          {
+            "name": "mysoc_config",
+            "rows": 0,
+            "sha256": "76cd7587863a49dde1d484274ad44e2b4a0ec08e9b7aea0a2d99671e9f695236"
+          },
+          {
+            "name": "mysoc_platform_config",
+            "rows": 0,
+            "sha256": "23348e003712b9edb094d312bfdf52f72665d12f97870461229c654578f0e8bb"
+          },
+          {
+            "name": "pod_replication_progress",
+            "rows": 1,
+            "sha256": "c5961939ecbaa5c10e95cbeefeab1b4d45d00f67f7fb0708d8ad8a871e9a2d9f"
+          },
+          {
+            "name": "pod_sender_mappings",
+            "rows": 0,
+            "sha256": "1a6f69ed8713c56b81b521f3d9e483a0fa451ab9e94495abdcad1182afbaa2a6"
+          },
+          {
+            "name": "rule_instance_storage",
+            "rows": 0,
+            "sha256": "65b5d247bb3581170d26138c67784bdb101bb653a8e65bbb2dee027594ef676d"
+          },
+          {
+            "name": "rule_templates",
+            "rows": 0,
+            "sha256": "f301017084fb8066df5b4e1598473f8b3017b845937dde4b1f8cda447d580999"
+          },
+          {
+            "name": "rules",
+            "rows": 0,
+            "sha256": "b2762791a8a02c454afb939c61dff3b7f75e3d30954cb946e7a096ccc93dd899"
+          },
+          {
+            "name": "system_global_catalogs",
+            "rows": 0,
+            "sha256": "3597be17be3514da9921c46dd294c9fd436a58f928c51e3b9e1608614c03d94d"
+          },
+          {
+            "name": "system_rule_definitions",
+            "rows": 0,
+            "sha256": "459ade6cb1d25f7bc3358011f9cb618cd4e6b34e74f5acd7be74474b2a6cfb2c"
+          },
+          {
+            "name": "system_rule_policies",
+            "rows": 0,
+            "sha256": "265d9e48aae039d6a8d093a1565018f026ad8a093dc8a3149e6b629355842b56"
+          },
+          {
+            "name": "tenant_ingest_tokens",
+            "rows": 0,
+            "sha256": "403690bee9f07d1cf26943badacaa8958ab2189e12893493347ee6ce2ea803da"
+          },
+          {
+            "name": "tenant_ip_mappings",
+            "rows": 0,
+            "sha256": "0e0404313b8388c4d382997b6dc1806d9f4cc53129493a80488a153aeebe581c"
+          },
+          {
+            "name": "tenant_settings",
+            "rows": 0,
+            "sha256": "2ce6a547c3ef28810ff2890b3d675aec4997821966d22cb415b809ec4437810c"
+          },
+          {
+            "name": "tenants",
+            "rows": 1,
+            "sha256": "6fe1125f36d3eb4231991c410385df6ccda0d2ae02c333fe0af29ac18f8a6daa"
+          },
+          {
+            "name": "triage_findings",
+            "rows": 0,
+            "sha256": "5631ada0dfe85efde331bb23e6411afaf9a0608000d4f1f790ffe93177d008d2"
+          },
+          {
+            "name": "unified_rule_templates",
+            "rows": 0,
+            "sha256": "0912113accaa83f1bf13a1664ebed92ac1cc5d95220707da4b182fce3e5fd7ef"
+          },
+          {
+            "name": "users",
+            "rows": 0,
+            "sha256": "4186640af8709b4c4509b7b85110a8880947a0e262a65f8aeb59aed49390cacd"
+          }
+        ],
+        "sha256": "bc586f766781f1e6ca7a77c6a15b9615d96964bace299174d700bafd8b21b909",
+        "observed_at": "2026-09-17T18:17:28.504616898Z"
+      },
+      "activation_ready": false
+    }
+  },
+  {
+    "sequence": 8,
+    "exit_code": 0,
+    "decoded_bytes": 12566,
+    "receipt": {
+      "protocol": "pod-bootstrap-readiness-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "2",
+      "input_sha256": "3e4500e54019414892a790c615b17e5f2317f854b10adc3eae0acb5e6407c37e",
+      "registry_sha256": "eb529b3bbd1b4e066550d3c4540b118671ca96fc60ef5d6ec78dcdf00166fe09",
+      "artifact_sha256": "41a6f8a19314db8982e3007d05fd322987cc4ead2129335a71fea9a5c827317f",
+      "installed_version": "3.3.152.99",
+      "phase": "selected-mirror-verified",
+      "installation_complete": false,
+      "processing_allowed": false,
+      "observed_at": "2026-09-17T18:17:29.069466043Z",
+      "policy_version": 2,
+      "operational_content": {
+        "policy_version": 2,
+        "tables": [
+          {
+            "name": "alert_rule_templates",
+            "rows": 0,
+            "sha256": "485407fbaa6112cef56f0753b7d7cad37d051008fd0c7aae0a7f9f98e7055000"
+          },
+          {
+            "name": "api_keys",
+            "rows": 0,
+            "sha256": "6557688a91abd67edbc6648568be546692931248c7856b46adb6e86ba55dd928"
+          },
+          {
+            "name": "archive_manifest",
+            "rows": 0,
+            "sha256": "b2a52f485220961077bc17dae54e1369a6636d9cbbc80d6dd7875fc763fe73c6"
+          },
+          {
+            "name": "compliance_profiles",
+            "rows": 0,
+            "sha256": "2f7780fb8be688ce46de9aab575dfeced7fe935be0ba909d8f1f1e632947214e"
+          },
+          {
+            "name": "compliance_requirements",
+            "rows": 0,
+            "sha256": "d1b5fbcc7938496dfbea8b38e3ca945e1e75bd6510f9d2f058143956f54c0b6e"
+          },
+          {
+            "name": "connector_configs",
+            "rows": 1,
+            "sha256": "2f5bcdb74c4b2d514f7f905fe016b73ce0680c66ecbe285e0b8947d253bccca3"
+          },
+          {
+            "name": "connector_state",
+            "rows": 0,
+            "sha256": "68d6c8fac1f15acbe02ed365dd11017fdbb3d98a9f11c669e907b63396ec0eb2"
+          },
+          {
+            "name": "customer_siemcore_config",
+            "rows": 0,
+            "sha256": "e175541e68c19d176cd38576e94d846064755bb538b2eaf7713f52ed26296a3d"
+          },
+          {
+            "name": "findings",
+            "rows": 0,
+            "sha256": "14bcab90c7332386cfcce237b51bd09f44d3f0366185a9b91002d69aa21868a6"
+          },
+          {
+            "name": "integration_tokens",
+            "rows": 0,
+            "sha256": "60bd21fa12d9305c81095731963d5ce9951c1bb89de6af113dfc59e98259f1f7"
+          },
+          {
+            "name": "llm_config",
+            "rows": 0,
+            "sha256": "7ac8d962b1c161d21dd0a697f2d90cadca2507f3dc7f928dbb15e0fc6fa04ef9"
+          },
+          {
+            "name": "log_categories",
+            "rows": 0,
+            "sha256": "ef5bedf185ef9c9eef81d5369dd420f004fc52a9657ca407e4da082762ef2950"
+          },
+          {
+            "name": "log_retention_policies",
+            "rows": 0,
+            "sha256": "61e5161fd731ebdc6991f6229a254ef245ee8b70fe12cb594930fdc6669452ba"
+          },
+          {
+            "name": "log_type_mappings",
+            "rows": 0,
+            "sha256": "baffb63b496fe13a897083299b0f43f7e6f3840444d6b502717a4161b0312f4f"
+          },
+          {
+            "name": "mssp_customer_settings",
+            "rows": 0,
+            "sha256": "8426fb55f576623d3c192040a10593b1d80de4cb25eedb897dc0f89bf3c94c05"
+          },
+          {
+            "name": "mssp_rule_definitions",
+            "rows": 0,
+            "sha256": "e1c387fe124270032300c8414efb747e010748b6119448c881cec6a3f3ca546c"
+          },
+          {
+            "name": "mysoc_config",
+            "rows": 0,
+            "sha256": "76cd7587863a49dde1d484274ad44e2b4a0ec08e9b7aea0a2d99671e9f695236"
+          },
+          {
+            "name": "mysoc_platform_config",
+            "rows": 0,
+            "sha256": "23348e003712b9edb094d312bfdf52f72665d12f97870461229c654578f0e8bb"
+          },
+          {
+            "name": "pod_replication_progress",
+            "rows": 1,
+            "sha256": "c5961939ecbaa5c10e95cbeefeab1b4d45d00f67f7fb0708d8ad8a871e9a2d9f"
+          },
+          {
+            "name": "pod_sender_mappings",
+            "rows": 0,
+            "sha256": "1a6f69ed8713c56b81b521f3d9e483a0fa451ab9e94495abdcad1182afbaa2a6"
+          },
+          {
+            "name": "rule_instance_storage",
+            "rows": 0,
+            "sha256": "65b5d247bb3581170d26138c67784bdb101bb653a8e65bbb2dee027594ef676d"
+          },
+          {
+            "name": "rule_templates",
+            "rows": 0,
+            "sha256": "f301017084fb8066df5b4e1598473f8b3017b845937dde4b1f8cda447d580999"
+          },
+          {
+            "name": "rules",
+            "rows": 0,
+            "sha256": "b2762791a8a02c454afb939c61dff3b7f75e3d30954cb946e7a096ccc93dd899"
+          },
+          {
+            "name": "system_global_catalogs",
+            "rows": 0,
+            "sha256": "3597be17be3514da9921c46dd294c9fd436a58f928c51e3b9e1608614c03d94d"
+          },
+          {
+            "name": "system_rule_definitions",
+            "rows": 0,
+            "sha256": "459ade6cb1d25f7bc3358011f9cb618cd4e6b34e74f5acd7be74474b2a6cfb2c"
+          },
+          {
+            "name": "system_rule_policies",
+            "rows": 0,
+            "sha256": "265d9e48aae039d6a8d093a1565018f026ad8a093dc8a3149e6b629355842b56"
+          },
+          {
+            "name": "tenant_ingest_tokens",
+            "rows": 0,
+            "sha256": "403690bee9f07d1cf26943badacaa8958ab2189e12893493347ee6ce2ea803da"
+          },
+          {
+            "name": "tenant_ip_mappings",
+            "rows": 0,
+            "sha256": "0e0404313b8388c4d382997b6dc1806d9f4cc53129493a80488a153aeebe581c"
+          },
+          {
+            "name": "tenant_settings",
+            "rows": 0,
+            "sha256": "2ce6a547c3ef28810ff2890b3d675aec4997821966d22cb415b809ec4437810c"
+          },
+          {
+            "name": "tenants",
+            "rows": 1,
+            "sha256": "6fe1125f36d3eb4231991c410385df6ccda0d2ae02c333fe0af29ac18f8a6daa"
+          },
+          {
+            "name": "triage_findings",
+            "rows": 0,
+            "sha256": "5631ada0dfe85efde331bb23e6411afaf9a0608000d4f1f790ffe93177d008d2"
+          },
+          {
+            "name": "unified_rule_templates",
+            "rows": 0,
+            "sha256": "0912113accaa83f1bf13a1664ebed92ac1cc5d95220707da4b182fce3e5fd7ef"
+          },
+          {
+            "name": "users",
+            "rows": 0,
+            "sha256": "4186640af8709b4c4509b7b85110a8880947a0e262a65f8aeb59aed49390cacd"
+          }
+        ],
+        "sha256": "bc586f766781f1e6ca7a77c6a15b9615d96964bace299174d700bafd8b21b909",
+        "observed_at": "2026-09-17T18:17:29.054809471Z"
+      },
+      "mirror": {
+        "identity": {
+          "PodID": "observer-qualification-pod",
+          "InstallationID": "8a50a520-021a-41c8-ad4e-dd9991d3586d",
+          "Generation": 2
+        },
+        "source": {
+          "policy_version": 2,
+          "tables": [
+            {
+              "name": "alert_rule_templates",
+              "rows": 0,
+              "sha256": "485407fbaa6112cef56f0753b7d7cad37d051008fd0c7aae0a7f9f98e7055000"
+            },
+            {
+              "name": "api_keys",
+              "rows": 0,
+              "sha256": "6557688a91abd67edbc6648568be546692931248c7856b46adb6e86ba55dd928"
+            },
+            {
+              "name": "archive_manifest",
+              "rows": 0,
+              "sha256": "b2a52f485220961077bc17dae54e1369a6636d9cbbc80d6dd7875fc763fe73c6"
+            },
+            {
+              "name": "compliance_profiles",
+              "rows": 0,
+              "sha256": "2f7780fb8be688ce46de9aab575dfeced7fe935be0ba909d8f1f1e632947214e"
+            },
+            {
+              "name": "compliance_requirements",
+              "rows": 0,
+              "sha256": "d1b5fbcc7938496dfbea8b38e3ca945e1e75bd6510f9d2f058143956f54c0b6e"
+            },
+            {
+              "name": "connector_configs",
+              "rows": 1,
+              "sha256": "2f5bcdb74c4b2d514f7f905fe016b73ce0680c66ecbe285e0b8947d253bccca3"
+            },
+            {
+              "name": "connector_state",
+              "rows": 0,
+              "sha256": "68d6c8fac1f15acbe02ed365dd11017fdbb3d98a9f11c669e907b63396ec0eb2"
+            },
+            {
+              "name": "customer_siemcore_config",
+              "rows": 0,
+              "sha256": "e175541e68c19d176cd38576e94d846064755bb538b2eaf7713f52ed26296a3d"
+            },
+            {
+              "name": "findings",
+              "rows": 0,
+              "sha256": "14bcab90c7332386cfcce237b51bd09f44d3f0366185a9b91002d69aa21868a6"
+            },
+            {
+              "name": "integration_tokens",
+              "rows": 0,
+              "sha256": "60bd21fa12d9305c81095731963d5ce9951c1bb89de6af113dfc59e98259f1f7"
+            },
+            {
+              "name": "llm_config",
+              "rows": 0,
+              "sha256": "7ac8d962b1c161d21dd0a697f2d90cadca2507f3dc7f928dbb15e0fc6fa04ef9"
+            },
+            {
+              "name": "log_categories",
+              "rows": 0,
+              "sha256": "ef5bedf185ef9c9eef81d5369dd420f004fc52a9657ca407e4da082762ef2950"
+            },
+            {
+              "name": "log_retention_policies",
+              "rows": 0,
+              "sha256": "61e5161fd731ebdc6991f6229a254ef245ee8b70fe12cb594930fdc6669452ba"
+            },
+            {
+              "name": "log_type_mappings",
+              "rows": 0,
+              "sha256": "baffb63b496fe13a897083299b0f43f7e6f3840444d6b502717a4161b0312f4f"
+            },
+            {
+              "name": "mssp_customer_settings",
+              "rows": 0,
+              "sha256": "8426fb55f576623d3c192040a10593b1d80de4cb25eedb897dc0f89bf3c94c05"
+            },
+            {
+              "name": "mssp_rule_definitions",
+              "rows": 0,
+              "sha256": "e1c387fe124270032300c8414efb747e010748b6119448c881cec6a3f3ca546c"
+            },
+            {
+              "name": "mysoc_config",
+              "rows": 0,
+              "sha256": "76cd7587863a49dde1d484274ad44e2b4a0ec08e9b7aea0a2d99671e9f695236"
+            },
+            {
+              "name": "mysoc_platform_config",
+              "rows": 0,
+              "sha256": "23348e003712b9edb094d312bfdf52f72665d12f97870461229c654578f0e8bb"
+            },
+            {
+              "name": "pod_replication_progress",
+              "rows": 1,
+              "sha256": "c5961939ecbaa5c10e95cbeefeab1b4d45d00f67f7fb0708d8ad8a871e9a2d9f"
+            },
+            {
+              "name": "pod_sender_mappings",
+              "rows": 0,
+              "sha256": "1a6f69ed8713c56b81b521f3d9e483a0fa451ab9e94495abdcad1182afbaa2a6"
+            },
+            {
+              "name": "rule_instance_storage",
+              "rows": 0,
+              "sha256": "65b5d247bb3581170d26138c67784bdb101bb653a8e65bbb2dee027594ef676d"
+            },
+            {
+              "name": "rule_templates",
+              "rows": 0,
+              "sha256": "f301017084fb8066df5b4e1598473f8b3017b845937dde4b1f8cda447d580999"
+            },
+            {
+              "name": "rules",
+              "rows": 0,
+              "sha256": "b2762791a8a02c454afb939c61dff3b7f75e3d30954cb946e7a096ccc93dd899"
+            },
+            {
+              "name": "system_global_catalogs",
+              "rows": 0,
+              "sha256": "3597be17be3514da9921c46dd294c9fd436a58f928c51e3b9e1608614c03d94d"
+            },
+            {
+              "name": "system_rule_definitions",
+              "rows": 0,
+              "sha256": "459ade6cb1d25f7bc3358011f9cb618cd4e6b34e74f5acd7be74474b2a6cfb2c"
+            },
+            {
+              "name": "system_rule_policies",
+              "rows": 0,
+              "sha256": "265d9e48aae039d6a8d093a1565018f026ad8a093dc8a3149e6b629355842b56"
+            },
+            {
+              "name": "tenant_ingest_tokens",
+              "rows": 0,
+              "sha256": "403690bee9f07d1cf26943badacaa8958ab2189e12893493347ee6ce2ea803da"
+            },
+            {
+              "name": "tenant_ip_mappings",
+              "rows": 0,
+              "sha256": "0e0404313b8388c4d382997b6dc1806d9f4cc53129493a80488a153aeebe581c"
+            },
+            {
+              "name": "tenant_settings",
+              "rows": 0,
+              "sha256": "2ce6a547c3ef28810ff2890b3d675aec4997821966d22cb415b809ec4437810c"
+            },
+            {
+              "name": "tenants",
+              "rows": 1,
+              "sha256": "6fe1125f36d3eb4231991c410385df6ccda0d2ae02c333fe0af29ac18f8a6daa"
+            },
+            {
+              "name": "triage_findings",
+              "rows": 0,
+              "sha256": "5631ada0dfe85efde331bb23e6411afaf9a0608000d4f1f790ffe93177d008d2"
+            },
+            {
+              "name": "unified_rule_templates",
+              "rows": 0,
+              "sha256": "0912113accaa83f1bf13a1664ebed92ac1cc5d95220707da4b182fce3e5fd7ef"
+            },
+            {
+              "name": "users",
+              "rows": 0,
+              "sha256": "4186640af8709b4c4509b7b85110a8880947a0e262a65f8aeb59aed49390cacd"
+            }
+          ],
+          "sha256": "bc586f766781f1e6ca7a77c6a15b9615d96964bace299174d700bafd8b21b909",
+          "observed_at": "2026-09-17T18:17:29.066327361Z"
+        },
+        "target": {
+          "policy_version": 2,
+          "tables": [
+            {
+              "name": "alert_rule_templates",
+              "rows": 0,
+              "sha256": "485407fbaa6112cef56f0753b7d7cad37d051008fd0c7aae0a7f9f98e7055000"
+            },
+            {
+              "name": "api_keys",
+              "rows": 0,
+              "sha256": "6557688a91abd67edbc6648568be546692931248c7856b46adb6e86ba55dd928"
+            },
+            {
+              "name": "archive_manifest",
+              "rows": 0,
+              "sha256": "b2a52f485220961077bc17dae54e1369a6636d9cbbc80d6dd7875fc763fe73c6"
+            },
+            {
+              "name": "compliance_profiles",
+              "rows": 0,
+              "sha256": "2f7780fb8be688ce46de9aab575dfeced7fe935be0ba909d8f1f1e632947214e"
+            },
+            {
+              "name": "compliance_requirements",
+              "rows": 0,
+              "sha256": "d1b5fbcc7938496dfbea8b38e3ca945e1e75bd6510f9d2f058143956f54c0b6e"
+            },
+            {
+              "name": "connector_configs",
+              "rows": 1,
+              "sha256": "2f5bcdb74c4b2d514f7f905fe016b73ce0680c66ecbe285e0b8947d253bccca3"
+            },
+            {
+              "name": "connector_state",
+              "rows": 0,
+              "sha256": "68d6c8fac1f15acbe02ed365dd11017fdbb3d98a9f11c669e907b63396ec0eb2"
+            },
+            {
+              "name": "customer_siemcore_config",
+              "rows": 0,
+              "sha256": "e175541e68c19d176cd38576e94d846064755bb538b2eaf7713f52ed26296a3d"
+            },
+            {
+              "name": "findings",
+              "rows": 0,
+              "sha256": "14bcab90c7332386cfcce237b51bd09f44d3f0366185a9b91002d69aa21868a6"
+            },
+            {
+              "name": "integration_tokens",
+              "rows": 0,
+              "sha256": "60bd21fa12d9305c81095731963d5ce9951c1bb89de6af113dfc59e98259f1f7"
+            },
+            {
+              "name": "llm_config",
+              "rows": 0,
+              "sha256": "7ac8d962b1c161d21dd0a697f2d90cadca2507f3dc7f928dbb15e0fc6fa04ef9"
+            },
+            {
+              "name": "log_categories",
+              "rows": 0,
+              "sha256": "ef5bedf185ef9c9eef81d5369dd420f004fc52a9657ca407e4da082762ef2950"
+            },
+            {
+              "name": "log_retention_policies",
+              "rows": 0,
+              "sha256": "61e5161fd731ebdc6991f6229a254ef245ee8b70fe12cb594930fdc6669452ba"
+            },
+            {
+              "name": "log_type_mappings",
+              "rows": 0,
+              "sha256": "baffb63b496fe13a897083299b0f43f7e6f3840444d6b502717a4161b0312f4f"
+            },
+            {
+              "name": "mssp_customer_settings",
+              "rows": 0,
+              "sha256": "8426fb55f576623d3c192040a10593b1d80de4cb25eedb897dc0f89bf3c94c05"
+            },
+            {
+              "name": "mssp_rule_definitions",
+              "rows": 0,
+              "sha256": "e1c387fe124270032300c8414efb747e010748b6119448c881cec6a3f3ca546c"
+            },
+            {
+              "name": "mysoc_config",
+              "rows": 0,
+              "sha256": "76cd7587863a49dde1d484274ad44e2b4a0ec08e9b7aea0a2d99671e9f695236"
+            },
+            {
+              "name": "mysoc_platform_config",
+              "rows": 0,
+              "sha256": "23348e003712b9edb094d312bfdf52f72665d12f97870461229c654578f0e8bb"
+            },
+            {
+              "name": "pod_replication_progress",
+              "rows": 1,
+              "sha256": "c5961939ecbaa5c10e95cbeefeab1b4d45d00f67f7fb0708d8ad8a871e9a2d9f"
+            },
+            {
+              "name": "pod_sender_mappings",
+              "rows": 0,
+              "sha256": "1a6f69ed8713c56b81b521f3d9e483a0fa451ab9e94495abdcad1182afbaa2a6"
+            },
+            {
+              "name": "rule_instance_storage",
+              "rows": 0,
+              "sha256": "65b5d247bb3581170d26138c67784bdb101bb653a8e65bbb2dee027594ef676d"
+            },
+            {
+              "name": "rule_templates",
+              "rows": 0,
+              "sha256": "f301017084fb8066df5b4e1598473f8b3017b845937dde4b1f8cda447d580999"
+            },
+            {
+              "name": "rules",
+              "rows": 0,
+              "sha256": "b2762791a8a02c454afb939c61dff3b7f75e3d30954cb946e7a096ccc93dd899"
+            },
+            {
+              "name": "system_global_catalogs",
+              "rows": 0,
+              "sha256": "3597be17be3514da9921c46dd294c9fd436a58f928c51e3b9e1608614c03d94d"
+            },
+            {
+              "name": "system_rule_definitions",
+              "rows": 0,
+              "sha256": "459ade6cb1d25f7bc3358011f9cb618cd4e6b34e74f5acd7be74474b2a6cfb2c"
+            },
+            {
+              "name": "system_rule_policies",
+              "rows": 0,
+              "sha256": "265d9e48aae039d6a8d093a1565018f026ad8a093dc8a3149e6b629355842b56"
+            },
+            {
+              "name": "tenant_ingest_tokens",
+              "rows": 0,
+              "sha256": "403690bee9f07d1cf26943badacaa8958ab2189e12893493347ee6ce2ea803da"
+            },
+            {
+              "name": "tenant_ip_mappings",
+              "rows": 0,
+              "sha256": "0e0404313b8388c4d382997b6dc1806d9f4cc53129493a80488a153aeebe581c"
+            },
+            {
+              "name": "tenant_settings",
+              "rows": 0,
+              "sha256": "2ce6a547c3ef28810ff2890b3d675aec4997821966d22cb415b809ec4437810c"
+            },
+            {
+              "name": "tenants",
+              "rows": 1,
+              "sha256": "6fe1125f36d3eb4231991c410385df6ccda0d2ae02c333fe0af29ac18f8a6daa"
+            },
+            {
+              "name": "triage_findings",
+              "rows": 0,
+              "sha256": "5631ada0dfe85efde331bb23e6411afaf9a0608000d4f1f790ffe93177d008d2"
+            },
+            {
+              "name": "unified_rule_templates",
+              "rows": 0,
+              "sha256": "0912113accaa83f1bf13a1664ebed92ac1cc5d95220707da4b182fce3e5fd7ef"
+            },
+            {
+              "name": "users",
+              "rows": 0,
+              "sha256": "4186640af8709b4c4509b7b85110a8880947a0e262a65f8aeb59aed49390cacd"
+            }
+          ],
+          "sha256": "bc586f766781f1e6ca7a77c6a15b9615d96964bace299174d700bafd8b21b909",
+          "observed_at": "2026-09-17T18:17:29.054809471Z"
+        },
+        "applied_age_ns": 5961784000,
+        "observed_at": "2026-09-17T18:17:29.06826737Z"
+      },
+      "activation_ready": false
+    }
+  }
+]
