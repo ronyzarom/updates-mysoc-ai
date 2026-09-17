@@ -38,6 +38,9 @@ Options:
   --relay-key-file FILE    matching unencrypted private key (PEM); both required
   --greenfield-input FILE  root-owned JSON with application inputs and signed
                            first-release receipt; enables and starts provisioning
+  --server-type TYPE     normal, pod-active, pod-stby, or pod-observer
+  --pod-id ID            immutable pod identity (for explicit pod type)
+  --node-id ID           1, 2, or witness; never inferred from active status
   --current-version V    required with --update
   --ca-file PATH         the relay's cert.pem to pin; omit when the relay
                          serves a publicly trusted certificate
@@ -49,10 +52,14 @@ EOF
 
 MODE="" LICENSE_KEY="" PARENT_URL="" INSTANCE_ID="" PARENT_ID=""
 CUSTOMER_ID="" CUSTOMER_NAME="" SIGNING_KEY="" CURRENT_VERSION="" CA_FILE="" GREENFIELD_INPUT=""
+SERVER_TYPE="" POD_ID="" NODE_ID=""
 SELF_UPDATE_CHANNEL=stable
 RELAY_CERT_FILE="" RELAY_KEY_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --server-type) SERVER_TYPE="${2:?--server-type needs a value}"; shift ;;
+        --pod-id) POD_ID="${2:?--pod-id needs a value}"; shift ;;
+        --node-id) NODE_ID="${2:?--node-id needs a value}"; shift ;;
         --greenfield-input) GREENFIELD_INPUT="${2:?--greenfield-input needs a value}"; shift ;;
         --self-update-channel) SELF_UPDATE_CHANNEL="${2:?--self-update-channel needs a value}"; shift ;;
         --relay-cert-file) RELAY_CERT_FILE="${2:?--relay-cert-file needs a value}"; shift ;;
@@ -94,7 +101,7 @@ if [[ -z "$MODE" && "$SELF_UPDATE_CHANNEL" != stable ]]; then
     echo '--self-update-channel requires --clean or --update' >&2
     exit 1
 fi
-if [[ -z "$MODE" && ( -n "$LICENSE_KEY$PARENT_URL$INSTANCE_ID$PARENT_ID$CUSTOMER_ID$CUSTOMER_NAME$SIGNING_KEY$CURRENT_VERSION$CA_FILE" ) ]]; then
+if [[ -z "$MODE" && ( -n "$LICENSE_KEY$PARENT_URL$INSTANCE_ID$PARENT_ID$CUSTOMER_ID$CUSTOMER_NAME$SIGNING_KEY$CURRENT_VERSION$CA_FILE$SERVER_TYPE$POD_ID$NODE_ID" ) ]]; then
     echo "config flags require a mode: --clean or --update" >&2
     exit 1
 fi
@@ -134,6 +141,18 @@ prompt() {
     printf -v "$var" '%s' "$value"
 }
 
+render_identity() {
+    local identity_args=(--config "$1" --existing-config "/etc/$NAME/config.yaml" --binary "./$BIN"
+        --server-type "$SERVER_TYPE" --pod-id "$POD_ID" --node-id "$NODE_ID")
+    if [[ -n "$GREENFIELD_INPUT" ]]; then
+        identity_args+=(--greenfield-input "$GREENFIELD_INPUT")
+    fi
+    if [[ -n "$SERVER_TYPE$POD_ID$NODE_ID$GREENFIELD_INPUT" ]] || \
+       { [[ -f "/etc/$NAME/config.yaml" ]] && grep -q '^    server_type:' "/etc/$NAME/config.yaml"; }; then
+        python3 ./installation-type.py "${identity_args[@]}"
+    fi
+}
+
 # render_config — fill the kit template from flags and install it.
 render_config() {
     prompt LICENSE_KEY "Enrollment credential (agreed with your operator)"
@@ -170,6 +189,7 @@ render_config() {
         -e "s|public_key: \"PASTE-HEX-PUBLIC-KEY\"|public_key: \"$SIGNING_KEY\"|" \
         -e "s|current_version: \"0.0.0\"|current_version: \"$CURRENT_VERSION\"|" \
         config.yaml > "$tmp"
+    render_identity "$tmp"
     printf '\nself_update:\n  channel: %s\n' "$SELF_UPDATE_CHANNEL" >> "$tmp"
     if [[ -n "$RELAY_CERT_FILE" ]]; then
         install -m 0640 -o root -g "$NAME" "$RELAY_CERT_FILE" /etc/$NAME/relay-fullchain.pem
@@ -194,6 +214,16 @@ render_config() {
     fi
     echo "    config rendered: instance=$INSTANCE_ID parent=$PARENT_URL version=$CURRENT_VERSION mode=$MODE"
 }
+
+# Validate type/binary compatibility before modifying the installed host.
+if [[ -n "$MODE" ]]; then
+    identity_preflight=$(mktemp)
+    trap 'rm -f "$identity_preflight"' EXIT
+    cp config.yaml "$identity_preflight"
+    render_identity "$identity_preflight"
+    rm -f "$identity_preflight"
+    trap - EXIT
+fi
 
 # A repeat bootstrap must not reset the updater's installed version to 0.0.0.
 if [[ -n "$GREENFIELD_INPUT" && -f /etc/siemcore/greenfield-release.json ]]; then

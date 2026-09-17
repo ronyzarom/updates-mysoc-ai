@@ -160,8 +160,9 @@ No missing grant is synthesized, and discovery never records product success.
 A terminal paused receipt plus a separately supplied recovery-v2 authorization and
 retained artifact permits the independently verified v2 path, including a recovered
 lost-begin intent. Ordinary v1 fallback remains blocked by the drain journal.
-Drain-evidence archival into the next-operation transition remains a separate
-integration gate; do not enable this source on a live host yet.
+Drain evidence is now archived byte-for-byte with its ledger during the separately
+authorized next-operation transition; crash retries verify the archive before
+removing the live sidecar. Joint live qualification remains pending.
 
 Protected configuration example (illustrative only; no configuration is installed):
 

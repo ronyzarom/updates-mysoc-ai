@@ -1,8 +1,10 @@
 # SiemCore installation by server role
 
 The same SiemCore updater kit handles standalone, pod A, pod B, and witness.
-There is no `--role` flag: the product role is supplied in the root-owned
-JSON passed to `--greenfield-input`. Bootstrap is an artifact type, not a pod role.
+Installation identity is recorded through `--server-type` (`normal`, `pod-active`,
+`pod-stby`, `pod-observer`) with `--pod-id` and `--node-id` for pod hosts. Clean
+installation may derive these fields from the protected `--greenfield-input` JSON.
+Bootstrap is an artifact type, not a pod role.
 
 ## Role selection
 
@@ -69,3 +71,29 @@ Repeated greenfield bootstrap does not rewrite an existing channel setting.
 Verify installed updater version, service restart, successful cascade heartbeat,
 application health, and appropriate pod node roles. Publication alone is not proof
 of installation. Product DR/rollback qualification remains a separate acceptance gate.
+
+## Persisted server type (source implementation; not deployed)
+
+For an existing standalone host add `--server-type normal` to the `--update`
+command. Old invocations without the new flags retain their existing behavior.
+For a data node supply, for example, `--server-type pod-stby --pod-id example-pod
+--node-id 2`. An observer uses `--server-type pod-observer --pod-id example-pod
+--node-id witness`. These fields do not grant processing, quorum, or IP ownership.
+A/B map to node IDs 1/2; neither implies current primary. Without an explicit
+active/standby label, greenfield data nodes record standby intent.
+
+The installer preserves an existing recorded identity and rejects conflicting
+inputs. For pod identity it probes the bundled binary's `installation-types`
+command before rendering: older binaries cannot silently ignore the new role
+fields. The probe is metadata support, explicitly not lifecycle qualification.
+The private .25 candidate does not gain these features retroactively.
+
+All types retain relay delivery. Explicit pod types cannot use normal application
+execution as a fallback. Recording a type does not install a privileged adapter,
+enable capability advertisement, or make a blocked pod bootstrap ready. Until
+SiemCore supplies and qualifies the role-specific lifecycle, data-node bootstrap
+without that adapter and observer-owned application updates fail closed.
+
+Remaining external gates: observer-specific signed lifecycle and shared relay
+endpoint failover qualification. The existing witness etcd/sentinel update script
+is not treated as an allocation-observer update implementation.

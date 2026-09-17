@@ -51,6 +51,12 @@ func newRootCommand(opts *options) *cobra.Command {
 	root.PersistentFlags().BoolVarP(&opts.verbose, "verbose", "v", false, "Enable debug logging")
 
 	root.AddCommand(newVersionCommand(opts))
+	root.AddCommand(&cobra.Command{Use: "installation-types", Short: "Print supported installation identity labels (not lifecycle readiness)", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), `{"schema":1,"server_types":["normal","pod-active","pod-stby","pod-observer"],"lifecycle_ready":false}`)
+			return err
+		},
+	})
 	root.AddCommand(newEnrollCommand(opts))
 	root.AddCommand(newHeartbeatCommand(opts))
 	root.AddCommand(newCheckCommand(opts))

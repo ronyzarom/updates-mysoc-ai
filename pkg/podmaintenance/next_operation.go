@@ -51,6 +51,7 @@ func (a CommandAdapter) AuthorizeNext(ctx context.Context, q NextOperationReques
 }
 
 type TransitionReceipt struct {
+	DrainJournalSHA256    string                `json:"drain_journal_sha256,omitempty"`
 	Protocol              string                `json:"protocol"`
 	Authorization         RecoveryAuthorization `json:"authorization"`
 	Claims                NextOperationClaims   `json:"claims"`
@@ -186,6 +187,14 @@ func (c *TransitionCoordinator) Advance(ctx context.Context, a RecoveryAuthoriza
 	if claims.PreviousOutcome == PredecessorRestored && !hasRecovery {
 		return errors.New("rollback acceptance evidence missing")
 	}
+	drain, drainErr := ReadDrainJournal(c.Directory)
+	hasDrain := drainErr == nil
+	if drainErr != nil && !os.IsNotExist(drainErr) {
+		return drainErr
+	}
+	if hasDrain && (drain.Protocol != DrainProtocol || drain.Phase != "paused" || drain.Binding != original.Binding || drain.Generation != original.Generation || drain.Evidence == nil || !paused(*drain.Evidence)) {
+		return errors.New("drain evidence not terminal")
+	}
 	n := claims.NextBinding
 	if e = verifyRetained(RetainedArtifact{Product: n.Product, Version: n.TargetVersion, SHA256: n.ArtifactSHA256, Signature: n.ArtifactSignature, Path: n.ArtifactPath}, c.ReleaseKey); e != nil {
 		return e
@@ -240,6 +249,13 @@ func (c *TransitionCoordinator) Advance(ctx context.Context, a RecoveryAuthoriza
 			return e
 		}
 	}
+	drainHash := ""
+	if hasDrain {
+		drainHash, e = saveEvidence("drain-v1.json")
+		if e != nil {
+			return e
+		}
+	}
 	// Preserve and verify exact archived journal bytes.
 	var oldJournal Journal
 	if e = readPrivate(filepath.Join(archive, "operation.json"), &oldJournal); e != nil {
@@ -248,7 +264,7 @@ func (c *TransitionCoordinator) Advance(ctx context.Context, a RecoveryAuthoriza
 	if !reflect.DeepEqual(oldJournal, original) {
 		return errors.New("archival verification failed")
 	}
-	receipt = TransitionReceipt{Protocol: NextOperationProtocol, Authorization: a, Claims: claims, Approval: approval, OldJournalSHA256: oldHash, RecoveryJournalSHA256: recoveryHash, Phase: "prepared"}
+	receipt = TransitionReceipt{Protocol: NextOperationProtocol, Authorization: a, Claims: claims, Approval: approval, OldJournalSHA256: oldHash, RecoveryJournalSHA256: recoveryHash, DrainJournalSHA256: drainHash, Phase: "prepared"}
 	if e = writeDurableJSON(filepath.Join(archive, "transition.json"), receipt); e != nil {
 		return e
 	}
@@ -288,6 +304,12 @@ func (c *TransitionCoordinator) finalize(path string, r *TransitionReceipt) erro
 			return errors.New("archived recovery evidence missing or changed")
 		}
 	}
+	if r.DrainJournalSHA256 != "" {
+		raw, e = os.ReadFile(filepath.Join(archive, "drain-v1.json"))
+		if e != nil || hashBytes(raw) != r.DrainJournalSHA256 {
+			return errors.New("archived drain evidence missing or changed")
+		}
+	}
 	current, e := ReadJournal(c.Directory)
 	if e != nil {
 		return e
@@ -319,6 +341,20 @@ func (c *TransitionCoordinator) finalize(path string, r *TransitionReceipt) erro
 		}
 	} else if !os.IsNotExist(e) {
 		return e
+	}
+	if drain, err := ReadDrainJournal(c.Directory); err == nil {
+		var archived DrainJournal
+		if r.DrainJournalSHA256 == "" {
+			return errors.New("unarchived drain evidence")
+		}
+		if err = readPrivate(filepath.Join(archive, "drain-v1.json"), &archived); err != nil || !reflect.DeepEqual(drain, archived) {
+			return errors.New("live drain evidence differs")
+		}
+		if err = os.Remove(filepath.Join(c.Directory, "drain-v1.json")); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
 	}
 	if c.AfterDurableCheckpoint != nil {
 		c.AfterDurableCheckpoint("recovery-archived")

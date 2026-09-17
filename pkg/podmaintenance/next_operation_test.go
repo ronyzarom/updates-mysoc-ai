@@ -147,3 +147,32 @@ func TestNextOperationCanonicalFixture(t *testing.T) {
 		t.Fatal("fixture drift")
 	}
 }
+
+func TestNextOperationPreservesDrainLedgerAcrossCrash(t *testing.T) {
+	c, a, claims, _ := nextFixture(t)
+	proof := DrainResponse{Protocol: DrainProtocol, Binding: claims.PreviousBinding, Generation: 9, Phase: "paused", ProcessingStopped: true, IngressStopped: true, WatchdogRetired: true, WatchdogExited: true, LeaseReleased: true}
+	j := DrainJournal{Protocol: DrainProtocol, Binding: claims.PreviousBinding, Generation: 9, Phase: "paused", Evidence: &proof, Grants: map[string]DrainGrantRecord{"old": {PayloadSHA256: "retained", Signature: "signed", Superseded: true}}}
+	path := filepath.Join(c.Directory, "drain-v1.json")
+	if e := writeDurableJSON(path, j); e != nil {
+		t.Fatal(e)
+	}
+	before, _ := os.ReadFile(path)
+	c.afterPrepare = func() error { return errors.New("interruption") }
+	if c.Advance(context.Background(), a) == nil {
+		t.Fatal("not interrupted")
+	}
+	c.afterPrepare = nil
+	if e := c.Advance(context.Background(), a); e != nil {
+		t.Fatal(e)
+	}
+	archived, _ := os.ReadFile(filepath.Join(c.Directory, "archive", hashBytes([]byte(claims.PreviousBinding.OperationID)), "drain-v1.json"))
+	if string(before) != string(archived) {
+		t.Fatal("drain ledger changed")
+	}
+	if _, e := os.Stat(path); !os.IsNotExist(e) {
+		t.Fatal("old drain blocks next operation")
+	}
+	if e := c.Advance(context.Background(), a); e != nil {
+		t.Fatal("retry", e)
+	}
+}
