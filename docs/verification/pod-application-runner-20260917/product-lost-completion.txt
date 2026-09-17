@@ -1,0 +1,4 @@
+PASS killed executor after actual installer commit: caller incomplete, product identity retained, all processors paused
+PASS lost-completion recovery 16 application
+PASS lost-completion recovery 17 management
+PASS same-operation recovery after committed installer lost reply; no premature processing

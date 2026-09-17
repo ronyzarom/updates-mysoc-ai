@@ -44,3 +44,10 @@ The fault hook exists only in the qualification runner, not in the signed produc
 `lost-completion.json` records expected exit codes1/0/0. This qualifies recovery
 from a committed installation with lost completion; it does not cover every
 possible mid-installation or host-power-loss point.
+
+Final product assertions independently confirm the unchanged product journal,
+all four processors paused at generation zero, no active assignment and retained
+durable maintenance barrier after the injected failure and retry. See
+`product-lost-completion.txt`. Full local source suite:108 tests discovered,
+106 passed,2 platform/root-only skips; actual fixture execution described above
+provides separate Linux evidence. The disposable fixture remains retained.
