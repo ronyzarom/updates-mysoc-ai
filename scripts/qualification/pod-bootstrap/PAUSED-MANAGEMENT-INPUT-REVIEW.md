@@ -86,3 +86,12 @@ prerequisites. Updates independently ran the actual product shell regression sui
 5tests passed in9.347s, including Normal/legacy cases with no added host probes.
 This resolves the identified source-level gate regression; it is not a new live
 Normal-install or release qualification claim.
+
+Host observation transport clarification: container `/run/bootstrap` file references
+must be materialized into a separate protected host data-binding config. Preserve
+all registry/node/generation/original-input/trust/endpoint fields; rebase only
+reviewed file references to byte-identical protected original materials. Freeze
+and verify both resulting host config files before/after execution. Do not alter
+the original input or container-stage config, and do not mount a Docker socket
+inside a customer app container. Native integration needs the materialization
+mapping and independent rendered-environment expectations in its fixture handoff.
