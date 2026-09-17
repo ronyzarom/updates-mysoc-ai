@@ -60,3 +60,15 @@ class ModuleTests(unittest.TestCase):
                 self.assertEqual(json.loads((root/'journal').read_text())['status'],'data-services-ready')
                 changed=dict(binding,generation=8)
                 with self.assertRaises(ValueError):r.invoke(str(root/'runtime'),config,tls,changed,root/'journal',verifier,authorize,timeout=5)
+
+    def test_second_reviewed_module_keeps_runtime_compatible(self):
+        manifest=self.manifest()
+        app=dict(manifest['bootstrap_host_modules'][0],name='pod-application-install-v1',path='updater/pod_application_install.py')
+        manifest['bootstrap_host_modules'].append(app)
+        self.assertIsNotNone(r.verify_module(manifest,RAW,(3,12)))
+        self.assertIsNotNone(r.verify_module(manifest,RAW,(3,12),'pod-application-install-v1'))
+        for field,value in [('path',r.MODULE_PATH),('name','unknown-module'),('sha256','invalid')]:
+            changed=copy.deepcopy(manifest);changed['bootstrap_host_modules'][1][field]=value
+            with self.subTest(field=field),self.assertRaises(ValueError):r.verify_module(changed,RAW,(3,12))
+        with self.assertRaises(ValueError):r.verify_module(dict(product='siemcore',bootstrap_host_modules=[app]),RAW,(3,12),'pod-application-install-v1')
+        with self.assertRaises(ValueError):r.verify_module(self.manifest(),RAW,(3,12),'pod-application-install-v1')

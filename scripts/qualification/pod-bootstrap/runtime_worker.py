@@ -3,6 +3,7 @@ import ast
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import selectors
 import signal
@@ -13,22 +14,34 @@ import client
 import protocol
 
 MODULE_PATH='updater/pod_data_runtime.py'
+MODULES={'pod-data-runtime-v1':MODULE_PATH,'pod-application-install-v1':'updater/pod_application_install.py'}
 IMPORTS={'ipaddress','re','hashlib','json','os','pathlib','stat','tempfile','fcntl','subprocess'}
 
 
-def verify_module(manifest,raw,python_version):
+def verify_module(manifest,raw,python_version,module_name='pod-data-runtime-v1'):
     if not (3,10)<=tuple(python_version[:2])<(3,13):raise ValueError('host module requires Python3.10-3.12')
     if manifest.get('product')!='siemcore':raise ValueError('wrong module product')
     entries=manifest.get('bootstrap_host_modules')
-    if not isinstance(entries,list) or len(entries)!=1:raise ValueError('exact reviewed module collection required')
-    entry=entries[0]
-    if not isinstance(entry,dict) or set(entry)!={'name','path','sha256','size','python','dependencies'}:
-        raise ValueError('exact module descriptor required')
-    if (entry['name']!='pod-data-runtime-v1' or entry['path']!=MODULE_PATH or entry['python']!='>=3.10,<3.13' or
-            entry['dependencies']!=[] or type(entry['size']) is not int or not 0<entry['size']<=1024*1024 or
-            entry['size']!=len(raw) or hashlib.sha256(raw).hexdigest()!=entry['sha256']):
+    if module_name not in MODULES or not isinstance(entries,list) or not 1<=len(entries)<=2:
+        raise ValueError('reviewed module collection required')
+    selected={}
+    for entry in entries:
+        if not isinstance(entry,dict) or set(entry)!={'name','path','sha256','size','python','dependencies'}:
+            raise ValueError('exact module descriptor required')
+        name=entry['name']
+        if not isinstance(name,str) or name not in MODULES or name in selected:
+            raise ValueError('unknown or duplicate module identity')
+        if (entry['path']!=MODULES[name] or entry['python']!='>=3.10,<3.13' or entry['dependencies']!=[] or
+                type(entry['size']) is not int or not 0<entry['size']<=1024*1024 or
+                not isinstance(entry['sha256'],str) or not re.fullmatch('[0-9a-f]{64}',entry['sha256'])):
+            raise ValueError('unreviewed module metadata')
+        selected[name]=entry
+    if 'pod-data-runtime-v1' not in selected or module_name not in selected:
+        raise ValueError('required module missing from signed collection')
+    entry=selected[module_name]
+    if entry['size']!=len(raw) or hashlib.sha256(raw).hexdigest()!=entry['sha256']:
         raise ValueError('host module provenance mismatch')
-    tree=ast.parse(raw,filename=MODULE_PATH)
+    tree=ast.parse(raw,filename=entry['path'])
     for item in ast.walk(tree):
         if isinstance(item,ast.Import):
             if any(alias.name.split('.')[0] not in IMPORTS for alias in item.names):raise ValueError('undeclared import')
@@ -36,7 +49,7 @@ def verify_module(manifest,raw,python_version):
             if item.level or not item.module or item.module.split('.')[0] not in IMPORTS:raise ValueError('unbound helper')
         elif isinstance(item,ast.Call) and isinstance(item.func,ast.Name) and item.func.id in ('__import__','eval','exec'):
             raise ValueError('undeclared dynamic loading')
-    return compile(tree,MODULE_PATH,'exec')
+    return compile(tree,entry['path'],'exec')
 
 
 def bounded_child(action,timeout):

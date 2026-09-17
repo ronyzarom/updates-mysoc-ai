@@ -358,3 +358,12 @@ binary, including internal five-second observation deadlines and real paused
 app/archiver observations on both nodes. Management receipts1627bytes each.
 Evidence: `docs/verification/pod-management-runner-20260917`. This qualifies the
 observation transport, not the full app installer/controller or activation.
+
+Signed module collection review: `runtime_worker.verify_module` now accepts the
+existing runtime-only collection or the reviewed two-entry collection adding
+`pod-application-install-v1` at `updater/pod_application_install.py`. Unknown,
+duplicate, missing runtime, wrong path/digest/size/interpreter/dependencies entries
+are rejected. The selected module's bytes are verified and compiled explicitly;
+adding metadata does not execute application installation. The runtime-only path
+remains compatible.102 localtests found101pass1Linux-onlyskip. Application module
+execution awaits its exact API/config/partial-receipt and prerequisite contract.
