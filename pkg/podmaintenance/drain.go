@@ -14,6 +14,18 @@ import (
 )
 
 const DrainProtocol = "pod-maintenance-drain-recovery-v1"
+const AckDrainProtocol = "pod-maintenance-ack-drain-recovery-v1"
+const AckDrainSignatureDomain = "mysoc-pod-ack-drain-recovery-v1\n"
+
+type AckBarrierProof struct {
+	PreparedRevision   uint64 `json:"prepared_revision"`
+	AssignmentRevision uint64 `json:"assignment_revision"`
+}
+
+func validAckProof(p *AckBarrierProof, generation uint64) bool {
+	return p != nil && generation > 0 && p.PreparedRevision == generation && p.AssignmentRevision > 0
+}
+
 const DrainSignatureDomain = "mysoc-pod-drain-recovery-v1\n"
 
 type CapturedOwner struct {
@@ -27,16 +39,18 @@ func (o CapturedOwner) valid() bool {
 }
 
 type DrainClaims struct {
-	Protocol        string        `json:"protocol"`
-	AuthorizationID string        `json:"authorization_id"`
-	Binding         Binding       `json:"binding"`
-	Generation      uint64        `json:"generation"`
-	CapturedOwner   CapturedOwner `json:"captured_owner"`
-	Action          string        `json:"action"`
-	IssuedAt        time.Time     `json:"issued_at"`
-	ExpiresAt       time.Time     `json:"expires_at"`
+	AckProof        *AckBarrierProof `json:"ack_proof,omitempty"`
+	Protocol        string           `json:"protocol"`
+	AuthorizationID string           `json:"authorization_id"`
+	Binding         Binding          `json:"binding"`
+	Generation      uint64           `json:"generation"`
+	CapturedOwner   CapturedOwner    `json:"captured_owner"`
+	Action          string           `json:"action"`
+	IssuedAt        time.Time        `json:"issued_at"`
+	ExpiresAt       time.Time        `json:"expires_at"`
 }
 type DrainRequest struct {
+	AckProof      *AckBarrierProof       `json:"ack_proof,omitempty"`
 	Protocol      string                 `json:"protocol"`
 	Binding       Binding                `json:"binding"`
 	Generation    uint64                 `json:"generation"`
@@ -44,25 +58,26 @@ type DrainRequest struct {
 	Authorization *RecoveryAuthorization `json:"authorization,omitempty"`
 }
 type DrainResponse struct {
-	Protocol                string        `json:"protocol"`
-	Binding                 Binding       `json:"binding"`
-	Generation              uint64        `json:"generation"`
-	CapturedOwner           CapturedOwner `json:"captured_owner"`
-	AuthorizationID         string        `json:"authorization_id,omitempty"`
-	ObservedAt              time.Time     `json:"observed_at"`
-	ValidUntil              time.Time     `json:"valid_until"`
-	Phase                   string        `json:"phase"`
-	OriginalDeadlineExpired *bool         `json:"original_deadline_expired,omitempty"`
-	Authorized              *bool         `json:"authorized,omitempty"`
-	PermissionExpires       *time.Time    `json:"permission_expires,omitempty"`
-	ProcessingStopped       bool          `json:"processing_stopped,omitempty"`
-	IngressStopped          bool          `json:"ingress_stopped,omitempty"`
-	Quiescent               bool          `json:"quiescent,omitempty"`
-	WatchdogRetired         bool          `json:"watchdog_retired,omitempty"`
-	WatchdogExited          bool          `json:"watchdog_exited,omitempty"`
-	LeaseReleased           bool          `json:"lease_released,omitempty"`
-	NodeEvidenceObservedAt  *time.Time    `json:"node_evidence_observed_at,omitempty"`
-	Reason                  string        `json:"reason,omitempty"`
+	AckProof                *AckBarrierProof `json:"ack_proof,omitempty"`
+	Protocol                string           `json:"protocol"`
+	Binding                 Binding          `json:"binding"`
+	Generation              uint64           `json:"generation"`
+	CapturedOwner           CapturedOwner    `json:"captured_owner"`
+	AuthorizationID         string           `json:"authorization_id,omitempty"`
+	ObservedAt              time.Time        `json:"observed_at"`
+	ValidUntil              time.Time        `json:"valid_until"`
+	Phase                   string           `json:"phase"`
+	OriginalDeadlineExpired *bool            `json:"original_deadline_expired,omitempty"`
+	Authorized              *bool            `json:"authorized,omitempty"`
+	PermissionExpires       *time.Time       `json:"permission_expires,omitempty"`
+	ProcessingStopped       bool             `json:"processing_stopped,omitempty"`
+	IngressStopped          bool             `json:"ingress_stopped,omitempty"`
+	Quiescent               bool             `json:"quiescent,omitempty"`
+	WatchdogRetired         bool             `json:"watchdog_retired,omitempty"`
+	WatchdogExited          bool             `json:"watchdog_exited,omitempty"`
+	LeaseReleased           bool             `json:"lease_released,omitempty"`
+	NodeEvidenceObservedAt  *time.Time       `json:"node_evidence_observed_at,omitempty"`
+	Reason                  string           `json:"reason,omitempty"`
 }
 
 // DrainAdapter is a trusted protected transport to the pinned, authenticated
@@ -89,6 +104,7 @@ type DrainGrantRecord struct {
 	Superseded    bool   `json:"superseded"`
 }
 type DrainJournal struct {
+	AckProof              *AckBarrierProof            `json:"ack_proof,omitempty"`
 	Protocol              string                      `json:"protocol"`
 	Binding               Binding                     `json:"binding"`
 	Generation            uint64                      `json:"generation"`
@@ -110,15 +126,32 @@ func DecodeDrainAuthorization(a RecoveryAuthorization, key ed25519.PublicKey) (D
 	if e != nil {
 		return c, "", e
 	}
+	if len(p) > 32768 {
+		return c, "", errors.New("drain authorization too large")
+	}
+	if e = decode(p, &c); e != nil {
+		return c, "", e
+	}
+	domain := DrainSignatureDomain
+	if c.Protocol == AckDrainProtocol {
+		domain = AckDrainSignatureDomain
+	}
 	sig, e := base64.StdEncoding.DecodeString(a.Signature)
-	if e != nil || len(key) != ed25519.PublicKeySize || !ed25519.Verify(key, append([]byte(DrainSignatureDomain), p...), sig) {
+	if e != nil || len(key) != ed25519.PublicKeySize || !ed25519.Verify(key, append([]byte(domain), p...), sig) {
 		return c, "", errors.New("invalid drain signature")
 	}
 	if e = decode(p, &c); e != nil {
 		return c, "", e
 	}
-	if c.Protocol != DrainProtocol || c.AuthorizationID == "" || c.Binding.Validate() != nil || c.Generation == 0 || !c.CapturedOwner.valid() || c.Action != "resume-drain" || c.IssuedAt.IsZero() || !c.ExpiresAt.After(c.IssuedAt) || c.ExpiresAt.Sub(c.IssuedAt) > 15*time.Minute {
+	if (c.Protocol != DrainProtocol && c.Protocol != AckDrainProtocol) || c.AuthorizationID == "" || c.Binding.Validate() != nil || c.Generation == 0 || !c.CapturedOwner.valid() || c.Action != "resume-drain" || c.IssuedAt.IsZero() || !c.ExpiresAt.After(c.IssuedAt) || c.ExpiresAt.Sub(c.IssuedAt) > 15*time.Minute {
 		return c, "", errors.New("invalid drain authorization")
+	}
+	if c.Protocol == AckDrainProtocol {
+		if c.Binding.Protocol != AckProtocol || !validAckProof(c.AckProof, c.Generation) {
+			return c, "", errors.New("invalid ACK drain scope")
+		}
+	} else if c.Binding.Protocol != Protocol || c.AckProof != nil {
+		return c, "", errors.New("legacy drain scope mismatch")
 	}
 	h := sha256.Sum256(p)
 	return c, hex.EncodeToString(h[:]), nil
@@ -127,6 +160,7 @@ func DecodeDrainAuthorization(a RecoveryAuthorization, key ed25519.PublicKey) (D
 // DrainCoordinator never creates a maintenance operation, clears its barrier,
 // executes an artifact, or rewrites the original deadline. It is opt-in only.
 type DrainCoordinator struct {
+	Protocol               string
 	Directory              string
 	Adapter                DrainAdapter
 	ObserverKey            ed25519.PublicKey
@@ -157,7 +191,7 @@ func (c *DrainCoordinator) Run(ctx context.Context, a RecoveryAuthorization) (Dr
 }
 func (c *DrainCoordinator) validResponse(r DrainResponse, j DrainJournal) bool {
 	now := c.now()
-	return r.Protocol == DrainProtocol && reflect.DeepEqual(r.Binding, j.Binding) && r.Generation > 0 && (j.Generation == 0 || r.Generation == j.Generation) && r.CapturedOwner.valid() && (j.Generation == 0 || r.CapturedOwner == j.CapturedOwner) && !r.ObservedAt.After(now) && now.Before(r.ValidUntil) && r.ValidUntil.After(r.ObservedAt) && r.ValidUntil.Sub(r.ObservedAt) <= 60*time.Second && (r.Phase == "draining" || r.Phase == "paused" || r.Phase == "blocked")
+	return r.Protocol == j.Protocol && (j.Protocol != AckDrainProtocol || (validAckProof(r.AckProof, r.Generation) && (j.AckProof == nil || reflect.DeepEqual(r.AckProof, j.AckProof)))) && reflect.DeepEqual(r.Binding, j.Binding) && r.Generation > 0 && (j.Generation == 0 || r.Generation == j.Generation) && r.CapturedOwner.valid() && (j.Generation == 0 || r.CapturedOwner == j.CapturedOwner) && !r.ObservedAt.After(now) && now.Before(r.ValidUntil) && r.ValidUntil.After(r.ObservedAt) && r.ValidUntil.Sub(r.ObservedAt) <= 60*time.Second && (r.Phase == "draining" || r.Phase == "paused" || r.Phase == "blocked" || (j.Protocol == AckDrainProtocol && r.Phase == "prepared"))
 }
 func paused(r DrainResponse) bool {
 	return r.Phase == "paused" && r.ProcessingStopped && r.IngressStopped && r.WatchdogRetired && r.WatchdogExited && r.LeaseReleased
@@ -185,8 +219,19 @@ func (c *DrainCoordinator) run(ctx context.Context, a *RecoveryAuthorization) (j
 	if original.Binding.Validate() != nil {
 		return j, errors.New("invalid original binding")
 	}
+	protocol := c.Protocol
+	if protocol == "" {
+		protocol = DrainProtocol
+	}
+	if protocol == AckDrainProtocol {
+		if original.Binding.Protocol != AckProtocol || original.Generation == 0 || (original.Phase != "barrier-acknowledged" && original.Phase != "draining" && original.Phase != "acknowledged") {
+			return j, errors.New("ACK drain requires durable original acknowledgment")
+		}
+	} else if protocol != DrainProtocol || original.Binding.Protocol != Protocol {
+		return j, errors.New("explicit matching drain protocol required")
+	}
 	// Never reopen an operation after artifact execution or completion.
-	if original.Phase != "intent" && original.Phase != "acknowledged" {
+	if protocol == DrainProtocol && original.Phase != "intent" && original.Phase != "acknowledged" {
 		return j, errors.New("original phase cannot enter drain recovery")
 	}
 	if _, e = os.Lstat(filepath.Join(c.Directory, "recovery-v2.json")); !os.IsNotExist(e) {
@@ -194,17 +239,20 @@ func (c *DrainCoordinator) run(ctx context.Context, a *RecoveryAuthorization) (j
 	}
 	j, e = ReadDrainJournal(c.Directory)
 	if os.IsNotExist(e) {
-		j = DrainJournal{Protocol: DrainProtocol, Binding: original.Binding, Phase: "discovering", Grants: map[string]DrainGrantRecord{}}
+		j = DrainJournal{Protocol: protocol, Binding: original.Binding, Phase: "discovering", Grants: map[string]DrainGrantRecord{}}
 		if e = c.save(j); e != nil {
 			return j, e
 		}
 	} else if e != nil {
 		return j, e
 	}
-	if j.Protocol != DrainProtocol || !reflect.DeepEqual(j.Binding, original.Binding) || (original.Generation != 0 && j.Generation != 0 && original.Generation != j.Generation) || (j.Generation != 0 && !j.CapturedOwner.valid()) || j.Grants == nil {
+	if j.Protocol != protocol || !reflect.DeepEqual(j.Binding, original.Binding) || (original.Generation != 0 && j.Generation != 0 && original.Generation != j.Generation) || (j.Generation != 0 && !j.CapturedOwner.valid()) || j.Grants == nil {
 		return j, errors.New("retained drain scope mismatch")
 	}
-	q := DrainRequest{Protocol: DrainProtocol, Binding: j.Binding, Generation: j.Generation}
+	if protocol == AckDrainProtocol && j.Generation != 0 && !validAckProof(j.AckProof, j.Generation) {
+		return j, errors.New("retained ACK epoch proof missing or invalid")
+	}
+	q := DrainRequest{Protocol: protocol, Binding: j.Binding, Generation: j.Generation, AckProof: j.AckProof}
 	// If the original begin reply was retained, constrain even initial lookup.
 	if q.Generation == 0 {
 		q.Generation = original.Generation
@@ -217,11 +265,15 @@ func (c *DrainCoordinator) run(ctx context.Context, a *RecoveryAuthorization) (j
 		return j, errors.New("invalid authenticated drain discovery")
 	}
 	j.Generation = r.Generation
+	j.AckProof = r.AckProof
 	j.CapturedOwner = r.CapturedOwner
 	j.Evidence = &r
 	j.Phase = r.Phase
 	if r.Phase == "paused" && (!paused(r) || c.now().Sub(r.ObservedAt) > 5*time.Second) {
 		return j, errors.New("paused evidence incomplete")
+	}
+	if protocol == AckDrainProtocol && r.Phase == "paused" && !freshAckPaused(r, c.now()) {
+		return j, errors.New("ACK paused evidence incomplete or stale")
 	}
 	if e = c.save(j); e != nil {
 		return j, e
@@ -241,7 +293,7 @@ func (c *DrainCoordinator) run(ctx context.Context, a *RecoveryAuthorization) (j
 	if e != nil {
 		return j, e
 	}
-	if !reflect.DeepEqual(claims.Binding, j.Binding) || claims.Generation != j.Generation || claims.CapturedOwner != j.CapturedOwner {
+	if claims.Protocol != protocol || !reflect.DeepEqual(claims.AckProof, j.AckProof) || !reflect.DeepEqual(claims.Binding, j.Binding) || claims.Generation != j.Generation || claims.CapturedOwner != j.CapturedOwner {
 		return j, errors.New("drain grant scope mismatch")
 	}
 	validGrant := func() bool { now := c.now(); return !claims.IssuedAt.After(now) && now.Before(claims.ExpiresAt) }
@@ -264,6 +316,7 @@ func (c *DrainCoordinator) run(ctx context.Context, a *RecoveryAuthorization) (j
 		return j, e
 	}
 	q.Generation = j.Generation
+	q.AckProof = j.AckProof
 	q.CapturedOwner = &j.CapturedOwner
 	q.Authorization = a
 	// Observer checks its durable revocation ledger on EVERY mutation. Transport
@@ -292,8 +345,19 @@ func (c *DrainCoordinator) run(ctx context.Context, a *RecoveryAuthorization) (j
 	if !c.validResponse(r, j) || r.AuthorizationID != claims.AuthorizationID || !paused(r) || !r.Quiescent || r.NodeEvidenceObservedAt == nil || r.NodeEvidenceObservedAt.After(r.ObservedAt) || c.now().Sub(*r.NodeEvidenceObservedAt) > 5*time.Second {
 		return j, errors.New("drain did not prove paused")
 	}
+	if protocol == AckDrainProtocol && (!validGrant() || !freshAckPaused(r, c.now())) {
+		return j, errors.New("ACK drain result expired or incomplete")
+	}
 	j.Phase = "paused"
 	j.Evidence = &r
 	err = c.save(j)
 	return
+}
+
+// Fresh terminal proof is required at discovery and explicit artifact recovery entry.
+func freshAckPaused(r DrainResponse, now time.Time) bool {
+	return r.Protocol == AckDrainProtocol && validAckProof(r.AckProof, r.Generation) && paused(r) && r.Quiescent && !r.ObservedAt.After(now) && now.Sub(r.ObservedAt) <= 5*time.Second && now.Before(r.ValidUntil) && r.ValidUntil.After(r.ObservedAt) && r.ValidUntil.Sub(r.ObservedAt) <= 60*time.Second && r.NodeEvidenceObservedAt != nil && !r.NodeEvidenceObservedAt.After(r.ObservedAt) && now.Sub(*r.NodeEvidenceObservedAt) <= 5*time.Second
+}
+func ackDrainHandoff(d DrainJournal, original Journal) bool {
+	return d.Protocol == AckDrainProtocol && original.Binding.Protocol == AckProtocol && d.Phase == "paused" && d.Binding == original.Binding && d.Generation == original.Generation && validAckProof(d.AckProof, d.Generation) && d.Evidence != nil && d.Evidence.Binding == d.Binding && d.Evidence.Generation == d.Generation && d.CapturedOwner.valid() && d.Evidence.CapturedOwner == d.CapturedOwner && reflect.DeepEqual(d.Evidence.AckProof, d.AckProof) && freshAckPaused(*d.Evidence, d.Evidence.ObservedAt)
 }

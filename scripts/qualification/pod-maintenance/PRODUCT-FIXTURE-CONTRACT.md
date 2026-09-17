@@ -48,6 +48,9 @@ absolute `proxy_config` and `fault`. Coordinator case JSON fields:
   absolute retained artifact path, and original deadline.
 - `observer_public_key`, `release_public_key`: disposable public keys in hex.
 - `authorization` and `artifact` where required by the selected mode.
+- Optional `drain_protocol`: explicitly select `pod-maintenance-ack-drain-recovery-v1`
+  for ACK-v2 recovery fixtures; omission retains the original drain protocol.
+  See ACK-DRAIN-RECOVERY-CONTRACT.md for the required epoch proof and public fixture.
 
 `run_suite.py` requires these case configs after reset and before each driver run.
 It verifies product binary hashes before execution and stores them in receipts.

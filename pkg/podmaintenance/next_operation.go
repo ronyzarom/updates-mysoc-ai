@@ -192,7 +192,10 @@ func (c *TransitionCoordinator) Advance(ctx context.Context, a RecoveryAuthoriza
 	if drainErr != nil && !os.IsNotExist(drainErr) {
 		return drainErr
 	}
-	if hasDrain && (drain.Protocol != DrainProtocol || drain.Phase != "paused" || drain.Binding != original.Binding || drain.Generation != original.Generation || drain.Evidence == nil || !paused(*drain.Evidence)) {
+	if hasDrain && drain.Protocol == AckDrainProtocol && !ackDrainHandoff(drain, original) {
+		return errors.New("invalid ACK drain archive proof")
+	}
+	if hasDrain && drain.Protocol != AckDrainProtocol && (drain.Protocol != DrainProtocol || drain.Phase != "paused" || drain.Binding != original.Binding || drain.Generation != original.Generation || drain.Evidence == nil || !paused(*drain.Evidence)) {
 		return errors.New("drain evidence not terminal")
 	}
 	n := claims.NextBinding

@@ -6,6 +6,7 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/podmaintenance"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	"os"
+	"time"
 )
 
 // resumePodDrain operates entirely from protected local configuration and the
@@ -19,8 +20,11 @@ func (s *Simulator) resumePodDrain(ctx context.Context, j podmaintenance.Journal
 	hasPrior := e == nil
 	// ACK-v2 prepares without draining. Its own coordinator must receive and
 	// journal the prepared acknowledgment before any drain recovery is considered.
-	if j.Binding.Protocol == podmaintenance.AckProtocol && !hasPrior {
+	if j.Binding.Protocol == podmaintenance.AckProtocol && !hasPrior && (cfg.Drain == nil || cfg.Drain.Protocol != podmaintenance.AckDrainProtocol) {
 		return false, nil
+	}
+	if !hasPrior && j.Binding.Protocol == podmaintenance.AckProtocol && cfg.Drain != nil && cfg.Drain.Protocol == podmaintenance.AckDrainProtocol && cfg.Drain.AuthorizationFile == "" && time.Now().Before(j.Binding.Deadline) {
+		return false, nil // A configured recovery transport does not preempt normal ACK-v2 progress.
 	}
 	if cfg.Drain == nil {
 		if hasPrior {
@@ -28,11 +32,11 @@ func (s *Simulator) resumePodDrain(ctx context.Context, j podmaintenance.Journal
 		}
 		return false, nil
 	}
-	if !hasPrior && j.Phase != "intent" && j.Phase != "acknowledged" {
+	if !hasPrior && j.Phase != "intent" && j.Phase != "acknowledged" && j.Phase != "barrier-acknowledged" && j.Phase != "draining" {
 		return false, nil
 	}
 	d := cfg.Drain
-	if d.Protocol != podmaintenance.DrainProtocol {
+	if d.Protocol != podmaintenance.DrainProtocol && d.Protocol != podmaintenance.AckDrainProtocol {
 		return true, fmt.Errorf("unsupported drain protocol")
 	}
 	if e := s.validateSiemCoreExecution(); e != nil {
@@ -42,7 +46,7 @@ func (s *Simulator) resumePodDrain(ctx context.Context, j podmaintenance.Journal
 	if e != nil {
 		return true, e
 	}
-	c := podmaintenance.DrainCoordinator{Directory: cfg.JournalDirectory, Adapter: podmaintenance.CommandAdapter{Command: d.AdapterCommand, Timeout: s.config.Simulation.Filesystem.CommandTimeout.Duration}, ObserverKey: key}
+	c := podmaintenance.DrainCoordinator{Protocol: d.Protocol, Directory: cfg.JournalDirectory, Adapter: podmaintenance.CommandAdapter{Command: d.AdapterCommand, Timeout: s.config.Simulation.Filesystem.CommandTimeout.Duration}, ObserverKey: key}
 	// A v2 journal means a separately scoped recovery already began. Its own
 	// coordinator checks the retained paused proof before doing anything.
 	if hasPrior && prior.Phase == "paused" {

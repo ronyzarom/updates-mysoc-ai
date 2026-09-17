@@ -1,0 +1,129 @@
+{
+  "authorization": {
+    "payload_base64": "eyJhY2tfcHJvb2YiOnsicHJlcGFyZWRfcmV2aXNpb24iOjQyLCJhc3NpZ25tZW50X3JldmlzaW9uIjo2fSwicHJvdG9jb2wiOiJwb2QtbWFpbnRlbmFuY2UtYWNrLWRyYWluLXJlY292ZXJ5LXYxIiwiYXV0aG9yaXphdGlvbl9pZCI6ImZpeHR1cmUtZ3JhbnQiLCJiaW5kaW5nIjp7ImFydGlmYWN0X3NpZ25hdHVyZSI6ImZpeHR1cmUtb25seS1ub3QtYW4tYXJ0aWZhY3Qtc2lnbmF0dXJlIiwiYXJ0aWZhY3RfcGF0aCI6Ii9maXh0dXJlL3RhcmdldC50YXIuZ3oiLCJwcm90b2NvbCI6InBvZC1tYWludGVuYW5jZS1hY2stdjIiLCJvcGVyYXRpb25faWQiOiJmaXh0dXJlLW9wZXJhdGlvbiIsInBvZF9pZCI6ImZpeHR1cmUtcG9kIiwibm9kZV9pZCI6IjEiLCJ1cGRhdGVyX2lkIjoiZml4dHVyZS11cGRhdGVyIiwicHJvZHVjdCI6InNpZW1jb3JlIiwiZnJvbV92ZXJzaW9uIjoiMy4zLjE1Mi4zNSIsInRhcmdldF92ZXJzaW9uIjoiMy4zLjE1Mi4zNiIsImFydGlmYWN0X3NoYTI1NiI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJwcmV2aW91c19hcnRpZmFjdF9zaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwiZGVhZGxpbmUiOiIyMDI5LTEyLTMxVDIzOjAwOjAwWiJ9LCJnZW5lcmF0aW9uIjo0MiwiY2FwdHVyZWRfb3duZXIiOnsibm9kZV9pZCI6IjEiLCJvd25lcl9nZW5lcmF0aW9uIjo3LCJ3YXRjaGRvZ19nZW5lcmF0aW9uIjo3fSwiYWN0aW9uIjoicmVzdW1lLWRyYWluIiwiaXNzdWVkX2F0IjoiMjAzMC0wMS0wMVQwMDowMDowMFoiLCJleHBpcmVzX2F0IjoiMjAzMC0wMS0wMVQwMDoxMDowMFoifQ==",
+    "signature": "XmCOVWG3T7sIzAevuYYWFNu3opE3YaN6BH6+dFyDmI+f2JXnbL2kX25GBydRmNg0Cfnu0t4YaK/FQuU0y323AQ=="
+  },
+  "claims": {
+    "ack_proof": {
+      "prepared_revision": 42,
+      "assignment_revision": 6
+    },
+    "protocol": "pod-maintenance-ack-drain-recovery-v1",
+    "authorization_id": "fixture-grant",
+    "binding": {
+      "artifact_signature": "fixture-only-not-an-artifact-signature",
+      "artifact_path": "/fixture/target.tar.gz",
+      "protocol": "pod-maintenance-ack-v2",
+      "operation_id": "fixture-operation",
+      "pod_id": "fixture-pod",
+      "node_id": "1",
+      "updater_id": "fixture-updater",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deadline": "2029-12-31T23:00:00Z"
+    },
+    "generation": 42,
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 7,
+      "watchdog_generation": 7
+    },
+    "action": "resume-drain",
+    "issued_at": "2030-01-01T00:00:00Z",
+    "expires_at": "2030-01-01T00:10:00Z"
+  },
+  "initial_operation": {
+    "binding": {
+      "artifact_signature": "fixture-only-not-an-artifact-signature",
+      "artifact_path": "/fixture/target.tar.gz",
+      "protocol": "pod-maintenance-ack-v2",
+      "operation_id": "fixture-operation",
+      "pod_id": "fixture-pod",
+      "node_id": "1",
+      "updater_id": "fixture-updater",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deadline": "2029-12-31T23:00:00Z"
+    },
+    "generation": 42,
+    "phase": "barrier-acknowledged"
+  },
+  "observer_public_key": "e27c4f536eb15835a01b08984849e8830c4ceaa7c5f9687990325d11153c1441",
+  "paused_status": {
+    "ack_proof": {
+      "prepared_revision": 42,
+      "assignment_revision": 6
+    },
+    "protocol": "pod-maintenance-ack-drain-recovery-v1",
+    "binding": {
+      "artifact_signature": "fixture-only-not-an-artifact-signature",
+      "artifact_path": "/fixture/target.tar.gz",
+      "protocol": "pod-maintenance-ack-v2",
+      "operation_id": "fixture-operation",
+      "pod_id": "fixture-pod",
+      "node_id": "1",
+      "updater_id": "fixture-updater",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deadline": "2029-12-31T23:00:00Z"
+    },
+    "generation": 42,
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 7,
+      "watchdog_generation": 7
+    },
+    "observed_at": "2030-01-01T00:00:00Z",
+    "valid_until": "2030-01-01T00:00:05Z",
+    "phase": "paused",
+    "processing_stopped": true,
+    "ingress_stopped": true,
+    "quiescent": true,
+    "watchdog_retired": true,
+    "watchdog_exited": true,
+    "lease_released": true,
+    "node_evidence_observed_at": "2030-01-01T00:00:00Z"
+  },
+  "prepared_status": {
+    "ack_proof": {
+      "prepared_revision": 42,
+      "assignment_revision": 6
+    },
+    "protocol": "pod-maintenance-ack-drain-recovery-v1",
+    "binding": {
+      "artifact_signature": "fixture-only-not-an-artifact-signature",
+      "artifact_path": "/fixture/target.tar.gz",
+      "protocol": "pod-maintenance-ack-v2",
+      "operation_id": "fixture-operation",
+      "pod_id": "fixture-pod",
+      "node_id": "1",
+      "updater_id": "fixture-updater",
+      "product": "siemcore",
+      "from_version": "3.3.152.35",
+      "target_version": "3.3.152.36",
+      "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previous_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "deadline": "2029-12-31T23:00:00Z"
+    },
+    "generation": 42,
+    "captured_owner": {
+      "node_id": "1",
+      "owner_generation": 7,
+      "watchdog_generation": 7
+    },
+    "observed_at": "2030-01-01T00:00:00Z",
+    "valid_until": "2030-01-01T00:00:05Z",
+    "phase": "prepared"
+  },
+  "signature_domain": "mysoc-pod-ack-drain-recovery-v1\n",
+  "test_only": true
+}

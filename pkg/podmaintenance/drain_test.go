@@ -15,6 +15,7 @@ import (
 )
 
 type drainProcessConfig struct {
+	Protocol      string
 	Directory     string
 	Key           []byte
 	Authorization RecoveryAuthorization
@@ -43,7 +44,7 @@ func TestDrainProcessHelper(t *testing.T) {
 		if json.Unmarshal(raw, &cfg) != nil {
 			os.Exit(9)
 		}
-		c := DrainCoordinator{Directory: cfg.Directory, ObserverKey: cfg.Key, Adapter: CommandAdapter{Command: []string{os.Args[0], "-test.run=^TestDrainProcessHelper$", "--", "--drain-helper", "adapter", dir}}}
+		c := DrainCoordinator{Protocol: cfg.Protocol, Directory: cfg.Directory, ObserverKey: cfg.Key, Adapter: CommandAdapter{Command: []string{os.Args[0], "-test.run=^TestDrainProcessHelper$", "--", "--drain-helper", "adapter", dir}}}
 		c.AfterDurableCheckpoint = func(point string) {
 			if cfg.Fault == "checkpoint:"+point {
 				if f, e := os.OpenFile(filepath.Join(dir, "injected"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600); e == nil {
@@ -86,6 +87,11 @@ func TestDrainProcessHelper(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	r := DrainResponse{Protocol: DrainProtocol, Binding: q.Binding, Generation: 42, CapturedOwner: CapturedOwner{"1", 7, 7}, Phase: "draining", ObservedAt: now, ValidUntil: now.Add(5 * time.Second)}
+	if q.Protocol == AckDrainProtocol {
+		r.Protocol = AckDrainProtocol
+		r.AckProof = &AckBarrierProof{42, 6}
+		r.Phase = "prepared"
+	}
 	if _, e := os.Stat(filepath.Join(dir, "paused")); e == nil || action == "resume-drain" {
 		r.Phase = "paused"
 		r.ProcessingStopped = true
@@ -93,6 +99,10 @@ func TestDrainProcessHelper(t *testing.T) {
 		r.WatchdogRetired = true
 		r.WatchdogExited = true
 		r.LeaseReleased = true
+	}
+	if q.Protocol == AckDrainProtocol && r.Phase == "paused" {
+		r.Quiescent = true
+		r.NodeEvidenceObservedAt = &now
 	}
 	if action != "status" {
 		claims, _, e := DecodeDrainAuthorization(*q.Authorization, cfg.Key)
@@ -108,6 +118,25 @@ func TestDrainProcessHelper(t *testing.T) {
 			r.Quiescent = true
 			r.NodeEvidenceObservedAt = &now
 			os.WriteFile(filepath.Join(dir, "paused"), []byte("paused"), 0600)
+		}
+	}
+	if q.Protocol == AckDrainProtocol {
+		switch cfg.Fault {
+		case "missing-proof":
+			r.AckProof = nil
+		case "epoch-change":
+			if action != "status" {
+				r.AckProof.AssignmentRevision++
+			}
+		case "incomplete-paused":
+			if r.Phase == "paused" {
+				r.Quiescent = false
+			}
+		case "stale-node":
+			if r.Phase == "paused" {
+				v := now.Add(-time.Minute)
+				r.NodeEvidenceObservedAt = &v
+			}
 		}
 	}
 	if cfg.Fault == "evidence-after-observation" && action == "resume-drain" {

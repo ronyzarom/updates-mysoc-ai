@@ -19,6 +19,7 @@ import (
 )
 
 type Config struct {
+	DrainProtocol   string                  `json:"drain_protocol,omitempty"`
 	FaultCheckpoint string                  `json:"fault_checkpoint,omitempty"`
 	EvidenceTier    string                  `json:"evidence_tier"`
 	Isolated        bool                    `json:"isolated"`
@@ -90,7 +91,7 @@ func execute(path string) error {
 		if err != nil {
 			return err
 		}
-		drain := &p.DrainCoordinator{Directory: c.Directory, Adapter: adapter, ObserverKey: observer}
+		drain := &p.DrainCoordinator{Protocol: c.DrainProtocol, Directory: c.Directory, Adapter: adapter, ObserverKey: observer}
 		var journal p.DrainJournal
 		if c.Mode == "drain-discovery" {
 			journal, e = drain.Discover(ctx)

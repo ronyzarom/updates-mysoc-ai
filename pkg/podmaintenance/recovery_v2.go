@@ -196,8 +196,16 @@ func (c *RecoveryCoordinator) Run(ctx context.Context, authorization RecoveryAut
 	// A drain grant never authorizes artifact recovery. Even a separately
 	// signed v2 grant must wait for a retained paused drain receipt.
 	drainPaused := false
+	ackDrainPaused := false
+	ackDrainFresh := false
 	if drain, err := ReadDrainJournal(c.Directory); err == nil {
-		if drain.Protocol != DrainProtocol || drain.Phase != "paused" || drain.Evidence == nil || !paused(*drain.Evidence) || !reflect.DeepEqual(drain.Binding, original.Binding) || drain.Generation != original.Generation {
+		if drain.Protocol == AckDrainProtocol {
+			if !ackDrainHandoff(drain, original) {
+				return "", errors.New("ACK drain handoff proof invalid")
+			}
+			ackDrainPaused = true
+			ackDrainFresh = freshAckPaused(*drain.Evidence, c.now())
+		} else if drain.Protocol != DrainProtocol || drain.Phase != "paused" || drain.Evidence == nil || !paused(*drain.Evidence) || !reflect.DeepEqual(drain.Binding, original.Binding) || drain.Generation != original.Generation {
 			return "", errors.New("drain has not reached a verified paused state")
 		}
 		drainPaused = true
@@ -233,6 +241,10 @@ func (c *RecoveryCoordinator) Run(ctx context.Context, authorization RecoveryAut
 		case "intent":
 			if !drainPaused {
 				return "", errors.New("lost-begin recovery requires terminal paused drain proof")
+			}
+		case "barrier-acknowledged", "draining":
+			if !ackDrainPaused || !ackDrainFresh {
+				return "", errors.New("early ACK recovery requires separate terminal ACK drain proof")
 			}
 		case "acknowledged", "applying", "applied", "completing":
 		default:
