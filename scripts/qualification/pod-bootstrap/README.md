@@ -197,3 +197,24 @@ succeeded, expired invitation rejected. See
 This uses a test-signed manifest and separate fixture trust, never production
 release trust. 58 distinct local tests pass (duplicate imported unittest class
 collection removed). Full clean-POD signed-release acceptance remains outstanding.
+
+## Per-node stage coordination
+
+`data_orchestration.py` coordinates the reviewed data-node schema stage and optional
+seed stage after authenticated registration/authorization. The planned stages and
+both configuration hashes are persisted as one immutable operation before any
+runner is created. Schema and seed retain separate receipts, so adding the seed
+field is not mistaken for changing a completed schema-stage input. On retry both
+artifact-owned stages revalidate through fresh verified runners; successful local
+receipts alone never authorize a skip. A seed failure preserves schema progress
+and all retained product state. Planned source or stage-set changes require explicit
+reconciliation. The final internal status is `awaiting-product-readiness`, with
+installation_complete=false and processing_allowed=false.
+
+Witness cannot invoke the data command. Its runtime/bootstrap contract remains a
+separate product-owned input. This module is not imported by the shipped kit and
+cannot perform activation, assign role IPs, infer an initial active node, delete
+VMs or publish releases. Runner factories must present each exact planned config
+at the protected container path and recheck runtime/authorization before execution.
+63 local tests pass; the new multi-stage coordination is fixture-tested, while the
+preceding live local handoff qualified the schema-stage runner specifically.
