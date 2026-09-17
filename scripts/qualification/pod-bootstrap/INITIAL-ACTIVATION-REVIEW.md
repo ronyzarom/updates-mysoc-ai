@@ -56,3 +56,19 @@ wire schemas are still needed before implementing a caller:
 
 These are contract clarification items, not additional user approval requests.
 No endpoint, production orchestration or kit capability was enabled by this review.
+
+## Revised wire draft
+
+The revision resolves the earlier caller blockers: exact domain-separated signed
+payload bytes, distinct bootstrap/preparation/assignment revisions, verified
+HTTP200 absent status, refusal of expired mutations, and atomic completed handoff
+to ordinary renewable authority. Accepted as a basis for source-only caller work;
+this does not enable endpoints or delivery.
+
+Before freezing fixtures, specify exact infrastructure operation record fields
+and provider values, plus phase-specific null/zero/positive/receipt invariants.
+Updates treats any `processing_allowed` observation as informational, never an
+instruction or permission to enable processing. A completion receipt proves
+historical verified completion, not present application health. Actual HTTP,
+authorize/controller/completion and race qualification remains outstanding;
+durable prepare-only tests do not establish those capabilities.
