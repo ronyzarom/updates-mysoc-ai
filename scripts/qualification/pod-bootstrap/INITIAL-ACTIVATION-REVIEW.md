@@ -101,3 +101,28 @@ permissions and repeat-run behavior because etcd grants/role memberships are
 additive: successful scoped reads, rejected protected put/delete/transactions,
 and rejected access to other PODs. This source review does not claim RBAC test
 completion or enable schema4 delivery.
+
+## Activation HTTP implementation review
+
+Reviewed activation_server.go/activation_snapshot.go. Positive boundaries:
+disabled by default, both independent readers required, original node1 mTLS,
+authoritative post-mutation reread, immutable completion evidence for historical
+routing, and unavailable response instead of invented provider-operation success.
+
+Caller conformance findings sent to SiemCore:
+
+1. Preserve typed errors: expired grant is409/grant_expired; quorum/observation
+   failure503; do not collapse backend/readiness failures into retryable409
+   phase_conflict or expired signatures into generic403.
+2. Enforce endpoint-specific field presence. Pointer nil checks accept forbidden
+   explicit null fields, contrary to the exact wire field sets.
+3. Include registration comparisons in the final absent-intent proof transaction;
+   the observed implementation drops those comparisons between initial registration
+   verification and its second barrier/absence transaction.
+4. Reconcile completed replay after expiry with the contract: either status-only
+   reconciliation or an explicit no-effect historical replay exception. Current
+   code checks the completed grant at issue time while the text refuses expired
+   mutations.
+
+These are source review findings, not claims of exploit reproduction or completed
+HTTP qualification. Unknown provider IDs remain unavailable, never verified absence.
