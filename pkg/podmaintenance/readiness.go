@@ -40,13 +40,13 @@ func (r ReadinessResponse) Validate(q ReadinessRequest, now time.Time) error {
 	}
 	seen := map[string]bool{}
 	for _, c := range r.Capabilities {
-		if (c != Protocol && c != RecoveryProtocol) || seen[c] {
+		if (c != Protocol && c != AckProtocol && c != RecoveryProtocol) || seen[c] {
 			return errors.New("invalid readiness capability")
 		}
 		seen[c] = true
 	}
-	if !seen[Protocol] {
-		return errors.New("maintenance-v1 readiness required")
+	if !seen[Protocol] && !seen[AckProtocol] {
+		return errors.New("maintenance protocol readiness required")
 	}
 	return nil
 }

@@ -15,6 +15,7 @@ import (
 )
 
 const Protocol = "pod-maintenance-v1"
+const AckProtocol = "pod-maintenance-ack-v2"
 
 type Binding struct {
 	ArtifactSignature      string    `json:"artifact_signature"`
@@ -88,7 +89,7 @@ func digest(s string) bool {
 	return e == nil && len(b) == 32 && s == hex.EncodeToString(b)
 }
 func (b Binding) Validate() error {
-	if b.ArtifactSignature == "" || !filepath.IsAbs(b.ArtifactPath) || b.Protocol != Protocol || b.OperationID == "" || b.PodID == "" || (b.NodeID != "1" && b.NodeID != "2") || b.UpdaterID == "" || b.Product == "" || b.FromVersion == "" || b.TargetVersion == "" || !digest(b.ArtifactSHA256) || !digest(b.PreviousArtifactSHA256) || b.Deadline.IsZero() {
+	if b.ArtifactSignature == "" || !filepath.IsAbs(b.ArtifactPath) || (b.Protocol != Protocol && b.Protocol != AckProtocol) || b.OperationID == "" || b.PodID == "" || (b.NodeID != "1" && b.NodeID != "2") || b.UpdaterID == "" || b.Product == "" || b.FromVersion == "" || b.TargetVersion == "" || !digest(b.ArtifactSHA256) || !digest(b.PreviousArtifactSHA256) || b.Deadline.IsZero() {
 		return errors.New("invalid maintenance identity")
 	}
 	return nil
@@ -145,7 +146,9 @@ func validHealth(h *Health, b Binding) bool {
 
 // Run retains the operation on every failure. It never clears an observer barrier.
 func (c *Coordinator) Run(ctx context.Context, target Binding) error {
-	target.Protocol = Protocol
+	if target.Protocol == "" {
+		target.Protocol = Protocol
+	}
 	if c.Adapter == nil || !filepath.IsAbs(c.Directory) {
 		return errors.New("maintenance adapter and absolute journal directory required")
 	}
@@ -189,6 +192,9 @@ func (c *Coordinator) Run(ctx context.Context, target Binding) error {
 		if e = j.Binding.Validate(); e != nil {
 			return e
 		}
+		if j.Binding.Protocol == AckProtocol && j.Phase != "intent" && j.Generation == 0 {
+			return errors.New("retained acknowledgment requires nonzero generation")
+		}
 		if j.Phase != "accepted" && !sameTarget(j.Binding, target) {
 			return errors.New("unfinished operation binds another release")
 		}
@@ -203,7 +209,6 @@ func (c *Coordinator) Run(ctx context.Context, target Binding) error {
 		if _, e = rand.Read(id); e != nil {
 			return e
 		}
-		target.Protocol = Protocol
 		target.OperationID = hex.EncodeToString(id)
 		if target.Deadline.IsZero() {
 			target.Deadline = c.now().Add(30 * time.Minute)
@@ -223,12 +228,12 @@ func (c *Coordinator) Run(ctx context.Context, target Binding) error {
 	}
 	supported := false
 	for _, s := range cap.Capabilities {
-		if s == Protocol {
+		if s == j.Binding.Protocol {
 			supported = true
 		}
 	}
 	if !supported {
-		return errors.New("adapter lacks pod-maintenance-v1; no legacy fallback")
+		return errors.New("adapter lacks required maintenance protocol; no legacy fallback")
 	}
 	call := func(action string) (Response, error) {
 		if action != "status" && !c.now().Before(j.Binding.Deadline) {
@@ -241,15 +246,57 @@ func (c *Coordinator) Run(ctx context.Context, target Binding) error {
 		if !reflect.DeepEqual(r.Binding, j.Binding) || r.Generation == 0 || (j.Generation != 0 && r.Generation != j.Generation) {
 			return r, errors.New("maintenance acknowledgement identity/generation mismatch")
 		}
-		if r.Phase != "paused" && r.Phase != "completed" {
+		if r.Phase != "paused" && r.Phase != "completed" && !(j.Binding.Protocol == AckProtocol && (r.Phase == "prepared" || r.Phase == "draining")) {
 			return r, errors.New("invalid observer phase")
 		}
-		if (r.Phase == "paused" || action == "complete") && !c.now().Before(r.PermissionExpires) {
+		if (r.Phase != "completed" || action == "complete") && !c.now().Before(r.PermissionExpires) {
 			return r, errors.New("maintenance permission expired")
 		}
 		return r, nil
 	}
 	save := func(phase string) error { j.Phase = phase; return writeJournal(path, j) }
+	if j.Binding.Protocol == AckProtocol {
+		if j.Phase == "intent" {
+			r, err := call("prepare")
+			if err != nil {
+				return err
+			}
+			if r.Phase != "prepared" {
+				return errors.New("prepare did not acknowledge non-draining barrier")
+			}
+			j.Generation = r.Generation
+			if err = save("barrier-acknowledged"); err != nil {
+				return err
+			}
+		}
+		if j.Phase == "barrier-acknowledged" {
+			r, err := call("start-drain")
+			if err != nil {
+				return err
+			}
+			if r.Phase != "draining" && r.Phase != "paused" {
+				return errors.New("start-drain did not acknowledge drain")
+			}
+			if err = save("draining"); err != nil {
+				return err
+			}
+		}
+		if j.Phase == "draining" {
+			r, err := call("status")
+			if err != nil {
+				return err
+			}
+			if r.Phase == "draining" {
+				return errors.New("maintenance drain pending")
+			}
+			if r.Phase != "paused" {
+				return errors.New("drain has not reached paused barrier")
+			}
+			if err = save("acknowledged"); err != nil {
+				return err
+			}
+		}
+	}
 	if j.Phase == "intent" {
 		r, e := call("begin-or-resume")
 		if e != nil {
@@ -275,6 +322,9 @@ func (c *Coordinator) Run(ctx context.Context, target Binding) error {
 			return e
 		}
 		return c.accept(ctx, &j, path)
+	}
+	if r.Phase != "paused" {
+		return errors.New("apply requires paused barrier")
 	}
 	switch j.Phase {
 	case "acknowledged":

@@ -19,3 +19,19 @@ func TestRoleVersionAndCapabilities(t *testing.T) {
 		t.Fatal("legacy changed")
 	}
 }
+
+func TestAckV2RequirementCannotUseLegacyCapability(t *testing.T) {
+	r := &Requirements{Scope: "pod-node", Capabilities: []string{"pod-maintenance-ack-v2"}, MinUpdaterVersion: "1.16.1.26"}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if r.Check("pod-node", "1.16.1.26", []string{"pod-maintenance-v1"}) == nil {
+		t.Fatal("v1 accepted ACK-v2 artifact")
+	}
+	if err := r.Check("pod-node", "1.16.1.26", []string{"pod-maintenance-ack-v2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Check("normal", "1.16.1.25", nil); err != nil {
+		t.Fatal("normal behavior changed", err)
+	}
+}

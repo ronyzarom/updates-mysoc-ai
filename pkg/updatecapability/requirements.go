@@ -34,18 +34,18 @@ func (r *Requirements) Validate() error {
 	if r == nil {
 		return nil
 	}
-	if r.Scope != "pod-node" || len(r.Capabilities) == 0 || len(r.Capabilities) > 2 {
+	if r.Scope != "pod-node" || len(r.Capabilities) == 0 || len(r.Capabilities) > 3 {
 		return fmt.Errorf("invalid updater requirements")
 	}
 	seen := map[string]bool{}
 	for _, c := range r.Capabilities {
-		if (c != "pod-maintenance-v1" && c != "pod-maintenance-recovery-v2") || seen[c] {
+		if (c != "pod-maintenance-v1" && c != "pod-maintenance-ack-v2" && c != "pod-maintenance-recovery-v2") || seen[c] {
 			return fmt.Errorf("unknown or duplicate required capability")
 		}
 		seen[c] = true
 	}
-	if !seen["pod-maintenance-v1"] {
-		return fmt.Errorf("maintenance-v1 required")
+	if !seen["pod-maintenance-v1"] && !seen["pod-maintenance-ack-v2"] {
+		return fmt.Errorf("maintenance protocol required")
 	}
 	_, e := version(r.MinUpdaterVersion)
 	return e

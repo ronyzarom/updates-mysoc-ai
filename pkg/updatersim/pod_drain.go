@@ -17,6 +17,11 @@ func (s *Simulator) resumePodDrain(ctx context.Context, j podmaintenance.Journal
 		return true, e
 	}
 	hasPrior := e == nil
+	// ACK-v2 prepares without draining. Its own coordinator must receive and
+	// journal the prepared acknowledgment before any drain recovery is considered.
+	if j.Binding.Protocol == podmaintenance.AckProtocol && !hasPrior {
+		return false, nil
+	}
 	if cfg.Drain == nil {
 		if hasPrior {
 			return true, fmt.Errorf("retained drain requires configured pinned drain transport")

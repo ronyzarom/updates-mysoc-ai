@@ -593,6 +593,7 @@ func (c *Config) Product(name string) (*ProductConfig, bool) {
 // PodMaintenanceConfig explicitly enables the negotiated pod executor. Omitted
 // configurations keep the normal legacy installation flow.
 type PodMaintenanceConfig struct {
+	Protocol              string             `yaml:"protocol,omitempty"`
 	Drain                 *PodDrainConfig    `yaml:"drain,omitempty"`
 	AdvertiseCapabilities bool               `yaml:"advertise_capabilities,omitempty"`
 	Recovery              *PodRecoveryConfig `yaml:"recovery,omitempty"`

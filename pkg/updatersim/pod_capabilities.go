@@ -41,6 +41,9 @@ func (s *Simulator) podCapabilities(ctx context.Context, product string) (string
 	}
 	caps := []string{}
 	for _, cap := range r.Capabilities {
+		if cap == podmaintenance.AckProtocol && cfg.Protocol != podmaintenance.AckProtocol {
+			continue
+		}
 		if cap == podmaintenance.RecoveryProtocol {
 			if cfg.Recovery == nil {
 				continue

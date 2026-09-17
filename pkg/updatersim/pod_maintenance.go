@@ -56,7 +56,7 @@ func (s *Simulator) applyPodMaintenance(ctx context.Context, u Update) error {
 	if err := s.verifyRetainedPodArtifact(u); err != nil {
 		return err
 	}
-	return coordinator.Run(ctx, podmaintenance.Binding{ArtifactSignature: u.ArtifactSignature, Protocol: podmaintenance.Protocol, PodID: cfg.PodID, NodeID: cfg.NodeID, UpdaterID: s.config.Instance.ID, Product: u.Product, FromVersion: u.FromVersion, TargetVersion: u.ToVersion, ArtifactPath: u.ArtifactPath, ArtifactSHA256: u.ArtifactSHA256, PreviousArtifactSHA256: previous})
+	return coordinator.Run(ctx, podmaintenance.Binding{ArtifactSignature: u.ArtifactSignature, Protocol: cfg.Protocol, PodID: cfg.PodID, NodeID: cfg.NodeID, UpdaterID: s.config.Instance.ID, Product: u.Product, FromVersion: u.FromVersion, TargetVersion: u.ToVersion, ArtifactPath: u.ArtifactPath, ArtifactSHA256: u.ArtifactSHA256, PreviousArtifactSHA256: previous})
 }
 
 func (s *Simulator) verifyRetainedPodArtifact(u Update) error {
