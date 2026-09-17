@@ -14,6 +14,7 @@ class OrchestrationTests(unittest.TestCase):
         self.original=json.dumps(dict(application=dict(schema=4,topology='pod',cluster_id=test_data_stage.FIXTURE['registry']['pod_id'],
             selective_sync=dict(source_node_id='1',target_node_id='2',allowlist_version=2)))).encode()
         self.digest=hashlib.sha256(self.original).hexdigest();self.schema['input_sha256']=self.digest
+        self.schema['initial_sync']=dict(source_node_id='1',target_node_id='2',allowlist_version=2)
         self.seed=copy.deepcopy(self.schema);self.seed['seed']=dict(source_node_id='1',source_address='10.0.0.2',
             publisher_connection_file='/run/bootstrap/publisher',apply_connection_file='/run/bootstrap/apply')
         self.calls=[];self.fail=None
@@ -54,3 +55,11 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(self.calls,['schema'])
         self.assertEqual(len(result['receipts']),1)
         self.assertIs(result['processing_allowed'],False)
+
+    def test_initial_sync_required_and_exact_copy_of_original(self):
+        for value in (None,dict(source_node_id='2',target_node_id='1',allowlist_version=2),
+                      dict(source_node_id='1',target_node_id='2',allowlist_version=3),
+                      dict(source_node_id='1',target_node_id='2',allowlist_version=2.0)):
+            self.schema['initial_sync']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):self.run_stages(seed=False)
+        self.assertEqual(self.calls,[])

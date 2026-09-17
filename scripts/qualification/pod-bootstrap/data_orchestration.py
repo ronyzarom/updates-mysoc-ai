@@ -17,7 +17,10 @@ def run_data_stages(registry,fingerprint,node_id,generation,input_sha256,schema_
     """
     if node_id not in ('1','2'):
         raise ValueError('Observer requires its own product bootstrap contract')
-    selective_sync.validate(original_input,registry,input_sha256,node_id,seed_config)
+    sync=selective_sync.validate(original_input,registry,input_sha256,node_id,seed_config)
+    supplied_sync=schema_config.get('initial_sync')
+    if supplied_sync!=sync or type(supplied_sync.get('allowlist_version')) is not int:
+        raise ValueError('initial_sync must copy immutable application.selective_sync')
     if 'seed' in schema_config:
         raise ValueError('schema preparation config must omit seed')
     configs=[('schema',schema_config)]

@@ -244,6 +244,26 @@
         "publisher_connection_file",
         "apply_connection_file"
       ]
+    },
+    "initial_sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_node_id": {
+          "const": "1"
+        },
+        "target_node_id": {
+          "const": "2"
+        },
+        "allowlist_version": {
+          "const": 2
+        }
+      },
+      "required": [
+        "source_node_id",
+        "target_node_id",
+        "allowlist_version"
+      ]
     }
   },
   "required": [

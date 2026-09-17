@@ -278,3 +278,12 @@ including actual child invocation, repeated authorization callback invocation,
 immutable generation refusal, timeout/output bounds and no diagnostic leakage.
 That invocation uses synthetic test module/verifier callbacks; actual product
 module, retained signed bundle and live mTLS callback integration is still pending.
+
+Corrected schema4 data orchestration now requires `config.initial_sync` to be an
+exact copy of immutable `application.selective_sync`, including integer allowlist
+version2, before creating any runner. Product schema snapshot accepts this optional
+field for legacy partial-stage compatibility; omission does not qualify the new
+orchestration. Source/target marker/content/freshness checks remain product-owned;
+the receipt shape and false completion/processing flags remain unchanged.
+84 local tests discovered:83 passed,1 Linux-only worker test skipped here (passed
+separately in the supported Linux worker environment).
