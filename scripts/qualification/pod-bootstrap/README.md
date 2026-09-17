@@ -407,3 +407,20 @@ successful stages1–14, then kills only the qualification worker after actual
 installer completion and verification. Stage15 retains incomplete caller state;
 stage16 retries the original installation and17 observes management. Results
 were expected failure/success/success, with no signed artifact modification.
+
+Fresh v2 candidate support is opt-in via `--application-v2 --application
+--management --readiness`. The original registered schema4 application must
+already contain exactly `bootstrap_installation: {protocol:
+"pod-application-install-v2", archive_readiness_file, archive_readiness_sha256}`,
+plus the complete bootstrap coordinator/updater identity/pod-role envelope.
+The caller checks original input bytes/digest and exact declared fields before
+application execution. V2 hashes the readiness profile as an additional asset
+and independently checks the installed root0600 copy. V1 digest construction is
+unchanged and does not accept the additional profile fields.
+
+Nine application-runner unit tests passed in a separate disposable Linux
+Python3.12 container with no network or Docker socket. Full local suite111 tests:
+109passed,2platform/root skips. No fresh combined v2 fixture has run. Existing
+v1 fixture remains untouched; fixed product container/network names require a
+separate Docker daemon for coexistence. Consumer paths remain fixture-root
+agnostic. Observation-listener generation and production kit delivery remain off.

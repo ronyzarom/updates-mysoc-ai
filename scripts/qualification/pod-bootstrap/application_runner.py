@@ -101,6 +101,32 @@ def validate_prior(config,binding,prior):
     if identity['pod_id']!=config['pod_id'] or identity['node_id']!=config['node_id'] or identity['database']!=config['database_name']:raise ValueError('application data identity changed')
 
 
+def validate_v2_original(config,binding,original):
+    if not isinstance(original,bytes) or hashlib.sha256(original).hexdigest()!=binding['input_sha256']:
+        raise ValueError('exact original registration bytes required for v2')
+    document=protocol.strict_json(original);app=document['application'];registry=document['registry']
+    expected={key:config[key] for key in ('protocol','archive_readiness_file','archive_readiness_sha256')}
+    coordinator=app.get('bootstrap_coordinator',{})
+    if (app.get('schema')!=4 or app.get('topology')!='pod' or app.get('cluster_id')!=config['pod_id'] or
+        app.get('bootstrap_installation')!=expected or
+        set(coordinator)!={'registry','observer','invitation_file','authorization_key_file'} or
+        coordinator['registry']!=registry or registry['operation_id']!=binding['operation_id'] or
+        registry['release']['sha256']!=binding['artifact_sha256']):
+        raise ValueError('v2 must be predeclared in the original coordinator input')
+    nodes=[n for n in registry['nodes'] if n['node_id']==config['node_id']]
+    if (len(nodes)!=1 or nodes[0]['updater_id']!=app.get('updater_instance_id') or
+        {'a':'1','b':'2','witness':'witness'}.get(app.get('pod_role'))!=config['node_id']):
+        raise ValueError('original v2 updater identity mismatch')
+
+
+def readiness_bytes(config):
+    raw=client.protected(config['archive_readiness_file'],limit=32768)
+    if hashlib.sha256(raw).hexdigest()!=config['archive_readiness_sha256']:
+        raise ValueError('original archive readiness bytes changed')
+    protocol.strict_json(raw)
+    return raw
+
+
 def configuration_hash(config):
     secrets={k:client.protected(config[p]).decode().strip() for k,p in [('database','database_password_file'),('redis','redis_password_file'),('jwt','jwt_secret_file')]}
     assets={}
@@ -109,17 +135,27 @@ def configuration_hash(config):
     archive=client.protected(config['archive_input_file']);parsed=protocol.strict_json(archive)
     auth=parsed['archive'].get('authentication',{})
     key=client.protected(auth['path']) if auth.get('mode')=='file' else b''
+    if config.get('protocol')=='pod-application-install-v2':
+        assets['archive-readiness.json']=hashlib.sha256(readiness_bytes(config)).hexdigest()
     return hashlib.sha256(json.dumps(dict(config=config,assets=assets,secret_hashes={k:hashlib.sha256(v.encode()).hexdigest() for k,v in secrets.items()},archive_sha256=hashlib.sha256(archive).hexdigest(),archive_credential_sha256=hashlib.sha256(key).hexdigest()),sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
-def invoke(bundle,directory,config,binding,prior,journal,verify_bundle,authorize,timeout=300,fixture_lose_completion=False):
+def invoke(bundle,directory,config,binding,prior,journal,verify_bundle,authorize,timeout=300,fixture_lose_completion=False,allow_v2=False,original_input=None):
     if type(fixture_lose_completion) is not bool:raise ValueError('explicit fixture fault flag required')
     if sys.platform!='linux' or os.geteuid()!=0:raise ValueError('Linux root application worker required')
+    if type(allow_v2) is not bool:raise ValueError('explicit v2 opt-in required')
+    selected=config.get('protocol')
+    if selected not in (NAME,'pod-application-install-v2'):raise ValueError('unsupported application protocol')
+    if selected=='pod-application-install-v2':
+        if not allow_v2:raise ValueError('application v2 disabled')
+        validate_v2_original(config,binding,original_input)
+    elif any(k in config for k in ('archive_readiness_file','archive_readiness_sha256')):
+        raise ValueError('v1 cannot adopt v2 profile fields')
     validate_prior(config,binding,prior)
     manifest,raw,digest=verify_bundle()
     if digest!=binding['artifact_sha256'] or manifest['version']!=config['version'] or manifest['runtime_image_id']!=config['runtime_image_id']:raise ValueError('application release mismatch')
     code=runtime_worker.verify_module(manifest,raw,sys.version_info,NAME)
-    expected=dict(protocol=NAME,pod_id=config['pod_id'],node_id=config['node_id'],version=config['version'],runtime_image_id=config['runtime_image_id'],binding=binding,configuration_sha256=configuration_hash(config),phase='management-installed-paused',installation_complete=False,processing_allowed=False,activation_ready=False)
+    expected=dict(protocol=selected,pod_id=config['pod_id'],node_id=config['node_id'],version=config['version'],runtime_image_id=config['runtime_image_id'],binding=binding,configuration_sha256=configuration_hash(config),phase='management-installed-paused',installation_complete=False,processing_allowed=False,activation_ready=False)
     intent=dict(expected=expected,bundle=str(bundle),directory=str(directory),module_sha256=hashlib.sha256(raw).hexdigest())
     journal=Path(journal)
     if journal.exists() and protocol.strict_json(client.protected(journal)).get('intent')!=intent:raise ValueError('application operation changed')
@@ -140,5 +176,9 @@ def invoke(bundle,directory,config,binding,prior,journal,verify_bundle,authorize
         return result
     receipt=runtime_worker.bounded_child(work,timeout)
     if receipt!=expected:raise ValueError('application receipt mismatch; retain partial state')
+    if selected=='pod-application-install-v2':
+        path=Path(directory)/'archive-readiness.json'
+        if stat.S_IMODE(path.lstat().st_mode)!=0o600 or client.protected(path,limit=32768)!=readiness_bytes(config):
+            raise ValueError('installed readiness profile mismatch')
     client.durable(journal,dict(intent=intent,status='awaiting-management-observation',receipt=receipt))
     return receipt

@@ -19,7 +19,8 @@ import management
 import selective_sync
 import application_runner
 
-p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');p.add_argument('--application',action='store_true');p.add_argument('--resume-application',action='store_true');p.add_argument('--resume-stage',type=int,choices=(9,10,11,12),default=9);p.add_argument('--installed-retry',action='store_true');p.add_argument('--lost-completion-test',action='store_true');args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--root',required=True);p.add_argument('--readiness',action='store_true');p.add_argument('--management',action='store_true');p.add_argument('--application',action='store_true');p.add_argument('--application-v2',action='store_true');p.add_argument('--resume-application',action='store_true');p.add_argument('--resume-stage',type=int,choices=(9,10,11,12),default=9);p.add_argument('--installed-retry',action='store_true');p.add_argument('--lost-completion-test',action='store_true');args=p.parse_args()
+if args.application_v2 and not args.application:p.error('--application-v2 requires --application')
 if args.lost_completion_test and (not args.application or args.installed_retry or args.resume_application):p.error('--lost-completion-test requires --application and excludes other retry flags')
 if args.installed_retry and (not args.application or args.resume_application):p.error('--installed-retry requires --application and excludes --resume-application')
 if args.resume_application and not args.application:p.error('--resume-application requires --application')
@@ -183,7 +184,7 @@ for sequence,(node_id,stage) in enumerate(order,1):
             expected=dict(operation_id=registry['operation_id'],generation=d['generation'],input_sha256=node['input_sha256'],artifact_sha256=registry['release']['sha256'])
             if set(config)!={'config','binding'} or config['binding']!=expected or config['config']['node_id']!=node_id or config['config']['pod_id']!=registry['pod_id']:raise ValueError('application input binding mismatch')
             prior=protocol.strict_json(client.protected(journal/'application-data-evidence.json'))
-            receipt=application_runner.invoke(d['application_bundle'],node['application_directory'],config['config'],expected,prior,journal/'application.json',lambda:bundle(application_runner.NAME,d['application_bundle']),authorize,fixture_lose_completion=args.lost_completion_test and sequence==15)
+            receipt=application_runner.invoke(d['application_bundle'],node['application_directory'],config['config'],expected,prior,journal/'application.json',lambda:bundle(application_runner.NAME,d['application_bundle']),authorize,fixture_lose_completion=args.lost_completion_test and sequence==15,allow_v2=args.application_v2,original_input=original)
         elif stage=='management':
             receipt=management_observation(node_id,node,journal)
         elif stage=='runtime':
