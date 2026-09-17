@@ -101,3 +101,11 @@ The original input never supplies generation; only the durable updater receipt
 records the Observer-issued generation. This registration-only client verifies
 the detached files are protected but does not accept invitations or execute any
 provisioning stage. Product-side invitation acceptance remains a separate gate.
+
+`authorization.py` adds isolated request/response validation for `authorize` and
+`authorization-status`. Exact invitation ID and RFC3339Nano UTC expiry (including
+nanoseconds), operation, registry and generation must match for lost-response
+reconciliation. A newer renewal is a conflict, not evidence the old invitation
+was accepted. Expired status can be inspected but cannot count as authorize
+success. No network integration or stage execution is enabled by this helper.
+The expanded suite passes 29 tests; native endpoint integration remains pending.
