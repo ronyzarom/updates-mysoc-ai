@@ -1,0 +1,8 @@
+socket after startup 0o41775 999
+PASS: pinned PostgreSQL16+local Redis startup, functional health and repeat without database/container replacement
+Prepared private fixture handoff TLS copy
+HANDOFF_DESCRIPTOR=/Users/ronyzaromil/Documents/code/siemcore-bezeq-pod/dist/siemcore-data-runtime-53447.handoff.json
+=== RUN   TestNativeDataBootstrapCommand
+--- PASS: TestNativeDataBootstrapCommand (99.13s)
+PASS
+Retained owned handoff fixture for joint evidence: siemcore-data-runtime-53447 volume=siemcore-data-runtime-53447-data tls=/Users/ronyzaromil/Documents/code/siemcore-bezeq-pod/dist/pod-runtime-fixture.hEuejx
