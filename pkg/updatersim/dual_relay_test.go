@@ -24,7 +24,7 @@ func TestIndependentMultiHopCacheSeparation(t *testing.T) {
 	testArtifactMultiHopCacheSeparation(t, true)
 }
 
-func testArtifactMultiHopCacheSeparation(t *testing.T, independent bool) {
+func testArtifactMultiHopCacheSeparation(t *testing.T, independent bool, serverTypes ...string) {
 	pub, key, _ := ed25519.GenerateKey(rand.Reader)
 	variants := []types.Artifact{}
 	for _, kind := range []string{"bootstrap", "update"} {
@@ -66,6 +66,20 @@ func testArtifactMultiHopCacheSeparation(t *testing.T, independent bool) {
 	defer origin.Close()
 	relayAt := func(url string) *Relay {
 		cfg := newSimulatorTestConfig(t, url, ModeReal)
+		if len(serverTypes) > 0 {
+			cfg.Products[0].ServerType = serverTypes[0]
+			if serverTypes[0] != "normal" && serverTypes[0] != "" {
+				cfg.Products[0].PodID = "relay-pod"
+				cfg.Products[0].NodeID = "1"
+				if serverTypes[0] == "pod-observer" {
+					cfg.Products[0].NodeID = "witness"
+				}
+			}
+			// Exercise persisted role initialization used by the relay command.
+			if _, err := NewSimulator(cfg, NoopExecutor{}, discardLogger()); err != nil {
+				t.Fatal(err)
+			}
+		}
 		cfg.Server.LicenseKey = "fixture"
 		cfg.Relay.Enabled = true
 		cfg.Relay.CacheDir = t.TempDir()
@@ -122,5 +136,19 @@ func testArtifactMultiHopCacheSeparation(t *testing.T, independent bool) {
 	data, _ := os.ReadFile(path)
 	if string(data) != "update" {
 		t.Fatal("corrupt cache served")
+	}
+}
+
+// Relay delivery stays available for every host type, independent of the local
+// product's readiness, drain barrier, or permission to process customer traffic.
+func TestRelayArtifactDeliveryAllServerTypes(t *testing.T) {
+	for _, kind := range []string{"", "normal", "pod-active", "pod-stby", "pod-observer"} {
+		for _, independent := range []bool{false, true} {
+			label := "paired"
+			if independent {
+				label = "independent"
+			}
+			t.Run(kind+"/"+label, func(t *testing.T) { testArtifactMultiHopCacheSeparation(t, independent, kind) })
+		}
 	}
 }

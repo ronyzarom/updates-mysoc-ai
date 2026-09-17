@@ -1,0 +1,1 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatersim	2.434s

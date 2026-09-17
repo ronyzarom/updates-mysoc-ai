@@ -196,3 +196,24 @@ The SiemCore adapter's separate root-protected JSON contains `pod_id`, `node_id`
 `updater_id`, `endpoint`, `tls` (`ca`, `certificate`, `key`),
 `certificate_sha256` (pinned server leaf), and `authorization_key` (protected
 hex public-key file path). Updates does not create those credentials or grants.
+
+### Relay behavior for every server type
+
+`relay.enabled` remains an independent, explicit configuration setting. Existing
+relay configurations are unchanged. Normal, pod-active, pod-stby and pod-observer
+hosts may all serve cascade update checks, child heartbeat rollups, and verified
+artifact delivery. Standby application processing being paused does not pause
+relay delivery. Observer relay delivery does not authorize a data-node product
+installation. Child checks retain the child's deployment role, identity and
+prerequisites; the relay never substitutes its own installation type.
+
+The host's own product installation follows its stored server type and the
+qualified lifecycle adapter. Relay operation does not assign the primary role,
+move a shared IP, or redirect application traffic. A shared endpoint/failover
+still requires the pod routing/controller integration to be qualified separately.
+
+`TestRelayArtifactDeliveryAllServerTypes` covers legacy/default and all four types
+through two relay hops, paired/independent bootstrap and update artifacts, signature
+verification, separate caches and repair of corrupt cached artifacts.
+`TestRelayPreservesChildRoleForEveryServerType` covers normal/data-node/witness
+child-role preservation and child heartbeat rollups for each relay host type.
