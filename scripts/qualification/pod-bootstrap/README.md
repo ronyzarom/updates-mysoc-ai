@@ -287,3 +287,12 @@ orchestration. Source/target marker/content/freshness checks remain product-owne
 the receipt shape and false completion/processing flags remain unchanged.
 84 local tests discovered:83 passed,1 Linux-only worker test skipped here (passed
 separately in the supported Linux worker environment).
+
+`native_combined_handoff.py` prepares the exact six-request disposable integration:
+runtime1,runtime2,schema1,schema2,seed2,runtime1retry. It authenticates test bundle
+manifest/module/image, per-node original input, distinct authorization trust and
+real pinned mTLS authorization for every runtime callback. It uses the reviewed
+worker/data runner and persists only bound partial receipts. This consumer is
+syntax-checked but not executed yet: product fixture launch paused on local Docker
+disk exhaustion and correction of initially shared release/authorization test keys.
+No old descriptor is accepted as a substitute for corrected fixture preflight.
