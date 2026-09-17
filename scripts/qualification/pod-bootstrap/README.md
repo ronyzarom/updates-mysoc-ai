@@ -242,3 +242,11 @@ requires original input bytes, verifies their existing hash and pod/schema bindi
 and rejects an inconsistent seed target/source or unsupported allowlist version.
 The declaration never grants active/standby processing roles. The existing
 `application.bootstrap_coordinator` object is unchanged.71 local tests pass.
+
+`observer_runner.py` adds the bounded host verification runner. It requires an
+independent signed-artifact verifier, hashes the protected root-owned executable
+before and after the command, verifies exact protected drain/update bytes and
+canonical receipt-input hash, and executes only the adapter's planned health
+command. It never starts/stops authority or changes assignments. Output/time are
+bounded by the shared subprocess wrapper.75 local tests pass; the actual native
+Observer handoff remains pending the product fixture descriptor and test trust.
