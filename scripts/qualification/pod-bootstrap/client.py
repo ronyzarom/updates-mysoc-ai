@@ -226,13 +226,19 @@ def main():
     receipt=strict_json(protected(config['input_receipt_file']))
     if receipt.get('input_sha256')!=digest:raise ValueError('original input receipt mismatch')
     app=strict_json(original)['application']
-    # Provisional fixture envelope only: flattened Registry plus observer settings.
-    supplied=app.get('bootstrap_coordinator',{}).copy()
+    # Reviewed schema-4 envelope; registration does not consume invitations or execute stages.
+    coordinator=app.get('bootstrap_coordinator',{})
+    if set(coordinator)!={'registry','observer','invitation_file','authorization_key_file'}:
+        raise ValueError('exact bootstrap coordinator envelope required')
+    supplied=coordinator['registry'].copy()
     if isinstance(supplied.get('nodes'),list):
         supplied['nodes']=sorted(supplied['nodes'],key=lambda n:n['node_id'])
     if (app.get('schema')!=4 or app.get('topology')!='pod' or app.get('cluster_id')!=registry['pod_id'] or
-            {k:supplied.get(k) for k in order}!=registry or supplied.get('observer')!=config['observer']):
+            supplied!=registry or coordinator['observer']!=config['observer']):
         raise ValueError('original input registry/transport mismatch')
+    # Require protected detached inputs, but never interpret their presence as stage authorization.
+    protected(coordinator['invitation_file'])
+    protected(coordinator['authorization_key_file'])
     node=next((n for n in registry['nodes'] if n['node_id']==config['node_id']),None)
     if (node is None or node['machine_id']!=Path('/etc/machine-id').read_text().strip() or
             node['updater_id']!=app.get('updater_instance_id') or

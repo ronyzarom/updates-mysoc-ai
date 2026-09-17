@@ -92,3 +92,12 @@ absolute wall-clock network deadline (current sockets have bounded inactivity
 and coordinator deadlines), root filesystem integration, live product endpoint
 integration, stage execution, rollback/retry acceptance, and clean VM qualification.
 No activation or deployment qualification is claimed by these tests.
+
+Reviewed schema-4 coordinator envelope: `application.bootstrap_coordinator` contains
+exactly `registry`, `observer`, `invitation_file`, and `authorization_key_file`.
+Observer contains `endpoint`, `ca_file`, `client_cert_file`, `client_key_file`,
+and `certificate_sha256`. Invitation/key paths are detached protected files.
+The original input never supplies generation; only the durable updater receipt
+records the Observer-issued generation. This registration-only client verifies
+the detached files are protected but does not accept invitations or execute any
+provisioning stage. Product-side invitation acceptance remains a separate gate.
