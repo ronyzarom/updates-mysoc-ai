@@ -289,7 +289,7 @@ func (c *DrainCoordinator) run(ctx context.Context, a *RecoveryAuthorization) (j
 	if e != nil {
 		return j, e
 	}
-	if !c.validResponse(r, j) || r.AuthorizationID != claims.AuthorizationID || !paused(r) || !r.Quiescent || r.NodeEvidenceObservedAt == nil || r.NodeEvidenceObservedAt.After(c.now()) || c.now().Sub(*r.NodeEvidenceObservedAt) > 5*time.Second {
+	if !c.validResponse(r, j) || r.AuthorizationID != claims.AuthorizationID || !paused(r) || !r.Quiescent || r.NodeEvidenceObservedAt == nil || r.NodeEvidenceObservedAt.After(r.ObservedAt) || c.now().Sub(*r.NodeEvidenceObservedAt) > 5*time.Second {
 		return j, errors.New("drain did not prove paused")
 	}
 	j.Phase = "paused"

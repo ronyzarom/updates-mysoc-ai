@@ -9,7 +9,8 @@ Run: `/private/test-root/coordinator --config /private/test-root/case.json`
 Config fields: isolated=true, test_id, evidence_tier, mode, directory,
 adapter_command (absolute executable + fixed arguments), timeout_seconds (1..60),
 binding, authorization, artifact, observer_public_key, release_public_key.
-Modes: maintenance-v1, recovery-v2, next-operation, readiness. Relevant wire objects
+Modes: maintenance-v1, recovery-v2, next-operation, readiness, drain-discovery,
+drain-recovery. Relevant wire objects
 are the exact pkg/podmaintenance structs/canonical fixtures. The driver checks
 retained artifact signature/checksum before v1, as the normal delivery path does.
 V2/next-operation coordinators independently verify their retained artifacts.
@@ -74,3 +75,11 @@ both target/predecessor outcomes, interrupted apply->recover, unsupported/not-re
 refusal, lost next-operation authorization and three archival crash checkpoints.
 Additional package tests cover expired/revoked/replayed grants, exact identities,
 retained tamper and v1/v2 separation. These results remain component evidence.
+
+## Real product fixture submission
+
+See [PRODUCT-FIXTURE-CONTRACT.md](PRODUCT-FIXTURE-CONTRACT.md) for the exact fixture
+interface and action/type table. Product plans require pinned `product_binaries`
+and explicit reset/ready/verify/stop commands. The suite validates binaries before
+each step and includes drain journals/archives in evidence. Fixture validation is
+not product qualification; do not relabel a synthetic lifecycle as real-host work.

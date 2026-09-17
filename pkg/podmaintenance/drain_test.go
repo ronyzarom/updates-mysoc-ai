@@ -110,6 +110,9 @@ func TestDrainProcessHelper(t *testing.T) {
 			os.WriteFile(filepath.Join(dir, "paused"), []byte("paused"), 0600)
 		}
 	}
+	if cfg.Fault == "evidence-after-observation" && action == "resume-drain" {
+		r.ObservedAt = now.Add(-time.Second)
+	}
 	if cfg.Fault == "reply:"+action {
 		if f, e := os.OpenFile(filepath.Join(dir, "injected"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600); e == nil {
 			f.Close()
@@ -328,5 +331,17 @@ func TestDrainToRecoveryRequiresSeparateGrantAndPausedProof(t *testing.T) {
 				t.Fatal(out, e)
 			}
 		})
+	}
+}
+
+func TestDrainRefusesEvidenceAfterResponseObservation(t *testing.T) {
+	dir, c, _ := drainFixture(t)
+	c.Fault = "evidence-after-observation"
+	if runDrainProcess(t, dir, c) == nil {
+		t.Fatal("evidence measured after response observation accepted")
+	}
+	j, e := ReadDrainJournal(dir)
+	if e != nil || j.Phase == "paused" {
+		t.Fatal("invalid response recorded paused", j, e)
 	}
 }

@@ -1,0 +1,2 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/podmaintenance	53.339s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/cmd/pod-maintenance-qualification	(cached)

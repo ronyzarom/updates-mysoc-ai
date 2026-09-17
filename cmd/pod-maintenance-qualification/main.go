@@ -150,7 +150,7 @@ func execute(path string) error {
 		return fmt.Errorf("unsupported qualification mode")
 	}
 	files := map[string]string{}
-	for _, name := range []string{"operation.json", "recovery-v2.json", "next-operation.json"} {
+	for _, name := range []string{"operation.json", "drain-v1.json", "recovery-v2.json", "next-operation.json"} {
 		if raw, err := os.ReadFile(filepath.Join(c.Directory, name)); err == nil {
 			h := sha256.Sum256(raw)
 			files[name] = hex.EncodeToString(h[:])
