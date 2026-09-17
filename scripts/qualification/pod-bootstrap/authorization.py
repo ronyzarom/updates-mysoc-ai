@@ -52,3 +52,78 @@ def validate_ack(sent, action, raw, intended_authorization_id, intended_expires_
         raise ValueError('different authorization requires explicit reconciliation')
     # Even an authorized response is not an execution/activation permission.
     return ack
+
+
+def verify_invitation(invitation, pinned_key, expected, now_ns, require_current=True):
+    """Validate detached exact-byte Ed25519 signature, scope and current lifetime."""
+    import base64
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    if not isinstance(invitation, dict) or set(invitation) != {'payload_base64', 'signature'}:
+        raise ValueError('exact invitation envelope required')
+    if len(invitation['payload_base64']) > 5464 or len(invitation['signature']) > 88:
+        raise ValueError('oversized invitation')
+    raw=base64.b64decode(invitation['payload_base64'],validate=True)
+    if len(raw)>4096:raise ValueError('oversized invitation payload')
+    Ed25519PublicKey.from_public_bytes(pinned_key).verify(
+        base64.b64decode(invitation['signature'],validate=True),b'mysoc-pod-bootstrap-invitation-v1\n'+raw)
+    claims=protocol.strict_json(raw)
+    fields={'protocol','authorization_id','operation_id','registry_sha256','node_id','input_sha256','issued_at','expires_at'}
+    if not isinstance(claims,dict) or set(claims)!=fields:
+        raise ValueError('exact invitation claims required')
+    if claims['protocol']!='pod-bootstrap-invitation-v1' or not re.fullmatch(IDENTIFIER,claims['authorization_id']):
+        raise ValueError('invalid invitation identity')
+    for field in ('operation_id','registry_sha256','node_id','input_sha256'):
+        if claims[field]!=expected[field]:raise ValueError('invitation binding mismatch')
+    def nanos(value):
+        seconds,fraction=timestamp(value)
+        return int(seconds.timestamp())*1_000_000_000+fraction
+    issued,expires=nanos(claims['issued_at']),nanos(claims['expires_at'])
+    if not 0<expires-issued<=3600*1_000_000_000 or (require_current and not issued<=now_ns<expires):
+        raise ValueError('invitation expired, future-dated or excessive lifetime')
+    return claims
+
+
+class Coordinator:
+    """Authorization-only transport integration. Does not execute provisioning."""
+    def __init__(self, registration, invitation, pinned_key, journal, wall_clock=None):
+        import time
+        self.registration=registration
+        self.invitation=invitation
+        self.pinned_key=pinned_key
+        self.path=journal
+        self.wall_clock=wall_clock or time.time_ns
+
+    def run_locked(self, generation):
+        import http.client
+        import hashlib
+        import json
+        import client
+        r=self.registration
+        expected=dict(operation_id=r.registry['operation_id'],registry_sha256=r.fingerprint,
+                      node_id=r.node_id,input_sha256=r.input_hash)
+        existed=self.path.exists()
+        claims=verify_invitation(self.invitation,self.pinned_key,expected,self.wall_clock(),require_current=not existed)
+        binding=dict(expected,generation=generation,authorization_id=claims['authorization_id'],
+                     expires_at=claims['expires_at'],authorization_key_sha256=hashlib.sha256(self.pinned_key).hexdigest())
+        if existed:
+            state=protocol.strict_json(client.protected(self.path))
+            if set(state)!={'binding','phase'} or state['binding']!=binding or state['phase'] not in ('intent','authorized','authorization-expired'):
+                raise ValueError('authorization change requires explicit reconciliation')
+        else:
+            client.durable(self.path,{'binding':binding,'phase':'intent'})
+        def call(action):
+            remaining=r.deadline-r.clock()
+            if remaining<=0:raise TimeoutError('authorization deadline reached')
+            if action=='authorize':
+                verify_invitation(self.invitation,self.pinned_key,expected,self.wall_clock())
+            sent=request(r.registry,r.fingerprint,r.node_id,action,generation,r.input_hash,
+                         self.invitation if action=='authorize' else None)
+            return validate_ack(sent,action,r.transport.call(action,sent,min(10,remaining)),
+                                claims['authorization_id'],claims['expires_at'])
+        if existed:
+            ack=call('authorization-status')
+        else:
+            try:ack=call('authorize')
+            except (OSError,http.client.HTTPException):ack=call('authorization-status')
+        client.durable(self.path,{'binding':binding,'phase':ack['phase']})
+        return dict(ack,installation_complete=False)

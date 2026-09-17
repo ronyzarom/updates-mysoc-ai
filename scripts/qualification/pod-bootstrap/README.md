@@ -109,3 +109,15 @@ reconciliation. A newer renewal is a conflict, not evidence the old invitation
 was accepted. Expired status can be inspected but cannot count as authorize
 success. No network integration or stage execution is enabled by this helper.
 The expanded suite passes 29 tests; native endpoint integration remains pending.
+
+Authorization transport integration now follows registration in the isolated
+client. It verifies the detached Ed25519 invitation using the separately pinned
+hex authorization key, exact original binding, UTC lifetime (maximum one hour),
+and exact-byte signature domain. Intent is persisted before authorize. A lost
+response or existing receipt uses authorization-status with exact invitation
+identity/expiry checks. Expired existing invitations permit read-only status;
+expired invitations never initiate authorize. The expanded suite passes 35
+local tests. This is mocked endpoint integration plus real transport qualification,
+not independent evidence of the product's native endpoint tests. Explicit renewal
+reconciliation and no-authorization-409 recovery remain fail-closed manual
+integration gates. No provisioning stage execution or kit shipment is enabled.

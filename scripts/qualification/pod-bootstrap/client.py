@@ -267,8 +267,16 @@ def main():
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         binding={'registry_sha256':fingerprint,'node_id':config['node_id'],'input_sha256':digest,
                  'transport':config['observer'],'public_key_hex':pin.hex()}
-        result=Coordinator(registry,fingerprint,config['node_id'],digest,transport,
-            directory/'registration.json',binding,config['timeout_seconds']).run_locked()
+        registration=Coordinator(registry,fingerprint,config['node_id'],digest,transport,
+            directory/'registration.json',binding,config['timeout_seconds'])
+        result=registration.run_locked()
+        import authorization
+        authorization_key=bytes.fromhex(protected(coordinator['authorization_key_file']).decode().strip())
+        if len(authorization_key)!=32 or authorization_key==pin:
+            raise ValueError('distinct independently pinned authorization key required')
+        invitation=strict_json(protected(coordinator['invitation_file']))
+        result=authorization.Coordinator(registration,invitation,authorization_key,
+            directory/'authorization.json').run_locked(result['generation'])
         print(json.dumps(result))
 
 if __name__=='__main__':
