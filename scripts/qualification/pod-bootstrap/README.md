@@ -325,3 +325,19 @@ observations; receipts measured4517/12566bytes. Evidence:
 `docs/verification/pod-readiness-runner-20260917`. Receiver5second freshness passed;
 product binary predates only its final internal5second deadline and must be rerun
 before a candidate. No overall operational readiness/activation qualification.
+
+## Paused app/archiver management observation
+
+`management.py` prepares the exact host `pod-bootstrap-management --config` call
+and validates its distinct management-paused-verified receipt. Image and effective
+environment digests must come from reviewed rendered inputs plus signed image
+metadata, never learned from running containers. It requires ordered app/archiver
+records, distinct container IDs, exact image/environment/version/node, generation0,
+managementready/paused/quiescent/unblocked state and false activation/completion.
+Observations expire after5seconds; repeated observation always executes again.
+The bounded host runner verifies signed-binary expectations, root-protected binary
+before/after, exact management config bytes and authenticated data-binding bytes
+before/after. No service installation/start, grants or routing changes occur.
+99 tests discovered98pass1Linux-onlyskip. Management callback is fixture-tested;
+real host/common-image integration with independent expectation derivation remains
+pending. Installation and host acceptance are still separate product contracts.
