@@ -15,12 +15,15 @@ publishing them does not change fleet assignments, holds or release targets.
 
 ## Packaging and maintenance
 
-`scripts/packaging/admin_repository.py` takes an existing published binary,
-its signature receipt, a verified SiemCore provisioning kit and a new output
-directory. It renders tracked templates, copies only selected verified
-provisioning modules, adds role documentation, and generates checksums and a
-JSON manifest. The initial provisioning modules are retained from the
-1.16.1.23 SiemCore kit; PROVISIONING_COMMIT records their source.
+`scripts/packaging/admin_repository.py` takes `--binary`, `--receipt`,
+`--provisioning-source`, `--package-revision` (for example `r2`) and `--output`.
+It reuses an existing published updater binary and copies the matching hook from
+committed, clean SiemCore source; `PROVISIONING_COMMIT` records that source.
+It adds role and clean-install parameter documentation, checksums and a manifest.
+The original r1 packages used the 1.16.1.23 provisioning kit. New schema 3 packages
+must not reuse that historical hook; the script no longer accepts
+`--provisioning-kit`. Both the chosen updater binary and product hook must be
+qualified for the advertised installation types before publication.
 
 Do not overwrite published versioned archives. Use a new package revision for
 packaging changes, even when the updater binary remains unchanged. Extend the

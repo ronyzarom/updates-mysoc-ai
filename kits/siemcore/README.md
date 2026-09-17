@@ -13,6 +13,8 @@ mysoc relay  ◀── heartbeat + rollup ── THIS NODE (siemcore-cascade-upd
 
 See [installation commands by server role](docs/SIEMCORE-INSTALLATION-ROLES.md) in generated kits
 (source guide: `docs/SIEMCORE-INSTALLATION-ROLES.md` at repository root).
+See also [clean-install parameters](docs/SIEMCORE-CLEAN-INSTALL-PARAMETERS.md)
+for required per-role inputs and application settings.
 Testing pod nodes follow the normal `stable` updater channel and `alpha` fleet group.
 
 ## Naming and ports (important on v3 hosts)

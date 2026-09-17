@@ -78,7 +78,7 @@ for tier in "${TIERS[@]}"; do
     chmod +x "$OUT/install.sh"
 
     echo "==> $tier: bundling docs (stamped)"
-    for doc in RELAY-DEPLOYMENT.md UPDATER-GUIDELINES.md UPDATE-ENTRYPOINT-CONTRACT.md SIEMCORE-INSTALLATION-ROLES.md; do
+    for doc in RELAY-DEPLOYMENT.md UPDATER-GUIDELINES.md UPDATE-ENTRYPOINT-CONTRACT.md SIEMCORE-INSTALLATION-ROLES.md SIEMCORE-CLEAN-INSTALL-PARAMETERS.md; do
         {
             echo "<!-- bundled with ${KIT_NAME} ${VERSION} (commit ${COMMIT}) -->"
             cat "docs/$doc"

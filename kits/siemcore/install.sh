@@ -215,6 +215,11 @@ render_config() {
     echo "    config rendered: instance=$INSTANCE_ID parent=$PARENT_URL version=$CURRENT_VERSION mode=$MODE"
 }
 
+# Validate the complete envelope before creating users or rewriting configuration.
+if [[ -n "$GREENFIELD_INPUT" ]]; then
+    python3 ./greenfield-bootstrap.py --validate-input "$GREENFIELD_INPUT"
+fi
+
 # Validate type/binary compatibility before modifying the installed host.
 if [[ -n "$MODE" ]]; then
     identity_preflight=$(mktemp)

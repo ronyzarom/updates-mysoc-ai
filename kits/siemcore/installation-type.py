@@ -29,11 +29,13 @@ def validate_identity(kind, pod_id='', node_id=''):
 
 def from_application(app, requested=''):
     shape = (app.get('schema'), app.get('topology'))
-    if shape == (1, 'single'):
+    if type(app.get('schema')) is not int:
+        raise ValueError('invalid bootstrap schema')
+    if shape in ((1, 'single'), (3, 'single')):
         if requested and requested != 'normal':
             raise ValueError('standalone bootstrap conflicts with server type')
         return validate_identity('normal')
-    if shape != (2, 'pod'):
+    if shape not in ((2, 'pod'), (3, 'pod')):
         raise ValueError('unsupported bootstrap topology')
     role = app.get('pod_role')
     if role not in ('a', 'b', 'witness'):

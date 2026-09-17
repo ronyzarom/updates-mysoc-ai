@@ -6,6 +6,10 @@ Installation identity is recorded through `--server-type` (`normal`, `pod-active
 installation may derive these fields from the protected `--greenfield-input` JSON.
 Bootstrap is an artifact type, not a pod role.
 
+See [clean-install parameter reference](SIEMCORE-CLEAN-INSTALL-PARAMETERS.md) for
+required CLI/JSON inputs, per-role credentials, storage paths, and the current
+LLM/archive provisioning gap.
+
 ## Agreed role lifecycle contract (2026-09-17)
 
 This is the required product behavior, not a claim that all executors are implemented

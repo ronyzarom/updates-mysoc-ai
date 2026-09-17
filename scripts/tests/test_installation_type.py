@@ -32,6 +32,15 @@ class InstallationTypeTests(unittest.TestCase):
         self.assertEqual(m.from_application(dict(schema=1,topology='single'))['server_type'], 'normal')
         self.assertEqual(m.from_application(dict(schema=2,topology='pod',cluster_id='pod',pod_role='witness'))['server_type'],'pod-observer')
 
+    def test_schema_three_preserves_role_isolation(self):
+        self.assertEqual(m.from_application(dict(schema=3,topology='single'))['server_type'],'normal')
+        for role,node in [('a','1'),('b','2'),('witness','witness')]:
+            identity=m.from_application(dict(schema=3,topology='pod',cluster_id='pod',pod_role=role))
+            self.assertEqual(identity['node_id'],node)
+            self.assertEqual(identity['server_type'],'pod-observer' if role=='witness' else 'pod-stby')
+        for schema,topology in [(True,'single'),(4,'pod'),(2,'single'),(1,'pod')]:
+            with self.assertRaises(ValueError):m.from_application(dict(schema=schema,topology=topology))
+
     def test_conflicts_and_yaml_injection_refused(self):
         for args in [('normal','pod','1'),('pod-active','pod','witness'),('pod-observer','pod','1'),('pod-stby','pod\nrelay:','1'),('unknown','','')]:
             with self.subTest(args=args), self.assertRaises(ValueError):m.validate_identity(*args)

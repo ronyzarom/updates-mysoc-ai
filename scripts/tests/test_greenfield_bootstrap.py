@@ -47,4 +47,63 @@ class InputTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'pod bootstrap role'):
             module.validate({'application':broken,'release':release})
 
+class SchemaThreeTests(unittest.TestCase):
+    def test_forwarding_and_legacy_boundaries(self):
+        import copy
+        release = {'channel':'stable','version':'3.3.152.36','sha256':'a'*64,
+                   'public_key':'b'*64,'signature':base64.b64encode(b'x'*64).decode()}
+        for topology, role in [('single',None),('pod','a'),('pod','b'),('pod','witness')]:
+            app = dict(schema=3, topology=topology, cluster_id='lab',
+                       instance_id='app', database_name='siemcore', updater_instance_id='node')
+            if role: app['pod_role'] = role
+            feature = 'allocation_observer' if role == 'witness' else 'archive'
+            app[feature] = {'opaque_product_owned_value':'preserve-me'}
+            data = {'application':app,'release':release}
+            original = copy.deepcopy(data)
+            module.validate(data)
+            self.assertEqual(data, original)
+            app['schema'] = 1 if topology == 'single' else 2
+            with self.assertRaises(ValueError): module.validate(data)
+            del app[feature]
+            module.validate(data)
+            app['schema'] = 3
+            with self.assertRaises(ValueError): module.validate(data)
+        app.update(schema=True,topology='single')
+        with self.assertRaises(ValueError): module.validate(data)
+
+class InputFileTests(unittest.TestCase):
+    def test_private_file_and_parent_checks(self):
+        from unittest.mock import Mock, patch
+        import json
+        import stat
+        from types import SimpleNamespace
+        source=Mock()
+        parent=Mock()
+        source.parents=[parent]
+        def file(mode=0o600, uid=0, size=100):
+            return SimpleNamespace(st_mode=stat.S_IFREG | mode,st_uid=uid,st_size=size)
+        source.lstat.return_value=file()
+        parent.lstat.return_value=SimpleNamespace(st_mode=stat.S_IFDIR | 0o700,st_uid=0)
+        source.read_text.return_value=json.dumps({'application':{},'release':{}})
+        with patch.object(module,'validate') as validate:
+            module.read_input(source)
+            validate.assert_called_once()
+        for info in [file(0o644),file(uid=501),file(size=65537),
+                     SimpleNamespace(st_mode=stat.S_IFLNK | 0o600,st_uid=0,st_size=100)]:
+            source.lstat.return_value=info
+            with self.assertRaises(ValueError): module.read_input(source)
+        source.lstat.return_value=file()
+        parent.lstat.return_value=SimpleNamespace(st_mode=stat.S_IFDIR | 0o777,st_uid=0)
+        with self.assertRaises(ValueError): module.read_input(source)
+
+    def test_read_only_validation_does_not_invoke_services(self):
+        from unittest.mock import patch
+        with patch.object(module.os,'geteuid',return_value=0), \
+             patch.object(module.sys,'argv',['bootstrap','--validate-input','/root/input.json']), \
+             patch.object(module,'read_input',return_value={}) as read, \
+             patch.object(module.subprocess,'run') as run:
+            module.main()
+            read.assert_called_once_with(Path('/root/input.json'))
+            run.assert_not_called()
+
 if __name__ == '__main__': unittest.main()

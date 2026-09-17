@@ -46,11 +46,20 @@ def validate(data):
         raise ValueError('explicit release channel required')
     app = data['application']
     shape = (app.get('schema'), app.get('topology'))
-    if shape not in ((1, 'single'), (2, 'pod')):
+    if type(app.get('schema')) is not int or shape not in ((1, 'single'), (2, 'pod'), (3, 'single'), (3, 'pod')):
         raise ValueError('supported standalone or pod bootstrap required')
-    role = app.get('pod_role') if shape == (2, 'pod') else None
-    if shape == (2, 'pod') and role not in ('a', 'b', 'witness'):
+    role = app.get('pod_role') if app['topology'] == 'pod' else None
+    if app['topology'] == 'pod' and role not in ('a', 'b', 'witness'):
         raise ValueError('pod bootstrap role required')
+    features = {'archive', 'allocation_observer'} & set(app)
+    if (app['schema'] == 3) != bool(features):
+        raise ValueError('new bootstrap settings require explicit schema 3')
+    if 'archive' in features and role == 'witness':
+        raise ValueError('archive belongs to data installations')
+    if 'allocation_observer' in features:
+        if role != 'witness' or not app.get('updater_instance_id'):
+            raise ValueError('allocation observer requires explicit witness updater identity')
+    # Detailed feature validation belongs to the signed product executor.
     identities = ('cluster_id',)
     if role != 'witness':
         identities += ('instance_id', 'database_name')
@@ -73,15 +82,30 @@ def write_private(path, data):
         os.fsync(stream.fileno())
 
 
-def main():
-    if os.geteuid() != 0 or len(sys.argv) != 3:
-        raise ValueError('root invocation and input/kit paths required')
-    source, kit = Path(sys.argv[1]), Path(sys.argv[2])
+def read_input(source):
     info = source.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
         raise ValueError('input must be root-owned and private')
+    if info.st_size > 65536:
+        raise ValueError('bootstrap input exceeds size limit')
+    for parent in source.parents:
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('bootstrap parent must be root-owned and protected')
     data = json.loads(source.read_text())
     validate(data)
+    return data
+
+
+def main():
+    if os.geteuid() != 0 or len(sys.argv) != 3:
+        raise ValueError('root invocation and input/kit paths required')
+    if sys.argv[1] == '--validate-input':
+        read_input(Path(sys.argv[2]))
+        print('Bootstrap envelope valid; signed product validates application prerequisites.')
+        return
+    source, kit = Path(sys.argv[1]), Path(sys.argv[2])
+    data = read_input(source)
     receipt = Path('/etc/siemcore/updater-bootstrap.json')
     fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()
     if receipt.exists():
