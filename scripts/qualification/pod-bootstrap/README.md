@@ -189,3 +189,11 @@ leaves remain root-owned private. The runtime verifier must also establish that
 root-owned read-only TLS copies match PostgreSQL's TLS bytes; the PostgreSQL-owned
 private key directory cannot be mounted directly for the capability-free command.
 54 tests pass, including narrow socket exception and rejection boundaries.
+
+External native handoff now completed against the disposable arm64 common-image
+fixture: wrong generation rejected, schema preparation succeeded, exact retry
+succeeded, expired invitation rejected. See
+`docs/verification/pod-bootstrap-runner-20260917/README.md` and response receipts.
+This uses a test-signed manifest and separate fixture trust, never production
+release trust. 58 distinct local tests pass (duplicate imported unittest class
+collection removed). Full clean-POD signed-release acceptance remains outstanding.

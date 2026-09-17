@@ -1,0 +1,46 @@
+[
+  {
+    "sequence": 1,
+    "exit_code": 1,
+    "receipt": null
+  },
+  {
+    "sequence": 2,
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "native-data-bootstrap",
+      "generation": 2,
+      "node_id": "1",
+      "input_sha256": "e5f1ccc977286e0b496ce85da4c78394f9d796d3c3f444ccb135ff100712838d",
+      "registry_sha256": "08225c863dc2f17cc429674e79a547d79ba382af3f27a07d178b16c61b7d5d81",
+      "artifact_sha256": "eda5e63836cc44e6454b1d398cb627a742d4c58ec9f5bf0fc35ba4464c60d069",
+      "installed_version": "3.3.152.99",
+      "phase": "schema-prepared",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 3,
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "native-data-bootstrap",
+      "generation": 2,
+      "node_id": "1",
+      "input_sha256": "e5f1ccc977286e0b496ce85da4c78394f9d796d3c3f444ccb135ff100712838d",
+      "registry_sha256": "08225c863dc2f17cc429674e79a547d79ba382af3f27a07d178b16c61b7d5d81",
+      "artifact_sha256": "eda5e63836cc44e6454b1d398cb627a742d4c58ec9f5bf0fc35ba4464c60d069",
+      "installed_version": "3.3.152.99",
+      "phase": "schema-prepared",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 4,
+    "exit_code": 1,
+    "receipt": null
+  }
+]
