@@ -72,3 +72,20 @@ instruction or permission to enable processing. A completion receipt proves
 historical verified completion, not present application health. Actual HTTP,
 authorize/controller/completion and race qualification remains outstanding;
 durable prepare-only tests do not establish those capabilities.
+
+## Canonical quorum principal packaging gate
+
+Updates' kit does not independently author quorum RBAC; it delegates application
+installation to the signed SiemCore artifact. Before schema4 delivery, qualify
+that artifact's `pod/quorum/configure-auth.sh` with canonical controller
+principals `1` and `2` and matching issued certificate identities. Adding grant
+calls alone is insufficient if permission-selection branches still recognize
+only legacy `a/b` names. Verify the required owner/cloud-operation and bootstrap
+reads using actual authenticated principals, including watchdog intent reads.
+Controllers/updaters must remain unable to write Observer-owned assignments or
+activation authority. Preserve legacy compatibility explicitly where required.
+
+The existing source review found legacy-only grant calls/permission branches;
+SiemCore owns their correction. Updates will verify the complete signed helper
+bytes in the matching candidate/kit, not introduce a separate RBAC implementation.
+Schema4 remains disabled and no live quorum permissions were modified.
