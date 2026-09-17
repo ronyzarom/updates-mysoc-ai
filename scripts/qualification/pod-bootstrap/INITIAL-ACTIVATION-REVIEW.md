@@ -126,3 +126,17 @@ Caller conformance findings sent to SiemCore:
 
 These are source review findings, not claims of exploit reproduction or completed
 HTTP qualification. Unknown provider IDs remain unavailable, never verified absence.
+
+## HTTP conformance follow-up
+
+Revised source resolves all four findings above. Error classification preserves
+expiry/readiness/unavailable distinctions; endpoint-specific key presence rejects
+forbidden null fields; final absence proof retains registration comparisons;
+and the contract explicitly defines completed historical replay without effects.
+Reviewed product native TLS/etcd test log covering the race and request/error
+cases. No further wire mismatch identified in this review.
+
+A pending provider operation without an ID may now yield authorized state with
+`infrastructure_uncertain` and an empty operation list. The caller must not treat
+that empty list as absence, no prior effects or completion. Revised HTTP contract
+is accepted for source-only integration, not actual reader/CLI/fresh-kit delivery.
