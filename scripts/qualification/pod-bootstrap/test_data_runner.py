@@ -86,3 +86,18 @@ class RunnerTests(unittest.TestCase):
         from pathlib import Path
         leaf,info,children=self.socket_fixture()
         with patch.object(Path,'lstat',info),self.assertRaises(ValueError):r.mount_path(str(leaf))
+
+    def test_qualified_peer_namespace_requires_exact_image_network_and_ip(self):
+        target='c'*64;pgimage='sha256:'+'d'*64
+        namespace=dict(container_id=target,image_id=pgimage,network_id=NETWORK,ip_address='172.30.97.12')
+        def inspect(docker,args):
+            if args[0]=='container':return [dict(Id=target,Image=pgimage,State=dict(Running=True),
+                NetworkSettings=dict(Networks={'peer':dict(NetworkID=NETWORK,IPAddress='172.30.97.12')}))]
+            return self.inspect(docker,args)
+        with patch.object(r,'mount_path',side_effect=lambda p,**kw:p),patch.object(r,'docker_json',side_effect=inspect):
+            _,argv=r.prepare('/usr/bin/docker',IMAGE,NETWORK,MOUNTS,lambda image:None,lambda:None,lambda:999,namespace)
+            self.assertEqual(argv[argv.index('--network')+1],'container:'+target)
+            for field,value in [('container_id','e'*64),('image_id','sha256:'+'f'*64),('network_id','f'*64),('ip_address','172.30.97.3')]:
+                changed=dict(namespace);changed[field]=value
+                with self.subTest(field=field),self.assertRaises(ValueError):
+                    r.prepare('/usr/bin/docker',IMAGE,NETWORK,MOUNTS,lambda image:None,lambda:None,lambda:999,changed)

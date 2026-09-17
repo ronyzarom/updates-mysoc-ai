@@ -78,7 +78,7 @@ def mount_path(value, socket_uid=None):
     return str(p)
 
 
-def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency):
+def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,peer_namespace=None):
     """Verifier callbacks are mandatory: image presence is not signature verification.
 
     verify_artifact_image must independently verify signed artifact, image identity,
@@ -106,9 +106,24 @@ def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_ru
     network=docker_json(docker,['network','inspect',network_id])
     if len(network)!=1 or network[0]['Id']!=network_id or network[0].get('Internal') is not True or network[0].get('Driver')!='bridge':
         raise ValueError('fixed internal bridge network required')
+    selected_network=network_id
+    if peer_namespace is not None:
+        if not isinstance(peer_namespace,dict) or set(peer_namespace)!={'container_id','image_id','network_id','ip_address'}:
+            raise ValueError('exact qualification peer namespace required')
+        container_id=peer_namespace['container_id']
+        if not re.fullmatch('[0-9a-f]{64}',container_id) or peer_namespace['network_id']!=network_id:
+            raise ValueError('namespace identity/network mismatch')
+        runtime=docker_json(docker,['container','inspect',container_id])
+        if (len(runtime)!=1 or runtime[0]['Id']!=container_id or runtime[0]['Image']!=peer_namespace['image_id'] or
+                not runtime[0]['State']['Running']):
+            raise ValueError('namespace runtime identity changed')
+        peers=[n for n in runtime[0]['NetworkSettings']['Networks'].values() if n['NetworkID']==network_id]
+        if len(peers)!=1 or peers[0]['IPAddress']!=peer_namespace['ip_address']:
+            raise ValueError('namespace fixed peer IP mismatch')
+        selected_network='container:'+container_id
     authorize_runtime()
     name='updates-pod-stage-'+uuid.uuid4().hex
-    argv=[docker,'run','--name',name,'--pull=never','--network',network_id,
+    argv=[docker,'run','--name',name,'--pull=never','--network',selected_network,
           '--read-only','--user','0:0','--cap-drop=ALL','--security-opt','no-new-privileges',
           '--pids-limit','128','--memory','512m','--cpus','1',
           '--log-driver','none','--entrypoint',COMMAND[0]]
@@ -119,10 +134,10 @@ def prepare(docker,image_id,network_id,mounts,verify_artifact_image,authorize_ru
 
 
 class Runner:
-    def __init__(self,docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,timeout=300):
+    def __init__(self,docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,timeout=300,peer_namespace=None):
         if type(timeout) is not int or not 1<=timeout<=600:
             raise ValueError('bounded qualification timeout required')
-        self.settings=(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency)
+        self.settings=(docker,image_id,network_id,mounts,verify_artifact_image,authorize_runtime,verify_socket_dependency,peer_namespace)
         self.timeout=timeout
         self.container_name=None
     def __call__(self,command):

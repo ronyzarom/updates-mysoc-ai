@@ -82,9 +82,13 @@ def data_factory(node_id,node,config,authorize):
             if path.is_symlink() or not path.is_file() or path.read_bytes()!=(Path(mounts[0]['Source'])/path.name).read_bytes():
                 raise ValueError('TLS copy drift')
         return node['postgres_uid']
+    target=data_runner.docker_json(docker,['container','inspect',node['data_container']])[0]
+    pinned=data_runner.docker_json(docker,['image','inspect',node['postgres_image']])[0]
+    peer_namespace=dict(container_id=target['Id'],image_id=pinned['Id'],network_id=d['network_id'],
+                        ip_address='172.30.97.'+str(10+int(node_id)))
     return data_runner.Runner(docker,d['image_id'],d['network_id'],
         {'/run/bootstrap':node['bootstrap_root'],'/run/tls':node['tls_root'],'/run/siemcore-postgres':node['socket_root']},
-        artifact,authorize,dependency,timeout=300)
+        artifact,authorize,dependency,timeout=300,peer_namespace=peer_namespace)
 
 order=[('1','runtime'),('2','runtime'),('1','schema'),('2','schema'),('2','seed'),('1','runtime')]
 for sequence,(node_id,stage) in enumerate(order,1):

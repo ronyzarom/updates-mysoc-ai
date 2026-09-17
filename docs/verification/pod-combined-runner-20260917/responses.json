@@ -1,0 +1,127 @@
+[
+  {
+    "sequence": "1",
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "1",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "2b0a2e09229ad56716bb043149d1ce4a628adc6a8d9e78e16f103e3486812597",
+        "artifact_sha256": "67b51df39f26353cb51f4b5937df4798c2d116c5915ecdaf618a7e53d4833a64"
+      },
+      "configuration_sha256": "efa588f4264157827e692049028c496a35dcef5948822731bf40cffc0a2d8792",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  },
+  {
+    "sequence": "2",
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "2",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "7bf9f99a23eafa5f7e1a23c572e0f38e7395925b0a1856eacacae84b58de6a07",
+        "artifact_sha256": "67b51df39f26353cb51f4b5937df4798c2d116c5915ecdaf618a7e53d4833a64"
+      },
+      "configuration_sha256": "1e22c34948603cbd628bbc2e678dbdf70d6f1a8537b13c53a989b75cd39f9eb8",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  },
+  {
+    "sequence": "3",
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "1",
+      "input_sha256": "2b0a2e09229ad56716bb043149d1ce4a628adc6a8d9e78e16f103e3486812597",
+      "registry_sha256": "5a4ace02c4e2929fb44d9575646d7342b3090febcf446c2ccd89c395d2082ccc",
+      "artifact_sha256": "67b51df39f26353cb51f4b5937df4798c2d116c5915ecdaf618a7e53d4833a64",
+      "installed_version": "3.3.152.99",
+      "phase": "schema-prepared",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": "4",
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "2",
+      "input_sha256": "7bf9f99a23eafa5f7e1a23c572e0f38e7395925b0a1856eacacae84b58de6a07",
+      "registry_sha256": "5a4ace02c4e2929fb44d9575646d7342b3090febcf446c2ccd89c395d2082ccc",
+      "artifact_sha256": "67b51df39f26353cb51f4b5937df4798c2d116c5915ecdaf618a7e53d4833a64",
+      "installed_version": "3.3.152.99",
+      "phase": "schema-prepared",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": "5",
+    "exit_code": 1,
+    "receipt": null
+  },
+  {
+    "sequence": "5-retry",
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-data-v1",
+      "operation_id": "combined-bootstrap-native",
+      "generation": 2,
+      "node_id": "2",
+      "input_sha256": "7bf9f99a23eafa5f7e1a23c572e0f38e7395925b0a1856eacacae84b58de6a07",
+      "registry_sha256": "5a4ace02c4e2929fb44d9575646d7342b3090febcf446c2ccd89c395d2082ccc",
+      "artifact_sha256": "67b51df39f26353cb51f4b5937df4798c2d116c5915ecdaf618a7e53d4833a64",
+      "installed_version": "3.3.152.99",
+      "phase": "selected-synchronization-configured",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": "6",
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-data-stage-v1",
+      "identity": {
+        "protocol": "pod-independent-data-v1",
+        "pod_id": "observer-qualification-pod",
+        "node_id": "1",
+        "database": "siemcore"
+      },
+      "binding": {
+        "operation_id": "combined-bootstrap-native",
+        "generation": 2,
+        "input_sha256": "2b0a2e09229ad56716bb043149d1ce4a628adc6a8d9e78e16f103e3486812597",
+        "artifact_sha256": "67b51df39f26353cb51f4b5937df4798c2d116c5915ecdaf618a7e53d4833a64"
+      },
+      "configuration_sha256": "efa588f4264157827e692049028c496a35dcef5948822731bf40cffc0a2d8792",
+      "phase": "data-services-ready",
+      "processing_enabled": false,
+      "installation_complete": false
+    }
+  }
+]

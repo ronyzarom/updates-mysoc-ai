@@ -296,3 +296,11 @@ worker/data runner and persists only bound partial receipts. This consumer is
 syntax-checked but not executed yet: product fixture launch paused on local Docker
 disk exhaustion and correction of initially shared release/authorization test keys.
 No old descriptor is accepted as a substitute for corrected fixture preflight.
+
+Combined native run completed runtime1/runtime2/schema1/schema2/seed2/runtime1retry
+with real test-bundle verification and mTLS authorization. First seed attempt was
+correctly rejected by fixed-peer HBA; the reviewed same-operation retry used an
+independently verified target PostgreSQL network namespace and passed without
+weakening HBA or changing original input. Initial consumer now uses this path.
+Evidence and explicit qualification limits are in
+`docs/verification/pod-combined-runner-20260917`.85 local tests discovered84pass1skip.
