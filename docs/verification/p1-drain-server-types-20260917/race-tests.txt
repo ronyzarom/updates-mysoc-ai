@@ -1,0 +1,3 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/podmaintenance	53.139s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatersim	10.414s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/cmd/pod-maintenance-qualification	(cached)

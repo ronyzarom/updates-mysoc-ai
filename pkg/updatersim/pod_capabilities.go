@@ -13,6 +13,16 @@ func (s *Simulator) podCapabilities(ctx context.Context, product string) (string
 		return "", nil, fmt.Errorf("product not configured")
 	}
 	role := p.DeploymentRole
+	if p.ServerType != "" {
+		mapped, err := serverTypeRole(p.ServerType)
+		if err != nil {
+			return "", nil, err
+		}
+		if role != "" && role != mapped {
+			return "", nil, fmt.Errorf("server type conflicts with deployment role")
+		}
+		role = mapped
+	}
 	cfg := s.config.Simulation.Filesystem.PodMaintenance
 	if product != "siemcore" || cfg == nil {
 		return role, nil, nil

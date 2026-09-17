@@ -123,6 +123,9 @@ func (s *Simulator) resumePendingPod(ctx context.Context) (bool, error) {
 	if j.Phase == "accepted" && p.CurrentVersion == b.TargetVersion {
 		return false, nil
 	}
+	if handled, err := s.resumePodDrain(ctx, j); handled {
+		return true, err
+	}
 	if handled, err := s.resumePodRecovery(ctx, j); handled {
 		return true, err
 	}

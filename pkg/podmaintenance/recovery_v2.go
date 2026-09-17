@@ -195,10 +195,12 @@ func (c *RecoveryCoordinator) Run(ctx context.Context, authorization RecoveryAut
 	}
 	// A drain grant never authorizes artifact recovery. Even a separately
 	// signed v2 grant must wait for a retained paused drain receipt.
+	drainPaused := false
 	if drain, err := ReadDrainJournal(c.Directory); err == nil {
 		if drain.Protocol != DrainProtocol || drain.Phase != "paused" || drain.Evidence == nil || !paused(*drain.Evidence) || !reflect.DeepEqual(drain.Binding, original.Binding) || drain.Generation != original.Generation {
 			return "", errors.New("drain has not reached a verified paused state")
 		}
+		drainPaused = true
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
@@ -228,6 +230,10 @@ func (c *RecoveryCoordinator) Run(ctx context.Context, authorization RecoveryAut
 	j, e := ReadRecoveryJournal(c.Directory)
 	if os.IsNotExist(e) {
 		switch original.Phase {
+		case "intent":
+			if !drainPaused {
+				return "", errors.New("lost-begin recovery requires terminal paused drain proof")
+			}
 		case "acknowledged", "applying", "applied", "completing":
 		default:
 			return "", errors.New("original phase cannot enter recovery")

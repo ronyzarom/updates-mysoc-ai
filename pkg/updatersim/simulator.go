@@ -95,6 +95,9 @@ func NewSimulator(
 		return nil, err
 	}
 	ApplyState(cfg, state)
+	if err := rememberSiemCoreInstallation(cfg, state); err != nil {
+		return nil, err
+	}
 	if cfg.Instance.ID == "" {
 		return nil, fmt.Errorf("instance id is required; configure one or run enroll")
 	}
@@ -402,13 +405,18 @@ func (s *Simulator) processOfferAttempt(
 	if err := s.verifyOfferRequirements(ctx, offer); err != nil {
 		return fmt.Errorf("updater requirements before execution: %w", err)
 	}
+	if update.Product == "siemcore" {
+		if err := s.validateSiemCoreExecution(); err != nil {
+			return err
+		}
+	}
 	if err := s.applyPolicyGrant(ctx, offer); err != nil {
 		// Policy failure has not applied the application: never invoke app rollback.
 		s.recordAttempt(update, false, "policy authorization: "+err.Error())
 		return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "policy_authorization", Stage: "prerequisite"}))
 	}
 
-	if s.config.Simulation.Filesystem.PodMaintenance != nil {
+	if update.Product == "siemcore" && s.config.Simulation.Filesystem.PodMaintenance != nil {
 		if err := s.applyPodMaintenance(ctx, update); err != nil {
 			s.recordAttempt(update, false, "pod maintenance: "+err.Error())
 			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "pod_maintenance", Stage: "maintenance"}))

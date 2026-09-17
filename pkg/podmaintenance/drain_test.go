@@ -311,3 +311,22 @@ func TestDrainDomainAndScope(t *testing.T) {
 		t.Fatal("deadline rewrite accepted")
 	}
 }
+
+func TestDrainToRecoveryRequiresSeparateGrantAndPausedProof(t *testing.T) {
+	for _, phase := range []string{"draining", "paused"} {
+		t.Run(phase, func(t *testing.T) {
+			x := makeRecovery(t, "resume-target")
+			writeJournal(filepath.Join(x.c.Directory, "operation.json"), Journal{Binding: x.b, Generation: 9, Phase: "intent"})
+			proof := DrainResponse{Protocol: DrainProtocol, Binding: x.b, Generation: 9, Phase: phase, ProcessingStopped: true, IngressStopped: true, WatchdogRetired: true, WatchdogExited: true, LeaseReleased: true}
+			writeDurableJSON(filepath.Join(x.c.Directory, "drain-v1.json"), DrainJournal{Protocol: DrainProtocol, Binding: x.b, Generation: 9, Phase: phase, Evidence: &proof})
+			out, e := x.c.Run(context.Background(), x.auth, x.a)
+			if phase == "draining" {
+				if e == nil || len(x.f.calls) != 0 {
+					t.Fatal("v2 proceeded before paused")
+				}
+			} else if e != nil || out != TargetInstalled {
+				t.Fatal(out, e)
+			}
+		})
+	}
+}

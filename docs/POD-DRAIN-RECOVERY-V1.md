@@ -141,3 +141,58 @@ Capability advertisement, updater startup integration, and deployment remain OFF
 A discovered lost-begin journal retains phase `intent`: a subsequent separately
 signed v2 handoff and drain-evidence archival integration are still required before
 that operation can apply a product artifact. The private `.25` binary is unchanged.
+
+### Explicit installation identity and startup wiring
+
+The subsequent source integration adds `products[].server_type` values `normal`,
+`pod-active`, `pod-stby`, and `pod-observer`, plus `pod_id` and `node_id`.
+Data-node IDs remain `1` or `2`; the observer ID is `witness`. Installer intent is
+persisted in updater state and restored if omitted from a later configuration.
+Changing pod membership or silently converting a pod node to normal is rejected.
+`pod-active` and `pod-stby` share coordinated maintenance: the saved label never
+substitutes for fresh observer authority. The observer role refuses data-node
+application until an observer-specific executor is qualified.
+
+Optional protected `pod_maintenance.drain` configuration supplies `protocol`,
+`observer_public_key`, `adapter_command`, and optionally `authorization_file`.
+Startup reconciles existing intent/acknowledged drain state without origin access.
+No missing grant is synthesized, and discovery never records product success.
+A terminal paused receipt plus a separately supplied recovery-v2 authorization and
+retained artifact permits the independently verified v2 path, including a recovered
+lost-begin intent. Ordinary v1 fallback remains blocked by the drain journal.
+Drain-evidence archival into the next-operation transition remains a separate
+integration gate; do not enable this source on a live host yet.
+
+Protected configuration example (illustrative only; no configuration is installed):
+
+```yaml
+products:
+  - name: siemcore
+    server_type: pod-stby
+    pod_id: example-pod
+    node_id: "2"
+simulation:
+  filesystem:
+    pod_maintenance:
+      pod_id: example-pod
+      node_id: "2"
+      journal_directory: /var/lib/cascade-updater/pod-maintenance
+      advertise_capabilities: false
+      # Existing qualified maintenance adapter argv belongs here separately.
+      adapter_command: []
+      drain:
+        protocol: pod-maintenance-drain-recovery-v1
+        observer_public_key: "<pinned Ed25519 public key in hex>"
+        adapter_command:
+          - /usr/local/libexec/siemcore
+          - pod-drain-adapter
+          - --config
+          - /etc/siemcore-pod-controller/drain-adapter.json
+        # Omit for read-only discovery. Provision only a scoped signed grant.
+        # authorization_file: /etc/cascade-updater/drain-authorization.json
+```
+
+The SiemCore adapter's separate root-protected JSON contains `pod_id`, `node_id`,
+`updater_id`, `endpoint`, `tls` (`ca`, `certificate`, `key`),
+`certificate_sha256` (pinned server leaf), and `authorization_key` (protected
+hex public-key file path). Updates does not create those credentials or grants.

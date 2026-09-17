@@ -273,6 +273,9 @@ type FilesystemConfig struct {
 // ProductConfig identifies one simulated managed product.
 type ProductConfig struct {
 	DeploymentRole       string   `yaml:"deployment_role,omitempty"`
+	ServerType           string   `yaml:"server_type,omitempty"`
+	PodID                string   `yaml:"pod_id,omitempty"`
+	NodeID               string   `yaml:"node_id,omitempty"`
 	PrerequisiteVerifier []string `yaml:"prerequisite_verifier,omitempty"`
 	Name                 string   `yaml:"name"`
 	CurrentVersion       string   `yaml:"current_version"`
@@ -590,6 +593,7 @@ func (c *Config) Product(name string) (*ProductConfig, bool) {
 // PodMaintenanceConfig explicitly enables the negotiated pod executor. Omitted
 // configurations keep the normal legacy installation flow.
 type PodMaintenanceConfig struct {
+	Drain                 *PodDrainConfig    `yaml:"drain,omitempty"`
 	AdvertiseCapabilities bool               `yaml:"advertise_capabilities,omitempty"`
 	Recovery              *PodRecoveryConfig `yaml:"recovery,omitempty"`
 	PodID                 string             `yaml:"pod_id"`
@@ -606,4 +610,12 @@ type PodRecoveryConfig struct {
 	ObserverPublicKey   string `yaml:"observer_public_key"`
 	AuthorizationFile   string `yaml:"authorization_file,omitempty"`
 	ArtifactReceiptFile string `yaml:"artifact_receipt_file,omitempty"`
+}
+
+// PodDrainConfig is provisioned locally. Offers cannot enable drain or provide keys.
+type PodDrainConfig struct {
+	Protocol          string   `yaml:"protocol"`
+	ObserverPublicKey string   `yaml:"observer_public_key"`
+	AdapterCommand    []string `yaml:"adapter_command"`
+	AuthorizationFile string   `yaml:"authorization_file,omitempty"`
 }
