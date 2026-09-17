@@ -250,3 +250,10 @@ canonical receipt-input hash, and executes only the adapter's planned health
 command. It never starts/stops authority or changes assignments. Output/time are
 bounded by the shared subprocess wrapper.75 local tests pass; the actual native
 Observer handoff remains pending the product fixture descriptor and test trust.
+
+The actual Observer host runner has now passed five disposable native handoffs:
+initial/retry/post-service-restart verification, wrong generation rejection and
+expired invitation rejection. See `docs/verification/pod-observer-runner-20260917`.
+The runner now rechecks drain/update/receipt input hashes after execution as well
+as before.76 local tests pass. This is test-signed local qualification, not full
+three-node or production-release acceptance.

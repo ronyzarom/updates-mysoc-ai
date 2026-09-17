@@ -36,3 +36,9 @@ class ObserverRunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):r.Runner(self.plan,reject)(self.plan['argv'])
             with self.assertRaises(ValueError):r.Runner(self.plan,reject)(['/bin/true'])
             call.assert_not_called()
+    def test_configuration_changed_during_execution_rejects_receipt(self):
+        def mutate(*args):
+            self.inputs[str(self.helper.root/'drain')]=b'{"changed":true}'
+            return 0,b'{}'
+        with patch.object(r,'binary_digest',return_value='a'*64),patch.object(r.data_runner,'bounded',side_effect=mutate),self.assertRaises(ValueError):
+            r.Runner(self.plan,lambda path:'a'*64)(self.plan['argv'])

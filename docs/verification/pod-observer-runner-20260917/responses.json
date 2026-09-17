@@ -1,0 +1,63 @@
+[
+  {
+    "sequence": 1,
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-observer-v1",
+      "operation_id": "bootstrap-receipt-native",
+      "generation": 2,
+      "node_id": "witness",
+      "input_sha256": "f337aaea8ae6afde1ad9f149345cf01a6415d707e406399092ea24b067bc884d",
+      "registry_sha256": "70bcae44d52b2f6ba7081979fcfa361d3793b11d5c7e03878a977578b11c38ea",
+      "artifact_sha256": "02fa7935b1e005798ae7e7cb4aa8991b9f92ca1210d31a60733312ab52aa6768",
+      "installed_version": "3.3.152.36",
+      "phase": "observer-management-verified",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 2,
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-observer-v1",
+      "operation_id": "bootstrap-receipt-native",
+      "generation": 2,
+      "node_id": "witness",
+      "input_sha256": "f337aaea8ae6afde1ad9f149345cf01a6415d707e406399092ea24b067bc884d",
+      "registry_sha256": "70bcae44d52b2f6ba7081979fcfa361d3793b11d5c7e03878a977578b11c38ea",
+      "artifact_sha256": "02fa7935b1e005798ae7e7cb4aa8991b9f92ca1210d31a60733312ab52aa6768",
+      "installed_version": "3.3.152.36",
+      "phase": "observer-management-verified",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 3,
+    "exit_code": 0,
+    "receipt": {
+      "protocol": "pod-bootstrap-observer-v1",
+      "operation_id": "bootstrap-receipt-native",
+      "generation": 2,
+      "node_id": "witness",
+      "input_sha256": "f337aaea8ae6afde1ad9f149345cf01a6415d707e406399092ea24b067bc884d",
+      "registry_sha256": "70bcae44d52b2f6ba7081979fcfa361d3793b11d5c7e03878a977578b11c38ea",
+      "artifact_sha256": "02fa7935b1e005798ae7e7cb4aa8991b9f92ca1210d31a60733312ab52aa6768",
+      "installed_version": "3.3.152.36",
+      "phase": "observer-management-verified",
+      "installation_complete": false,
+      "processing_allowed": false
+    }
+  },
+  {
+    "sequence": 4,
+    "exit_code": 1,
+    "receipt": null
+  },
+  {
+    "sequence": 5,
+    "exit_code": 1,
+    "receipt": null
+  }
+]

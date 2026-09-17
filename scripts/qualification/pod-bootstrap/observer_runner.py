@@ -39,13 +39,16 @@ class Runner:
         if argv!=self.plan['argv']:raise ValueError('Observer command differs from verified plan')
         expected=self.verify_artifact(argv[0])
         if binary_digest(argv[0])!=expected:raise ValueError('Observer executable differs from signed artifact')
-        for option,key in (('--drain-config','drain_sha256'),('--update-config','update_sha256')):
-            raw=client.protected(argv[argv.index(option)+1])
-            if hashlib.sha256(raw).hexdigest()!=self.plan[key]:raise ValueError('Observer configuration changed')
-        raw=client.protected(argv[argv.index('--receipt-config')+1])
-        canonical=json.dumps(protocol.strict_json(raw),sort_keys=True,separators=(',',':')).encode()
-        if hashlib.sha256(canonical).hexdigest()!=self.plan['config_sha256']:
-            raise ValueError('Observer receipt input changed')
+        def verify_inputs():
+            for option,key in (('--drain-config','drain_sha256'),('--update-config','update_sha256')):
+                raw=client.protected(argv[argv.index(option)+1])
+                if hashlib.sha256(raw).hexdigest()!=self.plan[key]:raise ValueError('Observer configuration changed')
+            raw=client.protected(argv[argv.index('--receipt-config')+1])
+            canonical=json.dumps(protocol.strict_json(raw),sort_keys=True,separators=(',',':')).encode()
+            if hashlib.sha256(canonical).hexdigest()!=self.plan['config_sha256']:
+                raise ValueError('Observer receipt input changed')
+        verify_inputs()
         result=data_runner.bounded(argv,self.timeout)
         if binary_digest(argv[0])!=expected:raise ValueError('Observer executable changed during verification')
+        verify_inputs()
         return result
