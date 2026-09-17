@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 from pathlib import Path
 import unittest
@@ -9,7 +10,11 @@ class OrchestrationTests(unittest.TestCase):
     def setUp(self):
         helper=test_data_stage.DataStageTests();helper.setUp();self.addCleanup(helper.doCleanups)
         self.schema=helper.config;self.root=Path(helper.temp.name)
-        self.seed=copy.deepcopy(self.schema);self.seed['seed']=dict(source_node_id='2',source_address='10.0.0.2',
+        self.schema['node']=test_data_stage.FIXTURE['registry']['nodes'][1]
+        self.original=json.dumps(dict(application=dict(schema=4,topology='pod',cluster_id=test_data_stage.FIXTURE['registry']['pod_id'],
+            selective_sync=dict(source_node_id='1',target_node_id='2',allowlist_version=2)))).encode()
+        self.digest=hashlib.sha256(self.original).hexdigest();self.schema['input_sha256']=self.digest
+        self.seed=copy.deepcopy(self.schema);self.seed['seed']=dict(source_node_id='1',source_address='10.0.0.2',
             publisher_connection_file='/run/bootstrap/publisher',apply_connection_file='/run/bootstrap/apply')
         self.calls=[];self.fail=None
     def factory(self,stage,config,plan):
@@ -18,10 +23,10 @@ class OrchestrationTests(unittest.TestCase):
             if self.fail==stage:raise TimeoutError()
             return 0,json.dumps(dict(plan['binding'],phase=plan['expected_phase'],installation_complete=False,processing_allowed=False))
         return runner
-    def run_stages(self,seed=True,node='1'):
+    def run_stages(self,seed=True,node='2'):
         f=test_data_stage.FIXTURE
-        return o.run_data_stages(f['registry'],f['registry_sha256'],node,7,'a'*64,self.schema,
-                                self.seed if seed else None,self.root,self.factory)
+        return o.run_data_stages(f['registry'],f['registry_sha256'],node,7,self.digest,self.schema,
+                                self.seed if seed else None,self.root,self.factory,original_input=self.original)
     def test_schema_then_seed_stops_before_readiness(self):
         result=self.run_stages()
         self.assertEqual(self.calls,['schema','seed'])

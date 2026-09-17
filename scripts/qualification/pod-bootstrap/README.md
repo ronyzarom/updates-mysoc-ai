@@ -234,3 +234,11 @@ The future verified runner must check artifact/configuration integrity and bound
 execution; product owns systemd MainPID, executable continuity, TLS/quorum and
 pre/post authorization checks. Native whole-service qualification remains pending.
 67 local tests pass; Observer adapter testing is fixture-only.
+
+The agreed immutable seed declaration is `application.selective_sync` in the
+original schema4 input, with exactly `{source_node_id:"1",target_node_id:"2",
+allowlist_version:2}` for this clean-rebuild qualification. Data orchestration now
+requires original input bytes, verifies their existing hash and pod/schema binding,
+and rejects an inconsistent seed target/source or unsupported allowlist version.
+The declaration never grants active/standby processing roles. The existing
+`application.bootstrap_coordinator` object is unchanged.71 local tests pass.

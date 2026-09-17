@@ -3,10 +3,11 @@ from pathlib import Path
 import client
 import data_stage
 import protocol
+import selective_sync
 
 
 def run_data_stages(registry,fingerprint,node_id,generation,input_sha256,schema_config,
-                    seed_config,journal_directory,verified_runner_factory):
+                    seed_config,journal_directory,verified_runner_factory,*,original_input):
     """Caller has registered/authorized original operation and locked private dir.
 
     Every factory-created runner must reverify artifact, runtime and current
@@ -16,6 +17,7 @@ def run_data_stages(registry,fingerprint,node_id,generation,input_sha256,schema_
     """
     if node_id not in ('1','2'):
         raise ValueError('Observer requires its own product bootstrap contract')
+    selective_sync.validate(original_input,registry,input_sha256,node_id,seed_config)
     if 'seed' in schema_config:
         raise ValueError('schema preparation config must omit seed')
     configs=[('schema',schema_config)]
