@@ -21,3 +21,9 @@ Do not copy real customer inputs into this fixture.
 Normal .44 universal legacy bootstrap would build Patroni on an empty host.
 SiemCore is preparing a pinned bootstrap dependency variant from the same product
 tree. Do not bypass this by allowing arbitrary build/downloads during execution.
+
+Native rerun on fresh A's isolated container passed real installer/type dispatch,
+signed delivery/root-hook execution, exact retry and changed-input refusal.
+Product .44 fails first on missing shasum; a second fresh fixture with that test
+utility reaches an attempted public Patroni base-image pull, blocked by no network.
+The real host stays empty. See docs/NORMAL-CLEAN-A-HANDOFF.md.

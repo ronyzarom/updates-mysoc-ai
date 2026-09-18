@@ -67,7 +67,7 @@ objects: `application` and `release`.
 
 `archive` has exactly `backend: gcs`, `project_id: siemcore-cluster-cyfox`,
 `bucket: siemcore-archive-bezeq-pod-test`, `location: me-west1`,
-`storage_class: STANDARD`, product-approved integer `retention_days` (1–36500),
+`storage_class: STANDARD`, confirmed existing `retention_days: 730`,
 `auto_provision: false`, and `authentication` either `{ "mode": "adc" }` with
 verified runtime IAM or `{ "mode": "file", "path": "/root/provisioning/gcp-archiver.json" }`.
 File credentials must be separately root-provisioned; never included in the kit.
@@ -86,3 +86,26 @@ PostgreSQL/Redis, ingestion and detection, real GCS upload/download/checksum,
 paid AI disabled, same-input interrupted retry, and cascade success reporting.
 Normal health must not depend on Observer availability. Preserve customer/DNS/IP
 identity, never copy an old database, and keep the benchmark hold unchanged.
+
+## Native result — 2026-09-19
+
+Literal kit1.16.1.33-r1 on isolated Linux amd64/systemd passed installer execution,
+Normal identity persistence, relay heartbeat, signed .44 artifact download/checksum,
+and invocation of the real product root hook. Exact installer retry preserved
+bootstrap receipts; altered input was refused. No successful application version
+was recorded after product failure.
+
+Product blockers found in immutable .44:
+
+1. DB role requires `shasum`, omitted from its prerequisite check. SiemCore has
+   committed a coreutils `sha256sum` fix for the next artifact.
+2. After providing that utility in disposable fixture infrastructure only, Normal
+   bootstrap attempts a Patroni build and public `postgres:16-bookworm` pull.
+   Fixture network isolation prevented it. This is **not** a passing product
+   prerequisite guard. SiemCore must support verified preloaded dependencies and
+   explicit missing/mismatch errors before publication.
+
+Fixture was synthetic, no host mounts/socket/published ports or customer calls.
+The actual new A VM is `1028971160940844512`, disk `4748909320316392928`;
+new updater identity is `siemcore-normal-db91d16e-97a5-452d-ae54-6db5c6d8f3bf`
+(not enrolled yet). Full product/UI/GCS acceptance remains pending.

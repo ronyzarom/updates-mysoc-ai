@@ -1,0 +1,11 @@
+{
+  "vm_id": "1028971160940844512",
+  "scope": "native isolated synthetic Normal fixture on fresh A",
+  "fixture_containers_removed": ["updates-normal-clean-20260919", "updates-normal-clean-20260919-r2"],
+  "host_docker_containers_remaining": 0,
+  "host_docker_volumes_remaining": 0,
+  "host_siemcore_role_directories": [],
+  "host_product_policy_absent": true,
+  "host_product_state_absent": true,
+  "host_application_deployed": false
+}

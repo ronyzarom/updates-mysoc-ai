@@ -76,7 +76,9 @@ try:
     while not records['reports'] and time.monotonic()<deadline:time.sleep(1)
     assert records['reports'], 'no apply report within timeout'
     (root/'first-report.json').write_text(json.dumps(records['reports'][0],indent=2))
-    assert records['reports'][0]['success'] is True, records['reports'][0]
+    if records['reports'][0]['success'] is not True:
+        print('Product apply refused; see /etc/normal-qualification/first-report.json')
+        raise SystemExit(2)
     containers_before=subprocess.check_output(['docker','ps','-q'],text=True).splitlines()
     retry=subprocess.run(command,capture_output=True,text=True,timeout=90)
     (root/'kit-retry.log').write_text(retry.stdout+retry.stderr)

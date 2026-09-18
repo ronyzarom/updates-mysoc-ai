@@ -1,0 +1,8 @@
+{
+  "artifact_digest": "d64f270af60b756cf0062cef897c56d5fecfecff25c1a83323453655d5d8d22f",
+  "instance_id": "fixture-normal-updater",
+  "from_version": "0.0.0",
+  "to_version": "3.3.152.44",
+  "success": false,
+  "error": "apply: restart service: restart command failed: exit status 1: sudo: unable to resolve host 56df254e1591: Temporary failure in name resolution\ngreenfield provisioning failed: RuntimeError; inspect protected install log\ngreenfield hook failed: CalledProcessError; rollback: restart command failed: exit status 1: sudo: unable to resolve host 56df254e1591: Temporary failure in name resolution\ngreenfield hook failed: ValueError"
+}

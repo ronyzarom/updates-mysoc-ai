@@ -1,0 +1,12 @@
+{
+  "updater_version": "1.16.1.33",
+  "kit_version": "1.16.1.33-r1",
+  "native_architecture": "amd64",
+  "normal_installation_identity": {
+    "server_type": "normal"
+  },
+  "exact_installer_retry_preserved_receipts": true,
+  "changed_input_refused": true,
+  "no_product_success_recorded": true,
+  "application_qualified": false
+}
