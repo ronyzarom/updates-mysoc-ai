@@ -1,0 +1,3 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatersim	10.561s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatecapability	1.054s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/signing	0.746s

@@ -1,0 +1,8 @@
+{"event": "updater_restart", "old_pid": "9993", "new_pid": "10338", "product_pid_unchanged": "10169"}
+{"sample": 0, "elapsed_seconds": 0, "product_pid": "10169", "updater_pid": "10338", "ui_status": 401, "version": "3.3.152.38", "journals_unchanged": true, "health": "passed"}
+{"sample": 1, "elapsed_seconds": 50, "product_pid": "10169", "updater_pid": "10338", "ui_status": 401, "version": "3.3.152.38", "journals_unchanged": true, "health": "passed"}
+{"sample": 2, "elapsed_seconds": 100, "product_pid": "10169", "updater_pid": "10338", "ui_status": 401, "version": "3.3.152.38", "journals_unchanged": true, "health": "passed"}
+{"sample": 3, "elapsed_seconds": 150, "product_pid": "10169", "updater_pid": "10338", "ui_status": 401, "version": "3.3.152.38", "journals_unchanged": true, "health": "passed"}
+{"sample": 4, "elapsed_seconds": 200, "product_pid": "10169", "updater_pid": "10338", "ui_status": 401, "version": "3.3.152.38", "journals_unchanged": true, "health": "passed"}
+{"sample": 5, "elapsed_seconds": 250, "product_pid": "10169", "updater_pid": "10338", "ui_status": 401, "version": "3.3.152.38", "journals_unchanged": true, "health": "passed"}
+{"sample": 6, "elapsed_seconds": 300, "product_pid": "10169", "updater_pid": "10338", "ui_status": 401, "version": "3.3.152.38", "journals_unchanged": true, "health": "passed"}

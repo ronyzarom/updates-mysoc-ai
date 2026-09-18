@@ -1,0 +1,20 @@
+{
+  "updater_version": "1.16.1.27",
+  "updater_sha256": "376894f690e9b431ca897ef210c0d49d4dc9f2452e626be34dab662fc25213fc",
+  "product_version": "3.3.152.38",
+  "product_archive_sha256": "84aa84dfe594eda00b8a76ea490500598743eeb862d72cff2be44b6338be5b3a",
+  "product_binary_sha256": "f73f01a0b75e0182d92d420024760ae69598544b81d6da26a280a22b469855d6",
+  "operation_id": "5b9fce01-a90d-4c25-977f-ea6bffd999ea",
+  "operation_sha256": "59956d4a016e6b1acb8680627d8f12c15d8cfbe9708407f7d242908a051e5099",
+  "root_phase": "accepted",
+  "product_phase": "accepted",
+  "bootstrap_journal_sha256": "7d2d73e5c50ed7ef0d340e425a89a5832618498484d06cd5ee736edf9bb58499",
+  "bootstrap_policy_sha256": "9313216ea69000830a06d07cad45bed0d681f251f6f40585d4bf92b6a09f91ef",
+  "installation_id": "observer-8079452056575878166-v1",
+  "updater_instance_id": "bezeq-pod-test-observer-8079452056575878166",
+  "server_type": "observer-unlinked",
+  "automatic_executor": true,
+  "product_channel": "obs-test-20260918",
+  "self_update_channel": "stable",
+  "password_file_mode": "0o600"
+}

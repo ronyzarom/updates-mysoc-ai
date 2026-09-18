@@ -18,6 +18,9 @@ fixture is an actual compiled Go test executable. Product executable is syntheti
 The test image adds sudo to the existing local systemd fixture image during test
 infrastructure provisioning; installed code has no package/download fallback.
 
-Live qualification and signed package identities will be recorded separately.
+Live qualification and signed package identities are recorded in LIVE-RESULT.md,
+live-receipt.json, auth.json and kit-manifest.json. The source-only checkpoint
+in ../observer-security-update-20260918/ is historical; this qualification
+supersedes its first-hop-only and not-yet-deployed limitations.
 The maintenance kit permits only the known .26 binary/bootstrap hook predecessor;
 never run on Normal or linked POD hosts. Original bootstrap pins are not changed.

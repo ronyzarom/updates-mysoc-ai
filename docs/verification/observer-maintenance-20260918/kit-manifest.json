@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "packages": [
+    {
+      "product": "observer-updater-maintenance",
+      "version": "1.16.1.27",
+      "package_revision": "1.16.1.27-r1",
+      "architecture": "linux-amd64",
+      "source_commit": "8e9a211c3fbfa260f4c97a65a8a195357682405f",
+      "filename": "observer-updater-maintenance-1.16.1.27-r1-linux-amd64.tar.gz",
+      "sha256": "6023cc9781e3e7dda2a4ed8c1caeee71d1eab7467207e90e7853219575000393",
+      "size": 4288074
+    }
+  ]
+}
