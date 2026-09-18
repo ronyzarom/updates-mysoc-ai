@@ -151,3 +151,11 @@ clients omitting it later. The instance page renders a locked, read-only badge.
 There is no dashboard conversion control. Legacy instances without a recorded
 identity display **Not reported**; they are not silently classified as Normal.
 This protects administrative classification, not against a privileged host attacker.
+
+## Independent Observer
+
+Kit 1.16.1.26 adds `--server-type observer-unlinked` for schema 4 / topology
+`observer-unlinked`. It has no POD/node identity and grants no authority. See
+[clean-install parameters](SIEMCORE-CLEAN-INSTALL-PARAMETERS.md#independent-observer-bootstrap--kit-116126).
+Failed bootstrap is retained for exact retry; ordinary update/rollback is refused.
+Normal installation/update behavior is unchanged.

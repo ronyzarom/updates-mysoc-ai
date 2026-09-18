@@ -19,7 +19,7 @@ func (i *InstallationIdentity) Validate() error {
 	if i == nil {
 		return nil
 	}
-	if i.Kind == "normal" && i.PodID == "" && i.NodeID == "" {
+	if (i.Kind == "normal" || i.Kind == "observer-unlinked") && i.PodID == "" && i.NodeID == "" {
 		return nil
 	}
 	if i.Kind == "pod" && installationPodID.MatchString(i.PodID) && (i.NodeID == "1" || i.NodeID == "2" || i.NodeID == "witness") {

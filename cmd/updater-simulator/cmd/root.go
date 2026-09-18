@@ -53,7 +53,7 @@ func newRootCommand(opts *options) *cobra.Command {
 	root.AddCommand(newVersionCommand(opts))
 	root.AddCommand(&cobra.Command{Use: "installation-types", Short: "Print supported installation identity labels (not lifecycle readiness)", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), `{"schema":1,"server_types":["normal","pod-active","pod-stby","pod-observer"],"lifecycle_ready":false}`)
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), `{"schema":1,"server_types":["normal","pod-active","pod-stby","pod-observer","observer-unlinked"],"lifecycle_ready":false}`)
 			return err
 		},
 	})

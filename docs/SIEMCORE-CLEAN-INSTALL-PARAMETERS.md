@@ -272,5 +272,69 @@ uses a separate privileged credential. Bootstrap API certificate pins remain a
 separate binding. No public package includes private credentials.
 
 This mapping is reserved for the matching qualified schema-4 kit. Existing
-schema2/3 input and credential handling is unchanged. The current kit still
-rejects schema4; accepting this mapping does not enable delivery or activation.
+schema2/3 input and credential handling is unchanged. The kit still rejects schema 4 with topology `pod`; the independent
+`observer-unlinked` shape below is a separate bootstrap contract.
+
+### Independent Observer bootstrap — kit 1.16.1.26
+
+Schema 4 with **topology `observer-unlinked` only** is supported. This does not
+turn on schema-4 POD data-node provisioning or grant authority. Persisted updater
+`server_type` and reported installation `kind` are `observer-unlinked`; `pod_id`
+and `node_id` are absent. Normal and existing POD paths are unchanged.
+
+The root-owned mode-0600 envelope still has exactly `application` and `release`.
+`release` uses the existing signed product version/channel/SHA256/signature/public
+key receipt. The application contains exactly:
+
+```json
+{
+  "schema": 4,
+  "topology": "observer-unlinked",
+  "machine_id": "<exact 32-character /etc/machine-id>",
+  "installation_id": "<immutable fresh observer identity>",
+  "updater_instance_id": "<same identity as --instance-id>",
+  "management": {
+    "listen": "0.0.0.0:443",
+    "hostname": "bezeq-pod-test-observer.siemcore.ai",
+    "certificate": "/etc/ssl/siemcore/fullchain.pem",
+    "key": "/etc/ssl/siemcore/privkey.pem"
+  }
+}
+```
+
+TLS files must already exist at root-owned protected regular paths; the private
+key must be mode 0600 (or stricter). No symlinks or writable parent directories.
+Machine binding is checked before host changes and is never substituted. No POD,
+A/B, database, quorum, invitation, processing role or active assignment is accepted.
+The matching signed product supplies its `pod-observer-unlinked` implementation.
+
+Invoke the verified kit through the approved host provisioning mechanism:
+
+```sh
+sudo ./install.sh --clean --server-type observer-unlinked \
+  --greenfield-input /root/observer-bootstrap.json \
+  --instance-id "$UPDATER_ID" --parent-id mysoc-testing-mysoc-ai \
+  --parent-url "$VERIFIED_PARENT_RELAY_URL" \
+  --customer-id testing-mysoc-ai --customer-name Testing \
+  --license-key "$ENROLLMENT_CREDENTIAL" --signing-key "$PINNED_PUBLIC_KEY" \
+  --self-update-channel stable
+```
+
+Use `--ca-file` when the parent uses a private CA. Never supply invented POD/node
+identities. Old binaries refuse this installation type during preflight. This
+command installs the updater kit; application delivery remains signed cascade
+execution, not SSH application installation.
+
+On first apply, the root hook re-verifies the pinned signed archive. On interruption
+or failed health, the updater preserves staging and the product journal without
+claiming rollback. An exact version/checksum/signature retry reuses that transaction;
+a changed offer fails closed. Completed replay measures health without reinstalling.
+Ordinary independent Observer upgrades and rollback remain unsupported. Health must
+match version, binary SHA256, installation/updater identity, installed-unlinked,
+management ready, and POD/authority/processing all false. No timeout clears authority
+or transaction state.
+
+Testing uses central fleet group **alpha**, automatic updates, and local updater
+self-update channel **stable**. Group assignment must be verified after enrollment;
+the parent being alpha alone is not proof that a new child is alpha. Product release
+channel and pin are separate. No publication is implied by creating this kit.

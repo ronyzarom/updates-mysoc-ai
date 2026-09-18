@@ -430,6 +430,10 @@ func (s *Simulator) processOfferAttempt(
 			s.recordAttempt(update, false, "pod maintenance: "+err.Error())
 			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "pod_maintenance", Stage: "maintenance"}))
 		}
+	} else if p, ok := s.config.Product(update.Product); ok && update.Product == "siemcore" && p.ServerType == "observer-unlinked" {
+		if err := s.applyIndependentObserver(ctx, update); err != nil {
+			return s.failAndRollback(ctx, update, err)
+		}
 	} else {
 		if err := s.executor.Apply(ctx, update); err != nil {
 			return s.failAndRollback(ctx, update, fmt.Errorf("apply: %w", err))
@@ -469,10 +473,15 @@ func (s *Simulator) failAndRollback(
 ) error {
 	var rollbackErr error
 	var preflight *PreMutationError
-	if !errors.As(updateErr, &preflight) {
+	p, _ := s.config.Product(update.Product)
+	retainedObserver := update.Product == "siemcore" && p != nil && p.ServerType == "observer-unlinked"
+	if !retainedObserver && !errors.As(updateErr, &preflight) {
 		rollbackErr = s.executor.Rollback(ctx, update)
 	}
 	errorMessage := updateErr.Error()
+	if retainedObserver {
+		errorMessage += "; independent Observer transaction retained for exact retry; rollback unsupported"
+	}
 	if rollbackErr != nil {
 		errorMessage += "; rollback: " + rollbackErr.Error()
 	}

@@ -8,14 +8,14 @@ import re
 import stat
 import subprocess
 
-KINDS = ('normal', 'pod-active', 'pod-stby', 'pod-observer')
+KINDS = ('normal', 'pod-active', 'pod-stby', 'pod-observer', 'observer-unlinked')
 FIELDS = ('server_type', 'pod_id', 'node_id')
 
 
 def validate_identity(kind, pod_id='', node_id=''):
     if kind not in KINDS:
         raise ValueError('unknown SiemCore server type')
-    if kind == 'normal':
+    if kind in ('normal', 'observer-unlinked'):
         if pod_id or node_id:
             raise ValueError('normal installation cannot have pod identity')
     else:
@@ -31,6 +31,10 @@ def from_application(app, requested=''):
     shape = (app.get('schema'), app.get('topology'))
     if type(app.get('schema')) is not int:
         raise ValueError('invalid bootstrap schema')
+    if shape == (4, 'observer-unlinked'):
+        if requested and requested != 'observer-unlinked':
+            raise ValueError('independent Observer conflicts with server type')
+        return validate_identity('observer-unlinked')
     if shape in ((1, 'single'), (3, 'single')):
         if requested and requested != 'normal':
             raise ValueError('standalone bootstrap conflicts with server type')

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/podmaintenance"
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
+	"slices"
 )
 
 // ServerType records installer intent, never authority to activate a node.
@@ -16,8 +17,8 @@ type SiemCoreInstallation struct {
 
 func serverTypeRole(kind string) (string, error) {
 	switch kind {
-	case "normal":
-		return "normal", nil
+	case "normal", "observer-unlinked":
+		return kind, nil
 	case "pod-active", "pod-stby":
 		return "pod-node", nil
 	case "pod-observer":
@@ -49,7 +50,7 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 	if p.DeploymentRole != "" && p.DeploymentRole != role {
 		return fmt.Errorf("siemcore deployment role conflicts with server type")
 	}
-	if role == "normal" {
+	if role == "normal" || role == "observer-unlinked" {
 		if p.PodID != "" || p.NodeID != "" || cfg.Simulation.Filesystem.PodMaintenance != nil {
 			return fmt.Errorf("normal installation cannot have pod identity or executor")
 		}
@@ -95,6 +96,12 @@ func (s *Simulator) validateSiemCoreExecution() error {
 	}
 	m := s.config.Simulation.Filesystem.PodMaintenance
 	switch role {
+	case "observer-unlinked":
+		f := s.config.Simulation.Filesystem
+		expected := []string{"sudo", "-n", "/usr/local/sbin/siemcore-apply-update"}
+		if m != nil || f.ObserverMaintenance != nil || p.PodID != "" || p.NodeID != "" || f.InstallRoot != "/opt/siemcore-cascade" || !slices.Equal(f.RestartCommand, expected) || !slices.Equal(f.HealthCommand, expected) {
+			return fmt.Errorf("independent Observer requires protected bootstrap executor without pod authority")
+		}
 	case "normal":
 		if m != nil {
 			return fmt.Errorf("normal server cannot use pod executor")
@@ -119,8 +126,8 @@ func (s *Simulator) installationIdentity() *platformtypes.InstallationIdentity {
 	}
 	saved := s.state.SiemCoreInstallation
 	kind := "pod"
-	if saved.ServerType == "normal" {
-		kind = "normal"
+	if saved.ServerType == "normal" || saved.ServerType == "observer-unlinked" {
+		kind = saved.ServerType
 	}
 	result := &platformtypes.InstallationIdentity{Kind: kind, PodID: saved.PodID, NodeID: saved.NodeID}
 	if result.Validate() != nil {

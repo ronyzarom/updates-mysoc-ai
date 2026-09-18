@@ -22,7 +22,7 @@ func TestInstallationTypesNeedsNoConfiguration(t *testing.T) {
 	if e := json.Unmarshal(out.Bytes(), &response); e != nil {
 		t.Fatal(e)
 	}
-	if response.Schema != 1 || len(response.Types) != 4 || response.Ready {
+	if response.Schema != 1 || len(response.Types) != 5 || response.Ready {
 		t.Fatal(response)
 	}
 }

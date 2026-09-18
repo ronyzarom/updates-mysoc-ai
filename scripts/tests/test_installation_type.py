@@ -63,6 +63,9 @@ class InstallerCLITests(unittest.TestCase):
             result = subprocess.run(command + ['--server-type','pod-stby','--pod-id','pod','--node-id','2'], capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(config.read_text(), original)
+            result = subprocess.run(command + ['--server-type','observer-unlinked'], capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(config.read_text(), original)
             result = subprocess.run(command + ['--server-type','normal'], capture_output=True)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(m.existing_identity(config.read_text())['server_type'], 'normal')
@@ -82,3 +85,15 @@ class InstallerCLITests(unittest.TestCase):
             self.assertEqual(m.existing_identity(config.read_text()),m.validate_identity('pod-stby','pod','2'))
 
 if __name__ == '__main__':unittest.main()
+
+class IndependentObserverTests(unittest.TestCase):
+    def test_mapping_persistence_and_no_reclassification(self):
+        app=dict(schema=4,topology='observer-unlinked')
+        identity=m.from_application(app)
+        self.assertEqual(identity,dict(server_type='observer-unlinked',pod_id='',node_id=''))
+        text=m.render((ROOT/'kits/siemcore/config.yaml').read_text(),identity)
+        self.assertEqual(m.existing_identity(text),identity)
+        with self.assertRaises(ValueError):m.render(text,m.validate_identity('normal'))
+        for kind in ('normal','pod-observer','pod-active','pod-stby'):
+            with self.assertRaises(ValueError):m.from_application(app,kind)
+        with self.assertRaises(ValueError):m.validate_identity('observer-unlinked','fake-pod','witness')

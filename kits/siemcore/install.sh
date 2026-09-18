@@ -38,7 +38,7 @@ Options:
   --relay-key-file FILE    matching unencrypted private key (PEM); both required
   --greenfield-input FILE  root-owned JSON with application inputs and signed
                            first-release receipt; enables and starts provisioning
-  --server-type TYPE     normal, pod-active, pod-stby, or pod-observer
+  --server-type TYPE     normal, pod-active, pod-stby, pod-observer, observer-unlinked
   --pod-id ID            immutable pod identity (for explicit pod type)
   --node-id ID           1, 2, or witness; never inferred from active status
   --current-version V    required with --update

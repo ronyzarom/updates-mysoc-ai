@@ -107,3 +107,36 @@ class InputFileTests(unittest.TestCase):
             run.assert_not_called()
 
 if __name__ == '__main__': unittest.main()
+
+class IndependentObserverTests(unittest.TestCase):
+    def fixture(self):
+        return dict(application=dict(schema=4, topology='observer-unlinked', machine_id='a'*32,
+            installation_id='observer-1', updater_instance_id='updater-1',
+            management=dict(listen='0.0.0.0:443', hostname='observer.example.org',
+                            certificate='/etc/ssl/cert.pem', key='/etc/ssl/key.pem')),
+            release=dict(channel='stable', version='3.3.152.40', sha256='a'*64,
+                         public_key='b'*64,signature=base64.b64encode(b'x'*64).decode()))
+
+    def test_independent_no_pod_required_and_input_unchanged(self):
+        import copy
+        data=self.fixture(); before=copy.deepcopy(data)
+        module.validate(data)
+        self.assertEqual(data,before)
+        for key in ('cluster_id','pod_role','node_id','authority_enabled','nodes'):
+            bad=copy.deepcopy(data);bad['application'][key]='unwanted'
+            with self.assertRaises(ValueError):module.validate(bad)
+
+    def test_invalid_identity_management_schema_refused(self):
+        import copy
+        for field,bad in [('schema',True),('schema',3),('machine_id',''),('installation_id','../id'),('updater_instance_id','')]:
+            data=self.fixture();data['application'][field]=bad
+            with self.assertRaises(ValueError):module.validate(data)
+        for field,bad in [('listen',':80'),('hostname','host/path'),('certificate','relative'),('key','/etc/../key')]:
+            data=self.fixture();data['application']['management'][field]=bad
+            with self.assertRaises(ValueError):module.validate(data)
+
+    def test_machine_binding_is_not_rewritten(self):
+        from unittest.mock import patch
+        with patch.object(module.Path,'read_text',return_value='b'*32):
+            with self.assertRaisesRegex(ValueError,'machine binding'):
+                module.validate_local_observer(self.fixture()['application'])

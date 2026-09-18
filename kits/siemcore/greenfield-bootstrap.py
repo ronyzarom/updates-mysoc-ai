@@ -46,6 +46,9 @@ def validate(data):
         raise ValueError('explicit release channel required')
     app = data['application']
     shape = (app.get('schema'), app.get('topology'))
+    if type(app.get('schema')) is int and shape == (4, 'observer-unlinked'):
+        validate_observer(app)
+        return
     if type(app.get('schema')) is not int or shape not in ((1, 'single'), (2, 'pod'), (3, 'single'), (3, 'pod')):
         raise ValueError('supported standalone or pod bootstrap required')
     role = app.get('pod_role') if app['topology'] == 'pod' else None
@@ -67,6 +70,41 @@ def validate(data):
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,100}', app.get(name, '')):
             raise ValueError('invalid application identity')
     updater_identity(app)
+
+
+def validate_observer(app):
+    required = {'schema', 'topology', 'machine_id', 'installation_id', 'updater_instance_id', 'management'}
+    if set(app) != required:
+        raise ValueError('independent Observer requires exact identity and management fields')
+    for field in ('installation_id', 'updater_instance_id'):
+        if not isinstance(app[field], str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,100}', app[field]):
+            raise ValueError('invalid Observer identity')
+    if not isinstance(app['machine_id'], str) or not re.fullmatch(r'[0-9a-f]{32}', app['machine_id']):
+        raise ValueError('exact local machine ID required')
+    management = app['management']
+    if not isinstance(management, dict) or set(management) != {'listen', 'hostname', 'certificate', 'key'}:
+        raise ValueError('Observer management TLS settings required')
+    if management['listen'] != '0.0.0.0:443' or not isinstance(management['hostname'], str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9.-]+', management['hostname']):
+        raise ValueError('Observer HTTPS listener required')
+    for field in ('certificate', 'key'):
+        path = Path(management[field])
+        if not path.is_absolute() or '..' in path.parts:
+            raise ValueError('protected absolute TLS paths required')
+
+
+def validate_local_observer(app):
+    if app.get('topology') != 'observer-unlinked':
+        return
+    if app['machine_id'] != Path('/etc/machine-id').read_text().strip():
+        raise ValueError('Observer machine binding mismatch')
+    for field in ('certificate', 'key'):
+        path = Path(app['management'][field])
+        for item in (path, *path.parents):
+            info = item.lstat()
+            if stat.S_ISLNK(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                raise ValueError('unprotected Observer TLS path')
+        if not path.is_file() or (field == 'key' and path.stat().st_mode & 0o077):
+            raise ValueError('Observer TLS key must be private')
 
 
 def write_private(path, data):
@@ -94,6 +132,7 @@ def read_input(source):
             raise ValueError('bootstrap parent must be root-owned and protected')
     data = json.loads(source.read_text())
     validate(data)
+    validate_local_observer(data['application'])
     return data
 
 
@@ -137,7 +176,8 @@ def main():
         raise ValueError('expected one product channel')
     root = Path('/etc/siemcore')
     root.mkdir(mode=0o700, exist_ok=True)
-    data['application']['machine_id'] = Path('/etc/machine-id').read_text().strip()
+    if data['application'].get('topology') != 'observer-unlinked':
+        data['application']['machine_id'] = Path('/etc/machine-id').read_text().strip()
     write_private(root / 'greenfield.json', data['application'])
     write_private(root / 'greenfield-release.json', data['release'])
     library = Path('/usr/local/lib/siemcore-cascade')
