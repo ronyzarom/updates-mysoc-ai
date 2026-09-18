@@ -1,5 +1,11 @@
 # Independent Observer kit qualification — 2026-09-18
 
+**Latest result: live independent Observer bootstrap and five-minute stability
+acceptance passed.** See [live result](LIVE-RESULT.md), signed kit details below,
+and `final-rollup.json`. The earlier “pending” entries below are historical
+pre-enrollment observations; only the fresh Observer was subsequently assigned
+alpha and installed through the cascade. Updater-wide publication did not occur.
+
 Implemented in Updates commit 849a21f321944f85a66bff898bb3174e46a5dba3.
 Kit **1.16.1.26-r1**, Linux amd64, built from a clean detached checkout.
 Product provisioning hook/recovery source: d138647aea0cc6ab4cfb8044b75280b2cd042b62.
