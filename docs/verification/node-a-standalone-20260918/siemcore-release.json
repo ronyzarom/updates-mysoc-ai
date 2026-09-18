@@ -1,0 +1,31 @@
+{
+  "artifact_path": "/home/bitnami/updates-mysoc-ai/data/releases/siemcore/3.3.152.43/siemcore-universal-3.3.152.43.tar.gz",
+  "artifact_size": 65403094,
+  "channel": "node-a-standalone-20260918",
+  "checksum": "605b41c1903c1c1eb5d2423d0873cb2af6a147988e9f05bb5c3de627f7a6010f",
+  "created_at": "2026-09-18T17:44:43.953262Z",
+  "id": "3c935bbc-f68d-46a4-9472-b7dcaa241067",
+  "manifest": {
+    "artifacts": [
+      {
+        "arch": "",
+        "checksum": "605b41c1903c1c1eb5d2423d0873cb2af6a147988e9f05bb5c3de627f7a6010f",
+        "name": "siemcore-universal-3.3.152.43.tar.gz",
+        "size": 65403094
+      }
+    ],
+    "channel": "node-a-standalone-20260918",
+    "product": "siemcore",
+    "version": "3.3.152.43"
+  },
+  "product": "siemcore",
+  "product_name": "siemcore",
+  "release_notes": "Isolated A standalone enablement after signed root prerequisite and verified preserved data. No linked POD or Normal rollout.",
+  "released_at": "2026-09-18T17:44:43.953262Z",
+  "signature": "Mt8W3dQSvZUOdUFJT0p8hyh3wa6UUBmG1DZKsQ+B4859cVjMPQHrvMMR6elfb/4HAXJ7yWbZC9EnFGN9pc2BDw==",
+  "size": 65403094,
+  "target_groups": [
+    "alpha"
+  ],
+  "version": "3.3.152.43"
+}

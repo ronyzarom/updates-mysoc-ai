@@ -1,0 +1,31 @@
+{
+  "artifact_path": "/home/bitnami/updates-mysoc-ai/data/releases/updater-linux-amd64/1.16.1.31/updater-simulator-1.16.1.31-linux-amd64",
+  "artifact_size": 10657976,
+  "channel": "stable",
+  "checksum": "7996edbdae72e3c4573bc1694a7b5016760e52beb21e78828a905d4c3b812728",
+  "created_at": "2026-09-18T17:35:30.247184Z",
+  "id": "2decfb52-3c0e-427e-9a4f-fa25b3450060",
+  "manifest": {
+    "artifacts": [
+      {
+        "arch": "",
+        "checksum": "7996edbdae72e3c4573bc1694a7b5016760e52beb21e78828a905d4c3b812728",
+        "name": "updater-simulator-1.16.1.31-linux-amd64",
+        "size": 10657976
+      }
+    ],
+    "channel": "stable",
+    "product": "updater-linux-amd64",
+    "version": "1.16.1.31"
+  },
+  "product": "updater-linux-amd64",
+  "product_name": "updater-linux-amd64",
+  "release_notes": "Gated independent-node standalone transition support. Normal and Observer update paths preserved. Product enablement requires separate signed host-bound prerequisites.",
+  "released_at": "2026-09-18T17:35:30.247184Z",
+  "signature": "NDklFoynPaB1ucS0+k43pThw8OGh72OHkM/9XkwFAbNW1yL5U4lPJIJ1wBpLEoP7hFyClmsBeUrQh0x/2dqYBw==",
+  "size": 10657976,
+  "target_groups": [
+    "alpha"
+  ],
+  "version": "1.16.1.31"
+}

@@ -1,0 +1,58 @@
+{
+  "updater": {
+    "product": "updater-linux-amd64",
+    "version": "1.16.1.31",
+    "sha256": "7996edbdae72e3c4573bc1694a7b5016760e52beb21e78828a905d4c3b812728",
+    "size": 10657976,
+    "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
+    "signature": "NDklFoynPaB1ucS0+k43pThw8OGh72OHkM/9XkwFAbNW1yL5U4lPJIJ1wBpLEoP7hFyClmsBeUrQh0x/2dqYBw==",
+    "channel": "stable",
+    "target_groups": "alpha",
+    "release_notes": "Gated independent-node standalone transition support. Normal and Observer update paths preserved. Product enablement requires separate signed host-bound prerequisites.",
+    "filename": "updater-simulator-1.16.1.31-linux-amd64"
+  },
+  "prerequisite": {
+    "archive": "node-a-standalone-prerequisite-1.16.1.31-r1.tar.gz",
+    "files": {
+      "PACKAGE.json": "a88da5bc6e78cf1d2150f798e6fded2bb5b3edf3da9a574f8471b054dbbd31fb",
+      "component/COMPONENT.json": "be9ff65bdd0b7f6b2e101ae3f22d913134cd50062b64af74de72f4231f957555",
+      "component/QUALIFICATION.json": "5011a9055c9df2cafd84f04b2de6a19418d16638f8a209b53dcedf8218979a60",
+      "component/adapter.py": "67d2d8ab5e3a16303ceca86a428ed5ab5afe10b6960c7e9d6940379be21565d2",
+      "component/artifacts.py": "9277e62d391c8baed05090106ada179bd1cd0ee28936f71110f6beb6fbab8202",
+      "component/capsule.py": "d0eeafb473d13456c3751843a81947f88a1e3164efafe105579e2b16862d92d2",
+      "component/cli.py": "6c559156458651874a2e295fcf5a84d48ba30c8ae09158008a7e5f6dce16fc94",
+      "component/configuration_inventory.py": "1b8bc150dda289cc89317a0fea2bf393d2a8e109e652082b6cc900f241b01519",
+      "component/host.py": "818148637c68f33be5db01045ae06f8b4904aa38fee0c2d801bc9dea59ba90b0",
+      "component/protocol.py": "acc8406c1ac5d723c65b40761aca99f504c721a144ea626cbfd8feb5528b7d7e",
+      "component/source_loader.py": "a0710b815dea6cb72fb84be9f459b3757dec827b73801bb8119f1c6f942ee434",
+      "component/supervisor.py": "4ceff18cbb19735180dfe3a2900b1f42ef29bad8e9e1d7f5d2b7f92a2fb8eb74",
+      "component/transaction.py": "9d6f36b78f360145ad5da55e72341d4427ff15d22d5d960608ad1336b3b9cea2",
+      "component/worker.py": "1c86104bb1e9947ed4cfaf018bf6a510836d71bbb2505bd9e802d637509348e0",
+      "install.py": "95018bf2f422143bb4fb512d7a17556a38364cf60d230b6e36413232733df502"
+    },
+    "scope": "node-a-standalone-prerequisite",
+    "sha256": "ef50f523e403fc789a27b96bdf57db46a9bf969b24a92bf2bed8d0c1b92b8ba5",
+    "size": 21511,
+    "source_commit": "140ac89587be179b4e14ea9909d9ec9b2c8ec40c",
+    "version": "1.16.1.31-r1"
+  },
+  "phase1_script_sha256": "ce3390f50379940cd0186317ba043c3b4e63457d03c6e2e756b709059a709879",
+  "phase2_script_sha256": "33cf6fd5afb1963d8a27e5b90dd3a1a554ddf50dd65f507a5c64019bea074257",
+  "status": "signed root component correction pending; isolated product offer temporarily withheld",
+  "benchmark_hold_preserved": true,
+  "phase2_retry_script_sha256": "38125d21e0c97a27415af50c62358325cbdf08393f224b5bc089b94b650559bc",
+  "catalog_migration": {
+    "version": "018",
+    "channel_length": 64,
+    "existing_values_preserved": true,
+    "postgresql_temp_table_test": "passed"
+  },
+  "component_repair": {
+    "version": "1.16.1.31-r2",
+    "manifest_sha256": "c85d681965631fd3110f52e3b191fd8dc543217f9a7c28b3f0b8067a68dbd499",
+    "archive_sha256": "01180a632306ef01506176aadf2058e3b548c415ca642c9d1216c145b89aeb26",
+    "script_sha256": "9dfcad27348cabe8e5121849de3c9472bf9683a1acf58a3ad4e3b9aae147d36c",
+    "reason": "Docker mount enumeration order varies; compare exact mount records independent of order"
+  },
+  "python_tests_passed": 31
+}
