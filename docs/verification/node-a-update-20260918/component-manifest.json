@@ -1,0 +1,19 @@
+{
+  "archive": "node-a-update-maintenance-1.16.1.30-r1.tar.gz",
+  "files": {
+    "PACKAGE.json": "ddbe3ebe093424f9b554a06a8afd76ea3eee92887ae6df6110ffa227c162af90",
+    "component/COMPONENT.json": "37b31407298e1092040757eb2f7e5b33d0982d02d3ffa3ec09b0293ea571d36c",
+    "component/adapter.py": "5aeb705641d9362a102cd46f81ecb3b62fa49269d6f6ea48e1bc1a80121c644e",
+    "component/cli.py": "ef47d4ba0b7422780b218b2bd9f1e3e7c29b4cda560f47bb6539e56418d29859",
+    "component/host.py": "f1a266731246cd204c9c9b4c30614f0c7c334dfe599d30810c8596870bbad55f",
+    "component/protocol.py": "291d599963d09591e16464bb19b54b044663923d7f187e0040634cec93ca6c2e",
+    "component/supervisor.py": "4ceff18cbb19735180dfe3a2900b1f42ef29bad8e9e1d7f5d2b7f92a2fb8eb74",
+    "component/worker.py": "97089e7f1e5236eff6f84a09852475ed5ec8defb06a2e24089af694f4c92b14f",
+    "install.py": "968b0896e6c20256abed2ab07facf336305557809623b6af21c3f95f09fa64ce"
+  },
+  "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
+  "scope": "node-a-update-maintenance",
+  "sha256": "da284abbe6aac5acb7d7e0d2a71685739da79a046a7579335cec101d9fc2a5fd",
+  "size": 14934,
+  "version": "1.16.1.30-r1"
+}

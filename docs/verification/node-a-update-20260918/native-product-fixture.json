@@ -1,0 +1,27 @@
+{
+  "status": "passed",
+  "health": {
+    "authority_enabled": false,
+    "binary_sha256": "d1b47d42d7036995b678708edc97f283e53d1f3584a9474136a89fb71510f698",
+    "data_ready": true,
+    "installation_complete": true,
+    "installation_id": "fixture-node-1",
+    "installation_state": "installed-unlinked",
+    "link_ready": false,
+    "management_ready": true,
+    "node_id": "1",
+    "pod_ready": false,
+    "processing_enabled": false,
+    "status": "healthy",
+    "updater_id": "fixture-updater-1",
+    "version": "3.3.152.41",
+    "management_container_id": "b1f3eaa474a5a347a1e5bd5e562689e8f692667a556fda19c4eeed9a26858b30",
+    "ui_closed": true,
+    "operator_login_verified": false
+  },
+  "data_ids_preserved": true,
+  "bootstrap_bytes_preserved": true,
+  "verified_predecessor_recovery": true,
+  "interrupted_switch_status_acceptance": true,
+  "login_role": "Pod node 1"
+}

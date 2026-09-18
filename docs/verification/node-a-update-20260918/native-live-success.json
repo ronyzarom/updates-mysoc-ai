@@ -1,0 +1,115 @@
+{
+  "machine_id": "bed377a24032485c8a58d8734eab6368",
+  "installation_id": "node-d6e43db4-e83e-4e7d-939e-909b7644961a",
+  "updater_instance_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d",
+  "node_id": "1",
+  "journal_sha256": "a0bfcd26476a8d3817210cab57652b6aeb57da415952a54af7c5d3daabcabb04",
+  "journal": {
+    "status": "complete",
+    "installation_state": "installed-unlinked",
+    "version": "3.3.152.40",
+    "policy_sha256": "231dc00b6de99c3ff2b2c58da24a32ed81f2a9ad363042cb51bd637e94baa854",
+    "configuration_sha256": "3387582a0fec5435597178635b709f1127d9ac6ed2ddaba91de28037aa224594",
+    "artifact": {
+      "runtime_image_id": "sha256:f4632a921ca7d1ed6ec971ec2468192c564c887cdc71fe1ca6133d2fb5774f38",
+      "sha256": "1d79b0c3cbdc54cb36fbcd337c6a5e9583659f5765ea17064034ea3b752dd7fc",
+      "version": "3.3.152.40"
+    },
+    "management_id": "c56d80bedcc9befe97a58cf7321ce1be64e8e4fe1f096359e7acc4066e965456"
+  },
+  "containers": {
+    "postgres": {
+      "id": "df3055b37035976ce66e5e10a74cc139c1f6844596b4624fbc1f5062904f5c81",
+      "image": "sha256:1938c16e9d2f10a6a3623b344b64ae8d45f407f2c5f34f0979468bb689b9227a",
+      "running": true
+    },
+    "redis": {
+      "id": "d7a4a1aab0d9d1932b9b2e5db533637b69d7e57bede0c64292fc34515ba3f580",
+      "image": "sha256:e17e3a1993da428251cbd88dbdb3de8c8d4007f840d7350eb17a2d8695fa705f",
+      "running": true
+    },
+    "management": {
+      "id": "0a2559bf180676620344e572df1e6eaf502a115b21c9742add8ed5a01364ce66",
+      "image": "sha256:d892542d5016949965d389bb81a8183fbc8888afe1c9591155cc680d84074b07",
+      "running": true,
+      "cap_add": [
+        "CAP_DAC_OVERRIDE",
+        "CAP_NET_BIND_SERVICE"
+      ]
+    }
+  },
+  "root_hook_sha256": "622e390f49f0684f05df523b94f45dc4479d4e0a8507972ba9a959901b08299e",
+  "updater_sha256": "62219fa760704818fddf624aca22dcaa60feb6b83c225895a564effd54fef8f5",
+  "health": {
+    "authority_enabled": false,
+    "binary_sha256": "d1b47d42d7036995b678708edc97f283e53d1f3584a9474136a89fb71510f698",
+    "data_ready": true,
+    "installation_complete": true,
+    "installation_id": "node-d6e43db4-e83e-4e7d-939e-909b7644961a",
+    "installation_state": "installed-unlinked",
+    "link_ready": false,
+    "management_ready": true,
+    "node_id": "1",
+    "pod_ready": false,
+    "processing_enabled": false,
+    "status": "healthy",
+    "updater_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d",
+    "version": "3.3.152.41"
+  },
+  "updater_state": {
+    "product_versions": {
+      "siemcore": "3.3.152.41"
+    },
+    "last_update_attempt": {
+      "artifact_digest": "5781c30da2cfc47220d8e116267f8cc9f5656c54139c95f6675385feee058ea7",
+      "from_version": "3.3.152.40",
+      "target_version": "3.3.152.41",
+      "success": true,
+      "timestamp": "2026-09-18T13:22:19.898628221Z"
+    },
+    "product_retries": null,
+    "updater_version": "1.16.1.30",
+    "updated_at": "2026-09-18T13:22:20.029781052Z"
+  },
+  "self_update": {
+    "channel": "stable",
+    "disabled": null
+  },
+  "repair_receipt": {
+    "admitted_updater_sha256": "77d44297f4acdccce6905665bd08ab1f940839967a6992bf125bf5a5b5a42267",
+    "authorization_sha256": "666d645feda618d9d33b1d5b8c05cab1be25323ae7fe228f4e121cc2113b414d",
+    "original_journal_sha256": "a6b5591c1d25c6f8ee66f019fb8d4458df339cbb161491db184146f7285b8c71",
+    "phase": "journal_committed"
+  },
+  "service": [
+    "MainPID=22544",
+    "ActiveState=active",
+    "SubState=running",
+    "ActiveEnterTimestamp=Fri 2026-09-18 13:19:56 UTC"
+  ],
+  "node_update_operation": {
+    "operation_id": "36636b19-cd40-4ee8-b64f-20ed09250ec9",
+    "operation_sha256": "898cea1819087b9bffa7e1f88bec20123405bc91b1767d1d489cb3e3cdeabfa8",
+    "target_version": "3.3.152.41",
+    "sha256": "5781c30da2cfc47220d8e116267f8cc9f5656c54139c95f6675385feee058ea7",
+    "signature": "Y7thA2IndJP4L0egIrk8d7hWJNb8/9hnsMxu2mCa+wx6s+e+WqeDD7jlYguE5OzuDvUtJrpiHbwNDq5UzbCwBg==",
+    "phase": "accepted",
+    "from_version": "3.3.152.40",
+    "artifact_path": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.152.41.artifact",
+    "channel": "node-a-20260918"
+  },
+  "adapter_journal": {
+    "observed_at": "2026-09-18T13:22:19.227258+00:00",
+    "operation_id": "36636b19-cd40-4ee8-b64f-20ed09250ec9",
+    "operation_sha256": "898cea1819087b9bffa7e1f88bec20123405bc91b1767d1d489cb3e3cdeabfa8",
+    "phase": "accepted",
+    "protocol": "pod-node-update-v1"
+  },
+  "product_journal_phase": "accepted",
+  "login": {
+    "status": 200,
+    "node1_branding": true,
+    "observer_branding": false,
+    "browser_basic_challenge": null
+  }
+}

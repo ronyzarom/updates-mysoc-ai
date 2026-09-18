@@ -1,0 +1,66 @@
+updater-simulator 1.16.1.30
+  Git Commit: a04556f
+  Build Time: 2026-09-18T13:17:28Z
+Run continuous jittered simulator cycles
+
+Usage:
+  updater-simulator run [flags]
+
+Flags:
+      --download   Download and verify offered artifacts without reporting success
+  -h, --help       help for run
+      --real       Run the full pipeline: verify, download, run the configured executor, report
+
+Global Flags:
+  -c, --config string   Path to simulator YAML configuration (default "updater-simulator.yaml")
+  -v, --verbose         Enable debug logging
+Relay mode keeps this node a normal updater toward its parent (heartbeats,
+update checks, installs) and additionally serves the updater API subset to its
+own children: their heartbeats are aggregated into this node's upward rollup,
+their update checks are forwarded with this node's credential, and artifacts
+are served from a signature-verified pull-through cache. Requires
+relay.enabled: true (and relay.listen) in the configuration.
+
+Usage:
+  updater-simulator relay [flags]
+
+Flags:
+      --download   Download and verify offered artifacts without reporting success
+  -h, --help       help for relay
+      --real       Run the full pipeline: verify, download, run the configured executor, report
+
+Global Flags:
+  -c, --config string   Path to simulator YAML configuration (default "updater-simulator.yaml")
+  -v, --verbose         Enable debug logging
+{"schema":1,"server_types":["normal","pod-active","pod-stby","pod-observer","observer-unlinked","pod-node"],"lifecycle_ready":false}
+=== RUN   TestNodePrivilegedResponseParsing
+--- PASS: TestNodePrivilegedResponseParsing (0.00s)
+=== RUN   TestNodeAcceptedPointersAndReadOnlyRetry
+--- PASS: TestNodeAcceptedPointersAndReadOnlyRetry (0.01s)
+=== RUN   TestNodeFailureReconciliationDoesNotRequireParentOrReadiness
+--- PASS: TestNodeFailureReconciliationDoesNotRequireParentOrReadiness (0.00s)
+=== RUN   TestNodeUncertainWorkerRetainsDurableIdentity
+--- PASS: TestNodeUncertainWorkerRetainsDurableIdentity (0.00s)
+=== RUN   TestNodeOptInCannotAffectNormal
+--- PASS: TestNodeOptInCannotAffectNormal (0.00s)
+=== RUN   TestNodeNextAutomaticUpgradeRetainsAcceptedPredecessor
+--- PASS: TestNodeNextAutomaticUpgradeRetainsAcceptedPredecessor (0.00s)
+=== RUN   TestNodeReadinessRejectsWrongSlotAndObserver
+--- PASS: TestNodeReadinessRejectsWrongSlotAndObserver (0.00s)
+=== RUN   TestNodeRetainedOperationCannotChangeChannel
+--- PASS: TestNodeRetainedOperationCannotChangeChannel (0.00s)
+=== RUN   TestSelfUpdaterStageValidateActivateRestore
+--- PASS: TestSelfUpdaterStageValidateActivateRestore (0.00s)
+=== RUN   TestSelfUpdaterValidateRejectsWrongVersion
+--- PASS: TestSelfUpdaterValidateRejectsWrongVersion (0.00s)
+=== RUN   TestSelfUpdaterManages
+--- PASS: TestSelfUpdaterManages (0.00s)
+=== RUN   TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands
+=== RUN   TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands/management-cli
+=== RUN   TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands/version-only
+=== RUN   TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands/substring-version
+--- PASS: TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands (0.00s)
+    --- PASS: TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands/management-cli (0.00s)
+    --- PASS: TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands/version-only (0.00s)
+    --- PASS: TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands/substring-version (0.00s)
+PASS

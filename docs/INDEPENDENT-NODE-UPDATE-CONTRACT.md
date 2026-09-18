@@ -1,6 +1,6 @@
 # Independent node update protocol
 
-Candidate updater 1.16.1.29 adds `pod-node-update-v1`, disabled unless the protected
+Updater 1.16.1.30 adds `pod-node-update-v1`, disabled unless the protected
 host configuration enables `simulation.filesystem.independent_node_update`.
 It applies only to immutable `server_type: pod-node`, node slot 1 or 2, with no
 POD assignment or maintenance executor. Normal, linked POD and Observer paths
@@ -37,4 +37,8 @@ contract/worker switch/recovery tests; signed updater standard stable/alpha
 self-update with installed-version/restart/heartbeat verification; signed component
 readiness; then isolated node-A product offer. Product channel isolation is
 separate from the updater's standard self-update channel. Benchmark hold remains.
-This document records candidate implementation, not deployment success.
+Isolated node A .40→.41 deployment passed; see
+[the native and live evidence](verification/node-a-update-20260918/README.md).
+The server requirements vocabulary still covers linked-POD maintenance only;
+this node capability is enforced by the installed updater/root adapter, with
+exclusive node-A channel targeting. Broader server metadata support is not claimed.
