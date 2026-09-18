@@ -19,6 +19,24 @@ INPUTS = '/etc/siemcore-cascade-updater/standalone-inputs'
 ROOT = Path('/var/lib/siemcore-node-standalone')
 
 
+def canonical_data_identity(value):
+    if not isinstance(value,dict) or set(value)!={'postgres','redis'}:
+        raise ValueError('exact_data_identity_required')
+    result={}
+    for role,record in value.items():
+        if not isinstance(record,dict) or set(record)!={'id','image','mounts'} or not isinstance(record['mounts'],list):
+            raise ValueError('exact_data_record_required')
+        mounts=[];destinations=set()
+        for mount in record['mounts']:
+            if not isinstance(mount,dict) or set(mount)!={'Type','Source','Destination','RW'} or type(mount['RW']) is not bool or any(not isinstance(mount[k],str) for k in ('Type','Source','Destination')):
+                raise ValueError('exact_data_mount_required')
+            if mount['Destination'] in destinations:raise ValueError('duplicate_data_mount_destination')
+            destinations.add(mount['Destination'])
+            mounts.append((mount['Destination'],mount['Type'],mount['Source'],mount['RW']))
+        result[role]={'id':record['id'],'image':record['image'],'mounts':sorted(mounts)}
+    return result
+
+
 class Host:
     def __init__(self, directory, pipeline_verifier=None):
         self.loader = SourceLoader()
@@ -59,7 +77,7 @@ class Host:
     def admit(self, binding):
         evidence, bootstrap, release = self.loader.measure(self.policy['historical_inventory'])
         self.release = release
-        if self.data_identity() != self.policy['data_identity']:
+        if canonical_data_identity(self.data_identity()) != canonical_data_identity(self.policy['data_identity']):
             raise ValueError('retained_data_identity_changed')
         self.protected(Path(INPUTS))
         config_sha = configuration_digest(INPUTS, self.policy['configuration_metadata'])
@@ -111,7 +129,7 @@ class Host:
         return strict_json(raw)
 
     def verify_accepted(self, binding):
-        if self.data_identity() != self.policy['data_identity']:
+        if canonical_data_identity(self.data_identity()) != canonical_data_identity(self.policy['data_identity']):
             raise ValueError('retained_data_identity_changed')
         live, ready = self._https('/health/live'), self._https('/health/ready')
         expected = dict(status='alive',version=binding['target']['version'],instance_id=binding['instance_id'],
@@ -165,7 +183,7 @@ class Host:
                     evidence_scope='runtime-readiness; synthetic pipeline qualified separately',binary_sha256=binary)
 
     def verify_restored(self, binding):
-        if self.data_identity() != self.policy['data_identity']:
+        if canonical_data_identity(self.data_identity()) != canonical_data_identity(self.policy['data_identity']):
             raise ValueError('restored_data_identity_changed')
         # Restored management has its original dedicated hostname, not the new
         # customer routing address or standalone container.

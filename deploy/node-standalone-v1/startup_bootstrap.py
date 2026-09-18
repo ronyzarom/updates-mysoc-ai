@@ -54,7 +54,7 @@ def stage_capsule(kit):
 
 def main():
     os.umask(0o077)
-    if os.geteuid()!=0 or PHASE not in ('enroll','install'):raise ValueError('root_bootstrap_phase_required')
+    if os.geteuid()!=0 or PHASE not in ('enroll','install','repair'):raise ValueError('root_bootstrap_phase_required')
     raw=fetch('manifest.json',65536)
     if hashlib.sha256(raw).hexdigest()!=MANIFEST_SHA256:raise ValueError('pinned_manifest_mismatch')
     signature=base64.b64decode(fetch('manifest.sig',1024).strip(),validate=True)
