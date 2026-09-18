@@ -1,0 +1,7 @@
+{
+  "product": "updater-linux-amd64",
+  "version": "1.16.1.28",
+  "sha256": "77d44297f4acdccce6905665bd08ab1f940839967a6992bf125bf5a5b5a42267",
+  "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
+  "signature": "RDQ6lWRgii6eLV+4bl5R7395FF4pEOahA6U9PumFRbZ90xfxAPSr2p4KVzTol+7DY4YRbx2EuQRpUwrDL37KBQ=="
+}

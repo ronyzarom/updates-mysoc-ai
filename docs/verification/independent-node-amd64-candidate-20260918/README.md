@@ -1,0 +1,26 @@
+# Independent node AMD64 candidate — 2026-09-18
+
+Candidate kit **1.16.1.28-r2**, Linux AMD64, source `73f8cad`, provisioning hook
+`c5ac122`. Revision r2 adds an explicit relay certificate/key requirement before
+node installation. Missing material fails before host mutation, including when
+node type is inferred from the protected envelope. Normal installation is unchanged.
+SSL.com chain/SAN/expiry/live-listener validation remains a separate deployment gate.
+
+- Archive SHA256: `4df964cd74b0ba391f5475615d970596f4056e0ad8a6ccb60814639a7b89a2ee`.
+- Binary SHA256: `77d44297f4acdccce6905665bd08ab1f940839967a6992bf125bf5a5b5a42267`.
+- Binary receipt and outer repository manifest signed in place on the origin,
+  using the existing fleet Ed25519 key; no private key export.
+- Both signatures verified locally; public key independently matches the origin
+  HTTPS `/api/v1/signing-key` response. ELF architecture checked by packager.
+- 27 installer/identity tests, signing/architecture package test, and targeted
+  Go updater/licensing/CLI tests pass. Shell syntax and diff checks pass.
+
+No release row, download repository, fleet assignment or host installation was
+changed by candidate assembly. These are candidate pins, not deployment evidence.
+Native execution and full signed bootstrap must be recorded separately. Prior
+ARM64 r1 fixture qualification does not qualify AMD64 r2 execution.
+
+Node A provisioning and SSL.com certificate staging belong to the coordinated
+SiemCore task. Remaining full-bootstrap inputs include the common signed AMD64
+product receipt/capability, immutable prerequisite digests, complete protected
+local settings with SSL.com-compatible database TLS, and actual machine binding.

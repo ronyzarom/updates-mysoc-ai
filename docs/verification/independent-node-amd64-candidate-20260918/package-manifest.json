@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "packages": [
+    {
+      "package_revision": "1.16.1.28-r2",
+      "architecture": "linux-amd64",
+      "template_commit": "73f8cad2bdc9b978d2eacf2afa7f609f3afbc00c",
+      "provisioning_commit": "c5ac122b4be3a8dbff5df2e861916467bfba9411",
+      "updater_version": "1.16.1.28",
+      "updater_sha256": "77d44297f4acdccce6905665bd08ab1f940839967a6992bf125bf5a5b5a42267",
+      "protocol": "pod-node-bootstrap-v1",
+      "filename": "siemcore-updater-kit-1.16.1.28-r2-linux-amd64.tar.gz",
+      "size": 8092202,
+      "sha256": "4df964cd74b0ba391f5475615d970596f4056e0ad8a6ccb60814639a7b89a2ee"
+    }
+  ]
+}
