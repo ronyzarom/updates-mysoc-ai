@@ -179,22 +179,50 @@ Updater current/previous pointers are reconciled only after the root transaction
 proves accepted/restored state. Interrupted pointer reconciliation is idempotent;
 it must not start a second application transaction or delete retained artifacts.
 
-## First-hop security recovery gate requiring product agreement
+## Agreed first-hop security recovery: blocked with management stopped
 
-The retained .37 predecessor does not enforce UI passwords. Preserving
-`ui.htpasswd` alone therefore cannot make a .37 rollback fail closed. Do not
-report `restored` merely because .37 management health passes while UI access
-has become anonymous again.
+SiemCore accepted this rule on 2026-09-18. The retained .37 predecessor does not
+enforce UI passwords. For the first .37-to-security-build transition, never start
+.37 as a recovery action. On failed target acceptance:
 
-Before qualifying .37-to-security-build recovery, SiemCore must provide a tested
-UI protection mechanism that remains enforced when the predecessor runs, with
-health/machine authentication still available, OR agree that this first-hop
-recovery cannot restore a serving .37 instance and remains explicitly blocked
-with management stopped. The latter is controlled failure, not successful
-rollback or qualified unattended recovery. No such protection layer is currently
-claimed to exist. This is an explicit review decision before removing guards.
-Both successful acceptance and `restored` require unauthenticated UI rejection;
-`ui_protection_required` is immutable and cannot be disabled by a retry.
+1. Durably record recovery_required, the original binding and failure evidence.
+2. Stop the failed target management service and its complete process group.
+   Verify that it cannot restart (including service-manager restart policy), no
+   descendants remain, and the UI listener is closed. An unverified stop remains
+   blocked with stop_unconfirmed; it is not proof of a safe stopped state.
+3. Record blocked with reason `predecessor_ui_unprotected`, preserving all
+   operation/artifact/credential/identity evidence. Keep management stopped.
+4. Keep the updater and its independently authenticated status/recovery boundary
+   available. No .37 startup, no generic rollback, no fabricated restored receipt
+   and no automatic transaction replacement. A later resolution requires the
+   original operation binding and a separately qualified explicit recovery path.
+
+This is controlled failure, not successful restoration or qualified unattended
+rollback. New password-capable predecessors may reach restored only after exact
+identity/version/binary health AND unauthenticated UI rejection have been measured.
+Trust signed product capability evidence plus actual behavior, not a version
+number alone. `ui_protection_required` is immutable across retries/recovery.
+
+Readiness of currently installed .37 may be `eligible_for_security_upgrade=true`
+while `ui_security_compliant=false`: that is the point of this isolated upgrade.
+It still requires exact installed-unlinked management health and no authority.
+Readiness and measured health responses expose independent booleans `ui_closed`
+and `operator_login_usable`, plus readiness-only `eligible_for_security_upgrade`
+and `ui_security_compliant`. These explicitly extend the response fields above.
+A missing credential file producing HTTP503 can establish ui_closed=true, but
+operator_login_usable=false. It must never be reported as successful operator
+login. Target acceptance/restoration requires UI closed to unauthenticated users;
+if operator login usability is an acceptance requirement for the operation, an
+explicit authenticated login probe must also pass. Probe credentials remain
+outside the operation payload and logs. For the requested password-protection
+rollout, provision a valid credential and require that probe before reporting the
+operator-facing feature usable.
+
+Machine-readable first-hop conformance cases are in
+`scripts/qualification/observer-unlinked-update/first-hop-cases.json`. They are
+integration requirements, not evidence that an executor has been implemented or
+qualified. Both teams must execute them against the real adapter/product worker
+before removing existing guards.
 
 ## Protected adapter delivery — separate from product execution
 
