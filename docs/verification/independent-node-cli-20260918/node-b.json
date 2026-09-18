@@ -1,0 +1,22 @@
+{
+  "node_id": "2",
+  "first_install_by_cli": true,
+  "signature_required": true,
+  "archive_sha256": "f3b5804b24743dfe015483629d9bb692afd1f2ca5c06f932dec1f9e479ca014a",
+  "updater_binary_sha256": "b2516294f25fd9b7652d766bb1c58ad455513878d39b1c3877f19e1c0079c475",
+  "success_report": {
+    "artifact_digest": "f3b5804b24743dfe015483629d9bb692afd1f2ca5c06f932dec1f9e479ca014a",
+    "instance_id": "fixture-updater-2",
+    "from_version": "0.0.0",
+    "to_version": "3.3.152.99",
+    "success": true
+  },
+  "installed_identity": {
+    "server_type": "pod-node",
+    "node_id": "2"
+  },
+  "restart_heartbeat_identity": {
+    "kind": "pod-node",
+    "node_id": "2"
+  }
+}

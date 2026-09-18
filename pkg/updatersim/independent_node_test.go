@@ -52,3 +52,26 @@ func TestIndependentNodeRejectsFakePodAndUnknownSlot(t *testing.T) {
 		}
 	}
 }
+
+func TestIndependentNodeOptInCannotChangeNormalOrUseUnprotectedExecutor(t *testing.T) {
+	cfg := &Config{Products: []ProductConfig{{Name: "siemcore", ServerType: "normal"}}}
+	cfg.Simulation.Filesystem.IndependentNodeBootstrap = true
+	s := &Simulator{config: cfg}
+	if s.validateSiemCoreExecution() == nil {
+		t.Fatal("node flag accepted on Normal")
+	}
+	cfg.Products[0] = ProductConfig{Name: "siemcore", ServerType: "pod-node", NodeID: "1"}
+	if s.validateSiemCoreExecution() == nil {
+		t.Fatal("unprotected node executor accepted")
+	}
+	cfg.Simulation.Filesystem.InstallRoot = "/opt/siemcore-cascade"
+	cfg.Simulation.Filesystem.RestartCommand = []string{"sudo", "-n", "/usr/local/sbin/siemcore-apply-update"}
+	cfg.Simulation.Filesystem.HealthCommand = append([]string{}, cfg.Simulation.Filesystem.RestartCommand...)
+	if err := s.validateSiemCoreExecution(); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Products[0].PodID = "fake"
+	if s.validateSiemCoreExecution() == nil {
+		t.Fatal("fake pod authority accepted")
+	}
+}

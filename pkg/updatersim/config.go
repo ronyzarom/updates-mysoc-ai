@@ -257,9 +257,11 @@ type SimulationConfig struct {
 // FilesystemConfig configures the real filesystem installer used when
 // simulation.executor is "filesystem".
 type FilesystemConfig struct {
-	ObserverUnlinkedUpdate bool                       `yaml:"observer_unlinked_update,omitempty"`
-	ObserverMaintenance    *ObserverMaintenanceConfig `yaml:"observer_maintenance,omitempty"`
-	PodMaintenance         *PodMaintenanceConfig      `yaml:"pod_maintenance,omitempty"`
+	// IndependentNodeBootstrap is default-off until the matching kit is qualified.
+	IndependentNodeBootstrap bool                       `yaml:"independent_node_bootstrap,omitempty"`
+	ObserverUnlinkedUpdate   bool                       `yaml:"observer_unlinked_update,omitempty"`
+	ObserverMaintenance      *ObserverMaintenanceConfig `yaml:"observer_maintenance,omitempty"`
+	PodMaintenance           *PodMaintenanceConfig      `yaml:"pod_maintenance,omitempty"`
 	// InstallRoot is the base directory that holds per-product install trees.
 	InstallRoot string `yaml:"install_root"`
 	// RestartCommand runs after the atomic symlink swap (and after rollback).

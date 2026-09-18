@@ -88,6 +88,9 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 }
 func (s *Simulator) validateSiemCoreExecution() error {
 	p, ok := s.config.Product("siemcore")
+	if s.config.Simulation.Filesystem.IndependentNodeBootstrap && (!ok || p.ServerType != "pod-node") {
+		return fmt.Errorf("independent node bootstrap cannot serve other installation types")
+	}
 	if s.config.Simulation.Filesystem.ObserverUnlinkedUpdate && (!ok || p.ServerType != "observer-unlinked") {
 		return fmt.Errorf("independent Observer update executor cannot serve other installation types")
 	}
@@ -98,7 +101,15 @@ func (s *Simulator) validateSiemCoreExecution() error {
 		return nil
 	}
 	if p.ServerType == "pod-node" {
-		return fmt.Errorf("independent node delivery disabled pending joint product qualification; normal fallback refused")
+		f := s.config.Simulation.Filesystem
+		expected := []string{"sudo", "-n", "/usr/local/sbin/siemcore-apply-update"}
+		if !f.IndependentNodeBootstrap {
+			return fmt.Errorf("independent node delivery disabled pending joint product qualification; normal fallback refused")
+		}
+		if f.PodMaintenance != nil || f.ObserverMaintenance != nil || p.PodID != "" || (p.NodeID != "1" && p.NodeID != "2") || f.InstallRoot != "/opt/siemcore-cascade" || !slices.Equal(f.RestartCommand, expected) || !slices.Equal(f.HealthCommand, expected) {
+			return fmt.Errorf("independent node requires protected bootstrap executor without pod authority")
+		}
+		return nil
 	}
 	role, e := serverTypeRole(p.ServerType)
 	if e != nil {

@@ -161,3 +161,13 @@ support landed: `TestNativeUnlinkedNodeSchema` passed (0.39s), and
 This tests the management handler, including disabled mutations and dependency
 failure status. It still does not qualify the TLS listener/login roundtrip or
 the full signed installer. No delivery gates were changed.
+
+### Compiled updater qualification
+
+Both clean independent nodes subsequently passed first install driven by the
+actual CLI, plus restart/identity heartbeat. See
+[the qualification record](verification/independent-node-cli-20260918/README.md).
+Execution now has an explicit default-off `independent_node_bootstrap` switch
+for matching protected-node executors. The ordinary installer and published
+capabilities remain gated pending versioned kit qualification; no fleet changes
+are implied by these local passes.
