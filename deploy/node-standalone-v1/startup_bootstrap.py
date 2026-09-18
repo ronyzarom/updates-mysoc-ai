@@ -64,7 +64,7 @@ def main():
     if PurePosixPath(archive_name).name!=archive_name:raise ValueError('invalid_archive_name')
     artifact=fetch(archive_name,8*1024*1024)
     if len(artifact)!=manifest['size'] or hashlib.sha256(artifact).hexdigest()!=manifest['sha256']:raise ValueError('kit_checksum_mismatch')
-    stage=Path('/root/updates-standalone-prerequisite')/manifest['version']
+    stage=Path('/root/updates-standalone-prerequisite')/manifest['version']/'verified-source'
     stage.mkdir(mode=0o700,parents=True,exist_ok=True)
     for path in (stage,*stage.parents):
         st=path.lstat()
@@ -87,7 +87,7 @@ def main():
             seen.add(name)
     if seen!=set(manifest['files']):raise ValueError('incomplete_kit')
     if PHASE=='install':stage_capsule(stage/kit_name)
-    subprocess.run(['/usr/bin/python3','-I',str(stage/kit_name/'install.py'),PHASE],check=True,timeout=180)
+    subprocess.run(['/usr/bin/python3','-I','-B',str(stage/kit_name/'install.py'),PHASE],check=True,timeout=180)
 
 
 if __name__=='__main__':main()
