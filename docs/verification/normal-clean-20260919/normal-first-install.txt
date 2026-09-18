@@ -1,0 +1,12 @@
+20.10.24+dfsg1
+Docker Compose version v2.40.3
+[role=db/install] NOTE: single-member etcd + Patroni (NUM_PEERS=1). No failover capability;
+[role=db/install]       a node failure is a full outage until the VM is restored.
+[role=db/install]       This is the documented contract for --topology single - safe to ignore.
+[role=db/install] Installing db on node_id=db-a cluster_id=normal-fixture
+[role=db/install]   peers            = db-a
+[role=db/install]   patroni scope    = siemcore
+[role=db/install]   install-dir      = /opt/siemcore-db-db-a
+[role=db/install]   cluster-network  = siemcore-cluster-net
+[role=db/install] Creating shared cluster network: siemcore-cluster-net
+/var/lib/siemcore-greenfield/verified-b9gki24w/unpacked/siemcore-universal-3.3.152.44/roles/db/install.sh: line 189: shasum: command not found

@@ -1,0 +1,15 @@
+20.10.24+dfsg1
+Docker Compose version v2.40.3
+[role=db/install] NOTE: single-member etcd + Patroni (NUM_PEERS=1). No failover capability;
+[role=db/install]       a node failure is a full outage until the VM is restored.
+[role=db/install]       This is the documented contract for --topology single - safe to ignore.
+[role=db/install] Installing db on node_id=db-a cluster_id=normal-fixture
+[role=db/install]   peers            = db-a
+[role=db/install]   patroni scope    = siemcore
+[role=db/install]   install-dir      = /opt/siemcore-db-db-a
+[role=db/install]   cluster-network  = siemcore-cluster-net
+[role=db/install] Creating shared cluster network: siemcore-cluster-net
+[role=db/install] Building siemcore/patroni-pg16:2b7577852272 (this is the slow step on first run) ...
+Sending build context to Docker daemon  62.98kB
+Step 1/9 : FROM postgres:16-bookworm
+Get "https://registry-1.docker.io/v2/": dial tcp: lookup registry-1.docker.io on 169.254.169.254:53: dial udp 169.254.169.254:53: connect: network is unreachable
