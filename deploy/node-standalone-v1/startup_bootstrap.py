@@ -18,10 +18,12 @@ BASE_URL='RENDER_KIT_HTTPS_BASE'
 MANIFEST_SHA256='RENDER_MANIFEST_SHA256'
 PUBLIC_KEY='1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57'
 PHASE='enroll'
+CAPSULE_BASE_URL='RENDER_CAPSULE_HTTPS_BASE'
+CAPSULE_MANIFEST_SHA256='RENDER_CAPSULE_MANIFEST_SHA256'
 
 
-def fetch(name,limit):
-    url=BASE_URL.rstrip('/')+'/'+name
+def fetch(name,limit,base=None):
+    url=(base or BASE_URL).rstrip('/')+'/'+name
     if not url.startswith('https://updates.mysoc.ai/downloads/'):raise ValueError('approved_https_source_required')
     with urllib.request.urlopen(url,timeout=30) as response:
         if response.url!=url or response.status!=200:raise ValueError('download_redirect_or_status')
@@ -29,6 +31,26 @@ def fetch(name,limit):
     if len(raw)>limit:raise ValueError('download_limit')
     return raw
 
+
+def stage_capsule(kit):
+    capsule_raw=fetch('manifest.json',65536,CAPSULE_BASE_URL)
+    if hashlib.sha256(capsule_raw).hexdigest()!=CAPSULE_MANIFEST_SHA256:raise ValueError('pinned_capsule_manifest_mismatch')
+    capsule_manifest=json.loads(capsule_raw)
+    capsule_signature=fetch('manifest.sig',1024,CAPSULE_BASE_URL)
+    canonical=json.dumps(capsule_manifest,sort_keys=True,separators=(',',':'),ensure_ascii=True).encode()
+    Ed25519PublicKey.from_public_bytes(bytes.fromhex(PUBLIC_KEY)).verify(base64.b64decode(capsule_signature.strip(),validate=True),b'mysoc-standalone-inputs-v1\n'+canonical)
+    ciphertext=fetch('inputs.cms',4*1024*1024,CAPSULE_BASE_URL)
+    if hashlib.sha256(ciphertext).hexdigest()!=capsule_manifest['ciphertext_sha256']:raise ValueError('capsule_ciphertext_mismatch')
+    capsule=kit/'capsule';capsule.mkdir(mode=0o700,exist_ok=True)
+    if capsule.is_symlink() or capsule.stat().st_uid!=0 or capsule.stat().st_mode&0o077:raise ValueError('protected_capsule_directory_required')
+    for name,content in {'manifest.json':capsule_raw,'manifest.sig':capsule_signature,'inputs.cms':ciphertext}.items():
+        path=capsule/name
+        if path.is_symlink() or (path.exists() and path.read_bytes()!=content):raise ValueError('capsule_retry_conflict')
+        if not path.exists():
+            with path.open('xb') as out:out.write(content);out.flush();os.fsync(out.fileno())
+            path.chmod(0o600)
+    # Installer independently verifies signature, host/recipient identity,
+    # expiry and exact decrypted file inventory before installing anything.
 
 def main():
     os.umask(0o077)
@@ -64,9 +86,7 @@ def main():
             if not path.exists():path.write_bytes(content);path.chmod(0o600)
             seen.add(name)
     if seen!=set(manifest['files']):raise ValueError('incomplete_kit')
-    # Phase2 encrypted capsule download will be pinned by its separate signed
-    # capsule manifest before install. This phase1 renderer never fetches secrets.
-    if PHASE!='enroll':raise ValueError('phase2_capsule_transport_not_rendered')
+    if PHASE=='install':stage_capsule(stage/kit_name)
     subprocess.run(['/usr/bin/python3','-I',str(stage/kit_name/'install.py'),PHASE],check=True,timeout=180)
 
 
