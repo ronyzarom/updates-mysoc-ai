@@ -435,6 +435,10 @@ func (s *Simulator) processOfferAttempt(
 			s.recordAttempt(update, false, "pod maintenance: "+err.Error())
 			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "pod_maintenance", Stage: "maintenance"}))
 		}
+	} else if p, ok := s.config.Product(update.Product); ok && update.Product == "siemcore" && p.ServerType == "pod-node" {
+		if err := s.applyIndependentNode(ctx, update); err != nil {
+			return s.failAndRollback(ctx, update, err)
+		}
 	} else if p, ok := s.config.Product(update.Product); ok && update.Product == "siemcore" && p.ServerType == "observer-unlinked" {
 		var observerErr error
 		if s.config.Simulation.Filesystem.ObserverUnlinkedUpdate {
@@ -486,12 +490,16 @@ func (s *Simulator) failAndRollback(
 	var preflight *PreMutationError
 	p, _ := s.config.Product(update.Product)
 	retainedObserver := update.Product == "siemcore" && p != nil && p.ServerType == "observer-unlinked"
-	if !retainedObserver && !errors.As(updateErr, &preflight) {
+	retainedNode := update.Product == "siemcore" && p != nil && p.ServerType == "pod-node"
+	if !retainedObserver && !retainedNode && !errors.As(updateErr, &preflight) {
 		rollbackErr = s.executor.Rollback(ctx, update)
 	}
 	errorMessage := updateErr.Error()
 	if retainedObserver {
 		errorMessage += "; independent Observer transaction retained for exact retry; rollback unsupported"
+	}
+	if retainedNode {
+		errorMessage += "; independent POD node transaction retained for exact retry; rollback unsupported"
 	}
 	if rollbackErr != nil {
 		errorMessage += "; rollback: " + rollbackErr.Error()

@@ -8,7 +8,7 @@ import re
 import stat
 import subprocess
 
-KINDS = ('normal', 'pod-active', 'pod-stby', 'pod-observer', 'observer-unlinked')
+KINDS = ('normal', 'pod-active', 'pod-stby', 'pod-observer', 'observer-unlinked', 'pod-node')
 FIELDS = ('server_type', 'pod_id', 'node_id')
 
 
@@ -18,6 +18,9 @@ def validate_identity(kind, pod_id='', node_id=''):
     if kind in ('normal', 'observer-unlinked'):
         if pod_id or node_id:
             raise ValueError('normal installation cannot have pod identity')
+    elif kind == 'pod-node':
+        if pod_id or node_id not in ('1', '2'):
+            raise ValueError('independent node requires local node identity without pod ID')
     else:
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,100}', pod_id):
             raise ValueError('pod ID required')
@@ -31,6 +34,10 @@ def from_application(app, requested=''):
     shape = (app.get('schema'), app.get('topology'))
     if type(app.get('schema')) is not int:
         raise ValueError('invalid bootstrap schema')
+    if shape == (5, 'node-unlinked'):
+        if requested and requested != 'pod-node':
+            raise ValueError('independent node conflicts with server type')
+        return validate_identity('pod-node', '', app.get('node_id', ''))
     if shape == (4, 'observer-unlinked'):
         if requested and requested != 'observer-unlinked':
             raise ValueError('independent Observer conflicts with server type')

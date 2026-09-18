@@ -217,7 +217,7 @@ render_config() {
 
 # Validate the complete envelope before creating users or rewriting configuration.
 if [[ -n "$GREENFIELD_INPUT" ]]; then
-    python3 ./greenfield-bootstrap.py --validate-input "$GREENFIELD_INPUT"
+    python3 ./greenfield-bootstrap.py --validate-install "$GREENFIELD_INPUT"
 fi
 
 # Validate type/binary compatibility before modifying the installed host.

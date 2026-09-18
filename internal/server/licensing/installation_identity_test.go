@@ -56,7 +56,7 @@ func TestInstallationIdentityRetainedAcrossHeartbeats(t *testing.T) {
 
 	for _, route := range []string{"upsert", "update", "rollup"} {
 		for _, withAttempt := range []bool{false, true} {
-			for _, kind := range []string{"normal", "pod"} {
+			for _, kind := range []string{"normal", "pod", "pod-node", "observer-unlinked"} {
 				name := route + "/" + kind
 				if withAttempt {
 					name += "/attempt"
@@ -66,6 +66,9 @@ func TestInstallationIdentityRetainedAcrossHeartbeats(t *testing.T) {
 					fixed := &types.InstallationIdentity{Kind: kind}
 					if kind == "pod" {
 						fixed.PodID = "pod"
+						fixed.NodeID = "1"
+					}
+					if kind == "pod-node" {
 						fixed.NodeID = "1"
 					}
 					send := func(identity *types.InstallationIdentity) error {

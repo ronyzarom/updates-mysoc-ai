@@ -17,7 +17,7 @@ type SiemCoreInstallation struct {
 
 func serverTypeRole(kind string) (string, error) {
 	switch kind {
-	case "normal", "observer-unlinked":
+	case "normal", "observer-unlinked", "pod-node":
 		return kind, nil
 	case "pod-active", "pod-stby":
 		return "pod-node", nil
@@ -53,6 +53,10 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 	if role == "normal" || role == "observer-unlinked" {
 		if p.PodID != "" || p.NodeID != "" || cfg.Simulation.Filesystem.PodMaintenance != nil {
 			return fmt.Errorf("normal installation cannot have pod identity or executor")
+		}
+	} else if p.ServerType == "pod-node" {
+		if p.PodID != "" || (p.NodeID != "1" && p.NodeID != "2") || cfg.Simulation.Filesystem.PodMaintenance != nil {
+			return fmt.Errorf("independent node requires immutable local slot without pod binding")
 		}
 	} else {
 		if p.PodID == "" || p.NodeID == "" {
@@ -93,6 +97,9 @@ func (s *Simulator) validateSiemCoreExecution() error {
 	if !ok || p.ServerType == "" {
 		return nil
 	}
+	if p.ServerType == "pod-node" {
+		return fmt.Errorf("independent node delivery disabled pending joint product qualification; normal fallback refused")
+	}
 	role, e := serverTypeRole(p.ServerType)
 	if e != nil {
 		return e
@@ -129,7 +136,7 @@ func (s *Simulator) installationIdentity() *platformtypes.InstallationIdentity {
 	}
 	saved := s.state.SiemCoreInstallation
 	kind := "pod"
-	if saved.ServerType == "normal" || saved.ServerType == "observer-unlinked" {
+	if saved.ServerType == "normal" || saved.ServerType == "observer-unlinked" || saved.ServerType == "pod-node" {
 		kind = saved.ServerType
 	}
 	result := &platformtypes.InstallationIdentity{Kind: kind, PodID: saved.PodID, NodeID: saved.NodeID}

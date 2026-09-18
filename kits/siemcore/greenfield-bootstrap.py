@@ -46,6 +46,9 @@ def validate(data):
         raise ValueError('explicit release channel required')
     app = data['application']
     shape = (app.get('schema'), app.get('topology'))
+    if type(app.get('schema')) is int and shape == (5, 'node-unlinked'):
+        validate_node(app)
+        return
     if type(app.get('schema')) is int and shape == (4, 'observer-unlinked'):
         validate_observer(app)
         return
@@ -92,8 +95,48 @@ def validate_observer(app):
             raise ValueError('protected absolute TLS paths required')
 
 
+def validate_node(app):
+    extra = {'node_id', 'settings_file', 'settings_sha256'}
+    # Reuse the same strictly bounded identity/HTTPS envelope as Observer.
+    validate_observer({k: v for k, v in app.items() if k not in extra})
+    if not extra.issubset(app) or app['node_id'] not in ('1', '2'):
+        raise ValueError('independent node slot must be 1 or 2')
+    path = Path(app['settings_file'])
+    if not path.is_absolute() or '..' in path.parts:
+        raise ValueError('protected absolute settings path required')
+    if not isinstance(app['settings_sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', app['settings_sha256']):
+        raise ValueError('settings checksum required')
+
+
+def validate_local_node(app):
+    if app.get('topology') != 'node-unlinked':
+        return
+    path = Path(app['settings_file'])
+    for item in (path, *path.parents):
+        info = item.lstat()
+        if stat.S_ISLNK(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('unprotected node settings path')
+    info = path.stat()
+    if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 65536:
+        raise ValueError('node settings must be bounded root-owned 0600 JSON')
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != app['settings_sha256']:
+        raise ValueError('node settings checksum mismatch')
+    if not isinstance(json.loads(raw, object_pairs_hook=unique_object), dict):
+        raise ValueError('node settings must be an object')
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate JSON field')
+        result[key] = value
+    return result
+
+
 def validate_local_observer(app):
-    if app.get('topology') != 'observer-unlinked':
+    if app.get('topology') not in ('observer-unlinked', 'node-unlinked'):
         return
     if app['machine_id'] != Path('/etc/machine-id').read_text().strip():
         raise ValueError('Observer machine binding mismatch')
@@ -130,21 +173,30 @@ def read_input(source):
         info = parent.lstat()
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
             raise ValueError('bootstrap parent must be root-owned and protected')
-    data = json.loads(source.read_text())
+    data = json.loads(source.read_text(), object_pairs_hook=unique_object)
     validate(data)
     validate_local_observer(data['application'])
+    validate_local_node(data['application'])
     return data
+
+
+def require_delivery(data):
+    if data['application'].get('topology') == 'node-unlinked':
+        raise ValueError('independent node delivery disabled pending joint product qualification')
 
 
 def main():
     if os.geteuid() != 0 or len(sys.argv) != 3:
         raise ValueError('root invocation and input/kit paths required')
-    if sys.argv[1] == '--validate-input':
-        read_input(Path(sys.argv[2]))
+    if sys.argv[1] in ('--validate-input', '--validate-install'):
+        data = read_input(Path(sys.argv[2]))
+        if sys.argv[1] == '--validate-install':
+            require_delivery(data)
         print('Bootstrap envelope valid; signed product validates application prerequisites.')
         return
     source, kit = Path(sys.argv[1]), Path(sys.argv[2])
     data = read_input(source)
+    require_delivery(data)
     receipt = Path('/etc/siemcore/updater-bootstrap.json')
     fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()
     if receipt.exists():
@@ -176,7 +228,7 @@ def main():
         raise ValueError('expected one product channel')
     root = Path('/etc/siemcore')
     root.mkdir(mode=0o700, exist_ok=True)
-    if data['application'].get('topology') != 'observer-unlinked':
+    if data['application'].get('topology') not in ('observer-unlinked', 'node-unlinked'):
         data['application']['machine_id'] = Path('/etc/machine-id').read_text().strip()
     write_private(root / 'greenfield.json', data['application'])
     write_private(root / 'greenfield-release.json', data['release'])
