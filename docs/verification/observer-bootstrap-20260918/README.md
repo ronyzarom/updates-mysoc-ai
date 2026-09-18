@@ -64,3 +64,27 @@ by the enrolled updater receiving the approved signed common SiemCore artifact.
 No POD/node identity, A/B, quorum or active permission is fabricated. Normal
 installation/update remains on the existing executor path. Observer update and
 rollback beyond exact bootstrap replay remain explicitly unsupported.
+
+## Exact deployed-origin compatibility follow-up
+
+Origin `/health` reports 1.16.1.19; latest startup log records source **2a35e76**.
+This source predates InstallationIdentity and ignores the optional `installation`
+field rather than validating its kind. An isolated checkout at 2a35e76 passed
+`TestObserverUnlinkedOptionalFieldCompatibility`: the real HTTP decoder accepts
+the new optional field on heartbeat and nested child report, preserves the child
+instance ID, and does not persist the unknown installation field. No live fixture
+heartbeat was sent and no origin restart/deployment is required for this protocol
+compatibility. The origin UI will lack the new optional identity until a later
+server upgrade. Newer servers with installation-kind validation must include the
+additive `observer-unlinked` support from 849a21f before being deployed.
+
+Parent relay HTTPS `/health` returned 200 from the existing testing host with its
+pinned CA. Unknown-source health requests return 403 as designed; first heartbeat
+is the guarded enrollment route. A fresh target-generated child credential is
+used; no parent secret or another child's relay token is reused.
+
+Agreed candidate product channel is `obs-test-20260918` (17 characters).
+`observer-test-20260918` exceeds the fixed kit's 20-character maximum. This applies
+only to the SiemCore product; updater self-update remains stable. Single-artifact
+publication accepts this custom channel and explicit alpha target. No enrollment
+until the signed product receipt exists and SiemCore signals readiness.

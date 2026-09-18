@@ -1,0 +1,16 @@
+package api
+import (
+ "encoding/json"
+ "net/http/httptest"
+ "strings"
+ "testing"
+ "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
+)
+func TestObserverUnlinkedOptionalFieldCompatibility(t *testing.T) {
+ body := `{"instance_id":"relay","product_tier":"mysoc","installation":{"kind":"observer-unlinked"},"children":[{"instance_id":"bezeq-pod-test-observer-8079452056575878166","product_tier":"siemcore","installation":{"kind":"observer-unlinked"}}]}`
+ var heartbeat types.Heartbeat
+ if err := decodeJSON(httptest.NewRequest("POST","/api/v1/heartbeat",strings.NewReader(body)),&heartbeat);err!=nil {t.Fatal(err)}
+ if heartbeat.InstanceID!="relay" || len(heartbeat.Children)!=1 || heartbeat.Children[0].InstanceID!="bezeq-pod-test-observer-8079452056575878166" {t.Fatal("lost child identity")}
+ encoded,err:=json.Marshal(heartbeat);if err!=nil{t.Fatal(err)}
+ if strings.Contains(string(encoded),"observer-unlinked") {t.Fatal("unexpected old-server installation persistence")}
+}
