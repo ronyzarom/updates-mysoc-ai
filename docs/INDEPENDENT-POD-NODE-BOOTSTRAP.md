@@ -135,3 +135,22 @@ readiness. Reviewed product source SHA256 at this checkpoint:
 
 Updates review identified the missing management TLS byte binding; the product
 fix is included in these passing tests. Full runtime remains pending.
+
+### Real runtime/schema follow-up (2026-09-18)
+
+Independently rebuilt SiemCore `internal/podcontroller` native test binary for
+Linux ARM64, then ran `FIXTURE_SCHEMA_TEST=1 bash
+scripts/tests/node-unlinked-runtime.sh` from the product worktree. Passed:
+
+- Real pinned PostgreSQL16 and Redis startup with no host ports or Observer/peer.
+- Injected interruption after PostgreSQL creation; retry created Redis without
+  replacing the PostgreSQL container.
+- Authenticated application-user PostgreSQL write/rollback and Redis checks.
+- Full shipped local schema initialization, repeated initialization, and verification
+  (`TestNativeUnlinkedNodeSchema`, 0.39s).
+
+The disposable fixture was cleaned up. This fixture exercises node1 runtime
+and schema using synthetic bindings. It does not yet exercise both complete
+installer envelopes, signed artifact delivery, management startup, or final
+installation acceptance. Receipts correctly remain `installation_complete=false`
+and `processing_enabled=false`. Delivery gates remain disabled.
