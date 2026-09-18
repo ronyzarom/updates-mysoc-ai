@@ -113,3 +113,25 @@ and reject modified signatures and artifact kinds. Targeted Go tests pass.
 The dashboard recognizes immutable `pod-node` and `observer-unlinked` identities
 as read-only POD node/Observer labels without implying linkage, readiness, or
 processing authority. Five badge tests and TypeScript checking pass.
+
+### Product staging independently exercised
+
+The product's isolated root fixture passed all 10 `test_node_local.py` tests:
+
+```sh
+docker run --rm --network none --entrypoint python3 \
+  -v /path/to/siemcore/deploy/cluster/updater:/src:ro \
+  siemcore-data-runtime-fixture:local \
+  -m unittest discover -s /src/tests -p test_node_local.py
+```
+
+This verifies durable local staging, interrupted-write retry, identity and
+credential binding, management certificate/key byte binding, and preservation
+of existing data. It does not start the product or prove schema/application
+readiness. Reviewed product source SHA256 at this checkpoint:
+
+- `pod_node_local.py`: `76d52e177893611837201f60cfa080a687783ef70d9ebca4dd951d595da8cddb`
+- `tests/test_node_local.py`: `2d261315b601e0742b3aefd06e9b488e64bd5b53373ef4d2723001ae6a5d292c`
+
+Updates review identified the missing management TLS byte binding; the product
+fix is included in these passing tests. Full runtime remains pending.
