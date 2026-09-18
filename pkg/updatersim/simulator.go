@@ -23,17 +23,18 @@ var ErrCycleInProgress = errors.New("simulator cycle already in progress")
 
 // Simulator runs safe updater protocol cycles.
 type Simulator struct {
-	nodeAdapterCall     func(context.Context, string, nodeRequest) (nodeResponse, error)
-	observerAdapterCall func(context.Context, string, observerRequest) (observerResponse, error)
-	config              *Config
-	client              *Client
-	executor            Executor
-	logger              *slog.Logger
-	state               *State
-	started             time.Time
-	cycleMu             sync.Mutex
-	random              *rand.Rand
-	publicKey           ed25519.PublicKey // release-signing key; nil disables verification
+	nodeAdapterCall       func(context.Context, string, nodeRequest) (nodeResponse, error)
+	standaloneAdapterCall func(context.Context, string, standaloneRequest) (standaloneResponse, error)
+	observerAdapterCall   func(context.Context, string, observerRequest) (observerResponse, error)
+	config                *Config
+	client                *Client
+	executor              Executor
+	logger                *slog.Logger
+	state                 *State
+	started               time.Time
+	cycleMu               sync.Mutex
+	random                *rand.Rand
+	publicKey             ed25519.PublicKey // release-signing key; nil disables verification
 
 	// binaryVersion is the ldflags-stamped version of the running executable,
 	// set via SetBinaryVersion. It anchors self-update comparisons; empty for
@@ -268,6 +269,10 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	}
 
 	if mode == ModeReal {
+		if pending, err := s.resumePendingIndependentStandalone(ctx); pending {
+			_, heartbeatErr := s.SendHeartbeat(ctx)
+			return errors.Join(err, heartbeatErr)
+		}
 		if pending, err := s.resumePendingIndependentNode(ctx); pending {
 			_, heartbeatErr := s.SendHeartbeat(ctx)
 			return errors.Join(err, heartbeatErr)
@@ -442,7 +447,9 @@ func (s *Simulator) processOfferAttempt(
 		}
 	} else if p, ok := s.config.Product(update.Product); ok && update.Product == "siemcore" && p.ServerType == "pod-node" {
 		var nodeErr error
-		if s.config.Simulation.Filesystem.IndependentNodeUpdate && update.FromVersion != "" && update.FromVersion != "0.0.0" && update.FromVersion != "0.0.0.0" {
+		if s.config.Simulation.Filesystem.IndependentNodeStandalone {
+			nodeErr = s.applyIndependentStandalone(ctx, update)
+		} else if s.config.Simulation.Filesystem.IndependentNodeUpdate && update.FromVersion != "" && update.FromVersion != "0.0.0" && update.FromVersion != "0.0.0.0" {
 			nodeErr = s.applyIndependentNodeUpdate(ctx, update)
 		} else {
 			nodeErr = s.applyIndependentNode(ctx, update)

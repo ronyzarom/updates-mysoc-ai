@@ -3,22 +3,19 @@ package updatersim
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-const nodeUpdateProtocol = "pod-node-update-v1"
+const nodeStandaloneProtocol = "pod-node-standalone-v1"
 
-type NodeUpdateOperation struct {
+type NodeStandaloneOperation struct {
 	OperationID     string `json:"operation_id"`
 	OperationSHA256 string `json:"operation_sha256,omitempty"`
 	TargetVersion   string `json:"target_version"`
@@ -29,17 +26,12 @@ type NodeUpdateOperation struct {
 	ArtifactPath    string `json:"artifact_path"`
 	Channel         string `json:"channel"`
 }
-type nodeTarget struct {
-	Version   string `json:"version"`
-	SHA256    string `json:"sha256"`
-	Signature string `json:"signature"`
-}
-type nodeRequest struct {
+type standaloneRequest struct {
 	Protocol    string      `json:"protocol"`
 	OperationID string      `json:"operation_id,omitempty"`
 	Target      *nodeTarget `json:"target,omitempty"`
 }
-type nodeResponse struct {
+type standaloneResponse struct {
 	Protocol              string         `json:"protocol"`
 	OperationID           string         `json:"operation_id,omitempty"`
 	OperationSHA256       string         `json:"operation_sha256,omitempty"`
@@ -55,18 +47,11 @@ type nodeResponse struct {
 	Health                map[string]any `json:"health,omitempty"`
 	Eligible              bool           `json:"eligible_for_security_upgrade,omitempty"`
 	UICompliant           bool           `json:"ui_security_compliant,omitempty"`
-}
-type nodeBoundedBuffer struct{ bytes.Buffer }
-
-func (b *nodeBoundedBuffer) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > 65536 {
-		return 0, fmt.Errorf("Node adapter output exceeds limit")
-	}
-	return b.Buffer.Write(p)
+	Mutation              string         `json:"mutation,omitempty"`
 }
 
-func invokeNodeAdapter(ctx context.Context, action string, request nodeRequest) (nodeResponse, error) {
-	var response nodeResponse
+func invokeStandaloneAdapter(ctx context.Context, action string, request standaloneRequest) (standaloneResponse, error) {
+	var response standaloneResponse
 	duration := 16 * time.Minute
 	if action == "readiness" || action == "status" {
 		duration = 40 * time.Second
@@ -77,7 +62,7 @@ func invokeNodeAdapter(ctx context.Context, action string, request nodeRequest) 
 	if err != nil {
 		return response, err
 	}
-	command := exec.CommandContext(ctx, "/usr/bin/sudo", "-n", "/usr/local/sbin/siemcore-node-update", action)
+	command := exec.CommandContext(ctx, "/usr/bin/sudo", "-n", "/usr/local/sbin/siemcore-node-standalone", action)
 	command.Stdin = bytes.NewReader(raw)
 	command.WaitDelay = 5 * time.Second
 	var output, diagnostic nodeBoundedBuffer
@@ -86,11 +71,11 @@ func invokeNodeAdapter(ctx context.Context, action string, request nodeRequest) 
 	if err = command.Run(); err != nil {
 		return response, fmt.Errorf("Node adapter outcome uncertain: %w", err)
 	}
-	return parseNodeResponse(output.Bytes())
+	return parseStandaloneResponse(output.Bytes())
 }
 
-func parseNodeResponse(raw []byte) (nodeResponse, error) {
-	var response nodeResponse
+func parseStandaloneResponse(raw []byte) (standaloneResponse, error) {
+	var response standaloneResponse
 	if err := rejectObserverDuplicateKeys(json.NewDecoder(bytes.NewReader(raw))); err != nil {
 		return response, err
 	}
@@ -103,53 +88,59 @@ func parseNodeResponse(raw []byte) (nodeResponse, error) {
 	if decoder.Decode(&extra) != io.EOF {
 		return response, fmt.Errorf("trailing Node adapter response")
 	}
-	if response.Protocol != nodeUpdateProtocol || time.Since(response.ObservedAt) > 40*time.Second || time.Until(response.ObservedAt) > 5*time.Second {
+	if response.Protocol != nodeStandaloneProtocol || time.Since(response.ObservedAt) > 40*time.Second || time.Until(response.ObservedAt) > 5*time.Second {
 		return response, fmt.Errorf("stale or incompatible Node adapter")
 	}
 	return response, nil
 }
-func (s *Simulator) nodeCall(ctx context.Context, action string, q nodeRequest) (nodeResponse, error) {
-	if s.nodeAdapterCall != nil {
-		return s.nodeAdapterCall(ctx, action, q)
+func (s *Simulator) standaloneCall(ctx context.Context, action string, q standaloneRequest) (standaloneResponse, error) {
+	if s.standaloneAdapterCall != nil {
+		return s.standaloneAdapterCall(ctx, action, q)
 	}
-	return invokeNodeAdapter(ctx, action, q)
+	return invokeStandaloneAdapter(ctx, action, q)
 }
-func (s *Simulator) nodeUpdateReady(ctx context.Context) ([]string, error) {
+func (s *Simulator) standaloneReady(ctx context.Context) (standaloneResponse, error) {
 	p, ok := s.config.Product("siemcore")
 	if !ok || p.ServerType != "pod-node" || (p.NodeID != "1" && p.NodeID != "2") {
-		return nil, fmt.Errorf("independent node identity required")
+		return standaloneResponse{}, fmt.Errorf("independent node identity required")
 	}
-	r, e := s.nodeCall(ctx, "readiness", nodeRequest{Protocol: nodeUpdateProtocol})
+	r, e := s.standaloneCall(ctx, "readiness", standaloneRequest{Protocol: nodeStandaloneProtocol})
 	if e != nil {
-		return nil, e
+		return standaloneResponse{}, e
 	}
 	if r.ServerType != "pod-node" || r.NodeID != p.NodeID || !nodeDigest(r.AdapterManifestSHA256) {
-		return nil, fmt.Errorf("protected Node component not ready")
+		return standaloneResponse{}, fmt.Errorf("protected Node component not ready")
 	}
-	return r.Capabilities, nil
+	if _, err := uuid.Parse(r.OperationID); err != nil {
+		return standaloneResponse{}, fmt.Errorf("root standalone operation ID required")
+	}
+	return r, nil
 }
 
-func (s *Simulator) applyIndependentNodeUpdate(ctx context.Context, u Update) error {
-	operation := s.state.NodeUpdateOperation
+func (s *Simulator) applyIndependentStandalone(ctx context.Context, u Update) error {
+	operation := s.state.NodeStandaloneOperation
 	if operation != nil && operation.Phase == "accepted" && operation.TargetVersion == u.FromVersion && operation.TargetVersion != u.ToVersion {
-		operation = nil // Root independently requires the previous accepted receipt.
+		return fmt.Errorf("routine standalone updates require a qualified executor")
 	}
 	if operation == nil {
-		capabilities, err := s.nodeUpdateReady(ctx)
+		ready, err := s.standaloneReady(ctx)
 		if err != nil {
 			return err
 		}
+		if ready.TargetVersion != u.ToVersion || ready.ArtifactSHA256 != u.ArtifactSHA256 {
+			return fmt.Errorf("standalone offer differs from protected transition")
+		}
 		found := false
-		for _, c := range capabilities {
-			if c == nodeUpdateProtocol {
+		for _, c := range ready.Capabilities {
+			if c == nodeStandaloneProtocol {
 				found = true
 			}
 		}
 		if !found {
-			return fmt.Errorf("Node security upgrade capability missing")
+			return fmt.Errorf("standalone transition capability missing")
 		}
-		operation = &NodeUpdateOperation{OperationID: uuid.NewString(), TargetVersion: u.ToVersion, SHA256: u.ArtifactSHA256, Signature: u.ArtifactSignature, Phase: "prepared", FromVersion: u.FromVersion, ArtifactPath: u.ArtifactPath, Channel: u.Channel}
-		s.state.NodeUpdateOperation = operation
+		operation = &NodeStandaloneOperation{OperationID: ready.OperationID, TargetVersion: u.ToVersion, SHA256: u.ArtifactSHA256, Signature: u.ArtifactSignature, Phase: "prepared", FromVersion: u.FromVersion, ArtifactPath: u.ArtifactPath, Channel: u.Channel}
+		s.state.NodeStandaloneOperation = operation
 		if err = SaveState(s.config.Simulation.StateFile, s.state); err != nil {
 			return err
 		}
@@ -157,13 +148,13 @@ func (s *Simulator) applyIndependentNodeUpdate(ctx context.Context, u Update) er
 	if operation.FromVersion != u.FromVersion || operation.Channel != u.Channel || operation.TargetVersion != u.ToVersion || operation.SHA256 != u.ArtifactSHA256 || operation.Signature != u.ArtifactSignature {
 		return fmt.Errorf("Node operation target changed; retained original transaction")
 	}
-	q := nodeRequest{Protocol: nodeUpdateProtocol, OperationID: operation.OperationID, Target: &nodeTarget{u.ToVersion, u.ArtifactSHA256, u.ArtifactSignature}}
+	q := standaloneRequest{Protocol: nodeStandaloneProtocol, OperationID: operation.OperationID, Target: &nodeTarget{u.ToVersion, u.ArtifactSHA256, u.ArtifactSignature}}
 	action := "apply"
 	if operation.Phase != "prepared" && operation.Phase != "staged" {
 		action = "status"
 	}
 	for step := 0; step < 3; step++ {
-		r, err := s.nodeCall(ctx, action, q)
+		r, err := s.standaloneCall(ctx, action, q)
 		if err != nil {
 			operation.Phase = "uncertain"
 			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state))
@@ -196,54 +187,15 @@ func (s *Simulator) applyIndependentNodeUpdate(ctx context.Context, u Update) er
 	return fmt.Errorf("Node transaction remains pending; reconcile retained operation")
 }
 
-// Only called after the protected root adapter proves acceptance. Product code
-// is never executed through mutable updater-owned extraction during publication.
-func (s *Simulator) publishNodePointers(ctx context.Context, u Update) error {
-	e, ok := s.executor.(*FilesystemExecutor)
-	if !ok {
-		return fmt.Errorf("Node filesystem metadata executor required")
-	}
-	target, err := filepath.EvalSymlinks(e.currentLink(u.Product))
-	expected := e.versionDir(u.Product, u.ToVersion)
-	if actual, resolveErr := filepath.EvalSymlinks(expected); resolveErr == nil && err == nil && actual == target {
-		raw, readErr := os.ReadFile(filepath.Join(target, ".updater-release.json"))
-		if readErr != nil {
-			return readErr
-		}
-		var m releaseMetadata
-		if json.Unmarshal(raw, &m) != nil || m.Version != u.ToVersion || m.Product != u.Product || m.SHA256 != u.ArtifactSHA256 || m.Signature != u.ArtifactSignature {
-			return fmt.Errorf("Node accepted pointer metadata differs")
-		}
-		return nil
-	}
-	copyExecutor := *e
-	copyExecutor.RestartCommand = nil
-	copyExecutor.HealthCommand = nil
-	return copyExecutor.Apply(ctx, u)
-}
-
-func nodeDigest(s string) bool {
-	b, e := hex.DecodeString(s)
-	return e == nil && len(b) == 32 && hex.EncodeToString(b) == s
-}
-
 // Reconcile local durable work before any network check or fresh offer admission.
 // Recovery must still work when product management or the parent is unavailable.
-func (s *Simulator) resumePendingIndependentNode(ctx context.Context) (bool, error) {
-	op := s.state.NodeUpdateOperation
+func (s *Simulator) resumePendingIndependentStandalone(ctx context.Context) (bool, error) {
+	op := s.state.NodeStandaloneOperation
 	if op == nil {
 		return false, nil
 	}
 	p, ok := s.config.Product("siemcore")
-	if ok && op.Phase == "accepted" && s.config.Simulation.Filesystem.IndependentNodeStandalone {
-		if p.CurrentVersion == op.TargetVersion {
-			return false, nil
-		}
-		if next := s.state.NodeStandaloneOperation; next != nil && next.Phase == "accepted" && next.FromVersion == op.TargetVersion && next.TargetVersion == p.CurrentVersion {
-			return false, nil
-		}
-	}
-	if !ok || p.ServerType != "pod-node" || !s.config.Simulation.Filesystem.IndependentNodeUpdate {
+	if !ok || p.ServerType != "pod-node" || !s.config.Simulation.Filesystem.IndependentNodeStandalone {
 		return true, fmt.Errorf("retained Node operation requires original executor")
 	}
 	if err := s.validateSiemCoreExecution(); err != nil {
@@ -253,7 +205,7 @@ func (s *Simulator) resumePendingIndependentNode(ctx context.Context) (bool, err
 		return false, nil
 	}
 	u := Update{Product: "siemcore", FromVersion: op.FromVersion, ToVersion: op.TargetVersion, ArtifactPath: op.ArtifactPath, ArtifactSHA256: op.SHA256, ArtifactSignature: op.Signature, Channel: op.Channel}
-	err := s.applyIndependentNodeUpdate(ctx, u)
+	err := s.applyIndependentStandalone(ctx, u)
 	message := ""
 	if err != nil {
 		message = err.Error()

@@ -88,6 +88,9 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 }
 func (s *Simulator) validateSiemCoreExecution() error {
 	p, ok := s.config.Product("siemcore")
+	if s.config.Simulation.Filesystem.IndependentNodeStandalone && (!ok || p.ServerType != "pod-node" || s.config.Simulation.Filesystem.IndependentNodeUpdate) {
+		return fmt.Errorf("standalone transition requires independent node and exclusive executor")
+	}
 	if s.config.Simulation.Filesystem.IndependentNodeUpdate && (!ok || p.ServerType != "pod-node") {
 		return fmt.Errorf("independent node update executor cannot serve other installation types")
 	}

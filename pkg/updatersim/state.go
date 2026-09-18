@@ -14,6 +14,7 @@ import (
 // State is simulator state that must survive process restarts.
 type State struct {
 	NodeUpdateOperation     *NodeUpdateOperation         `json:"node_update_operation,omitempty"`
+	NodeStandaloneOperation *NodeStandaloneOperation     `json:"node_standalone_operation,omitempty"`
 	ObserverUpdateOperation *ObserverUpdateOperation     `json:"observer_update_operation,omitempty"`
 	SiemCoreInstallation    *SiemCoreInstallation        `json:"siemcore_installation,omitempty"`
 	InstanceID              string                       `json:"instance_id,omitempty"`

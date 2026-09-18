@@ -23,6 +23,10 @@ func (s *Simulator) podCapabilities(ctx context.Context, product string) (string
 		}
 		role = mapped
 	}
+	if product == "siemcore" && p.ServerType == "pod-node" && s.config.Simulation.Filesystem.IndependentNodeStandalone {
+		ready, err := s.standaloneReady(ctx)
+		return role, ready.Capabilities, err
+	}
 	if product == "siemcore" && p.ServerType == "pod-node" && s.config.Simulation.Filesystem.IndependentNodeUpdate {
 		caps, err := s.nodeUpdateReady(ctx)
 		return role, caps, err
