@@ -127,7 +127,7 @@ func (u *SelfUpdater) Stage(artifactPath, version, binaryName string) (string, e
 }
 
 // ValidateStaged executes the staged candidate ("<binary> version") and
-// requires its output to contain the expected version. This catches corrupt
+// requires its cascade identity, exact version and runtime command surface. This catches corrupt
 // downloads, wrong-architecture binaries, and mislabeled builds before the
 // swap, which is the main crash-loop risk of a service self-update.
 func (u *SelfUpdater) ValidateStaged(ctx context.Context, stagedPath, version string) error {
@@ -138,12 +138,19 @@ func (u *SelfUpdater) ValidateStaged(ctx context.Context, stagedPath, version st
 	if err != nil {
 		return fmt.Errorf("staged updater failed to execute: %w: %s", err, strings.TrimSpace(string(output)))
 	}
-	if !strings.Contains(string(output), version) {
+	identity := strings.Fields(strings.SplitN(string(output), "\n", 2)[0])
+	if len(identity) != 2 || identity[0] != "updater-simulator" || identity[1] != version {
 		return fmt.Errorf(
 			"staged updater reports %q, expected version %s",
 			strings.TrimSpace(strings.SplitN(string(output), "\n", 2)[0]),
 			version,
 		)
+	}
+	for _, action := range []string{"run", "relay"} {
+		help, err := exec.CommandContext(runCtx, stagedPath, action, "--help").CombinedOutput()
+		if err != nil || !strings.Contains(string(help), "--config") {
+			return fmt.Errorf("staged updater lacks cascade %s command", action)
+		}
 	}
 	return nil
 }

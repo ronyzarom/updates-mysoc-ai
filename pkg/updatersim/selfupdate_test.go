@@ -14,7 +14,7 @@ import (
 // "version" subcommand output for the given version.
 func fakeUpdaterBinary(t *testing.T, path, version string) {
 	t.Helper()
-	script := fmt.Sprintf("#!/bin/sh\necho \"updater-simulator %s\"\n", version)
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$2\" = \"--help\" ]; then echo \"--config cascade\"; exit 0; fi\necho \"updater-simulator %s\"\n", version)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -230,5 +230,23 @@ func TestResolveSelfUpdateWatchdogRestoresPrevious(t *testing.T) {
 	target, _ := os.Readlink(layout.currentLink())
 	if target != layout.releaseDir("1.0.0") {
 		t.Fatalf("current points at %s after watchdog, want restored 1.0.0", target)
+	}
+}
+
+func TestSelfUpdaterRejectsWrongEntrypointAndMissingCommands(t *testing.T) {
+	for name, body := range map[string]string{
+		"management-cli":    "#!/bin/sh\necho 'mysoc-updater 2.0.0'\n",
+		"version-only":      "#!/bin/sh\necho 'updater-simulator 2.0.0'\n",
+		"substring-version": "#!/bin/sh\necho 'updater-simulator 12.0.0'\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "candidate")
+			if err := os.WriteFile(path, []byte(body), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := (&SelfUpdater{}).ValidateStaged(context.Background(), path, "2.0.0"); err == nil {
+				t.Fatal("incompatible entrypoint accepted")
+			}
+		})
 	}
 }
