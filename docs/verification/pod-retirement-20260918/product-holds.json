@@ -1,0 +1,29 @@
+[
+  {
+    "id": "5a8aa484-52b6-41ad-8e5c-5a40f810d8a7",
+    "instance_id": "bezeq-pod-test-a-7631443060152631202",
+    "previous_auto_update": true,
+    "auto_update_enabled": false,
+    "update_group": "alpha",
+    "status": "offline",
+    "deleted_at": null
+  },
+  {
+    "id": "054e68fd-c983-439d-9fb2-b92b3cd3a905",
+    "instance_id": "bezeq-pod-test-b-5012156962629255074",
+    "previous_auto_update": true,
+    "auto_update_enabled": false,
+    "update_group": "alpha",
+    "status": "online",
+    "deleted_at": null
+  },
+  {
+    "id": "54c75109-183e-4ef6-ae31-ab62ec862fdc",
+    "instance_id": "bezeq-pod-test-witness-8916397017694216169",
+    "previous_auto_update": false,
+    "auto_update_enabled": false,
+    "update_group": "alpha",
+    "status": "online",
+    "deleted_at": null
+  }
+]
