@@ -1,0 +1,12 @@
+Temporary unprivileged Linux amd64 CLI only. No installation or service execution.
+Local and remote pod/bin/siemcore SHA256:
+75db1e54f9b1066e5a66fbc41756f2d12f57bd58b64dd26d8fc64705ca056a32
+
+Command: timeout 10 /tmp/siemcore-observer-version-check-3.3.152.37 --version
+Exit: 0
+SiemCore SIEM Platform
+  Version:    3.3.152.37
+  Build Date: 2026-09-18T03:42:15Z
+  Git Commit: e399879503065e260ba2dbb13913fd6d9db176de
+
+Temporary remote binary removed after check.
