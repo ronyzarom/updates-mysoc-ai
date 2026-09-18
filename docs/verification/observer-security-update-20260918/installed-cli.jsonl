@@ -1,0 +1,1 @@
+{"fixture": "installed-cli", "phase": "accepted", "root_and_exact_product_worker": true, "real_systemd": true, "synthetic_signed_executable": true, "network": "none", "public_artifact_or_live_host": false}

@@ -1,0 +1,2 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatersim	10.509s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatecapability	(cached)

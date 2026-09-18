@@ -23,15 +23,16 @@ var ErrCycleInProgress = errors.New("simulator cycle already in progress")
 
 // Simulator runs safe updater protocol cycles.
 type Simulator struct {
-	config    *Config
-	client    *Client
-	executor  Executor
-	logger    *slog.Logger
-	state     *State
-	started   time.Time
-	cycleMu   sync.Mutex
-	random    *rand.Rand
-	publicKey ed25519.PublicKey // release-signing key; nil disables verification
+	observerAdapterCall func(context.Context, string, observerRequest) (observerResponse, error)
+	config              *Config
+	client              *Client
+	executor            Executor
+	logger              *slog.Logger
+	state               *State
+	started             time.Time
+	cycleMu             sync.Mutex
+	random              *rand.Rand
+	publicKey           ed25519.PublicKey // release-signing key; nil disables verification
 
 	// binaryVersion is the ldflags-stamped version of the running executable,
 	// set via SetBinaryVersion. It anchors self-update comparisons; empty for
@@ -266,6 +267,10 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	}
 
 	if mode == ModeReal {
+		if pending, err := s.resumePendingIndependentObserver(ctx); pending {
+			_, heartbeatErr := s.SendHeartbeat(ctx)
+			return errors.Join(err, heartbeatErr)
+		}
 		if pending, err := s.resumePendingObserver(ctx); pending {
 			_, heartbeatErr := s.SendHeartbeat(ctx)
 			return errors.Join(err, heartbeatErr)
@@ -431,7 +436,13 @@ func (s *Simulator) processOfferAttempt(
 			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "pod_maintenance", Stage: "maintenance"}))
 		}
 	} else if p, ok := s.config.Product(update.Product); ok && update.Product == "siemcore" && p.ServerType == "observer-unlinked" {
-		if err := s.applyIndependentObserver(ctx, update); err != nil {
+		var observerErr error
+		if s.config.Simulation.Filesystem.ObserverUnlinkedUpdate {
+			observerErr = s.applyObserverSecurityUpdate(ctx, update)
+		} else {
+			observerErr = s.applyIndependentObserver(ctx, update)
+		}
+		if err := observerErr; err != nil {
 			return s.failAndRollback(ctx, update, err)
 		}
 	} else {

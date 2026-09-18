@@ -84,6 +84,9 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 }
 func (s *Simulator) validateSiemCoreExecution() error {
 	p, ok := s.config.Product("siemcore")
+	if s.config.Simulation.Filesystem.ObserverUnlinkedUpdate && (!ok || p.ServerType != "observer-unlinked") {
+		return fmt.Errorf("independent Observer update executor cannot serve other installation types")
+	}
 	if s.config.Simulation.Filesystem.ObserverMaintenance != nil && (!ok || p.ServerType != "pod-observer") {
 		return fmt.Errorf("observer executor cannot handle normal or data nodes")
 	}

@@ -1,0 +1,8 @@
+{
+  "deploy/observer-update-v1/adapter.py": "5aeb705641d9362a102cd46f81ecb3b62fa49269d6f6ea48e1bc1a80121c644e",
+  "deploy/observer-update-v1/cli.py": "f50f7b96b77e468f18ef4195145cc55b57a041d34b7f0b78baefe928c04f1069",
+  "deploy/observer-update-v1/host.py": "65461787ec517f465daa3cc81c40da80ef2dff32edf374452e6aa9a5c95fd839",
+  "deploy/observer-update-v1/protocol.py": "17b648921c4e914de5c937b28af63e8173a08251313de7481d8258ed7ab8e79a",
+  "deploy/observer-update-v1/supervisor.py": "4ceff18cbb19735180dfe3a2900b1f42ef29bad8e9e1d7f5d2b7f92a2fb8eb74",
+  "deploy/observer-update-v1/worker.py": "b34d7610e50a1757cc9f31cda8012c76ec207e7c3f509fe5dd3e8785a6cb0b8f"
+}

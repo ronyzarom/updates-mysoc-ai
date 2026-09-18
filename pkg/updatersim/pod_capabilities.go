@@ -23,6 +23,10 @@ func (s *Simulator) podCapabilities(ctx context.Context, product string) (string
 		}
 		role = mapped
 	}
+	if product == "siemcore" && role == "observer-unlinked" && s.config.Simulation.Filesystem.ObserverUnlinkedUpdate {
+		caps, err := s.observerUpdateReady(ctx)
+		return role, caps, err
+	}
 	cfg := s.config.Simulation.Filesystem.PodMaintenance
 	if product != "siemcore" || cfg == nil {
 		return role, nil, nil

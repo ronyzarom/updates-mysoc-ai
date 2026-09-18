@@ -13,13 +13,14 @@ import (
 
 // State is simulator state that must survive process restarts.
 type State struct {
-	SiemCoreInstallation *SiemCoreInstallation        `json:"siemcore_installation,omitempty"`
-	InstanceID           string                       `json:"instance_id,omitempty"`
-	APIKey               string                       `json:"api_key,omitempty"`
-	RelayToken           string                       `json:"relay_token,omitempty"`
-	ProductVersions      map[string]string            `json:"product_versions,omitempty"`
-	LastUpdateAttempt    *platformtypes.UpdateAttempt `json:"last_update_attempt,omitempty"`
-	ProductRetries       map[string]*ProductRetry     `json:"product_retries,omitempty"`
+	ObserverUpdateOperation *ObserverUpdateOperation     `json:"observer_update_operation,omitempty"`
+	SiemCoreInstallation    *SiemCoreInstallation        `json:"siemcore_installation,omitempty"`
+	InstanceID              string                       `json:"instance_id,omitempty"`
+	APIKey                  string                       `json:"api_key,omitempty"`
+	RelayToken              string                       `json:"relay_token,omitempty"`
+	ProductVersions         map[string]string            `json:"product_versions,omitempty"`
+	LastUpdateAttempt       *platformtypes.UpdateAttempt `json:"last_update_attempt,omitempty"`
+	ProductRetries          map[string]*ProductRetry     `json:"product_retries,omitempty"`
 
 	// Desired-state reconciliation tracking.
 	SystemRelease     string            `json:"system_release,omitempty"`
