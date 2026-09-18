@@ -1,0 +1,14 @@
+{
+  "archive_checksum_verified": true,
+  "archive_retrieval_verified": true,
+  "bootstrap_bytes_preserved": true,
+  "data_identity_preserved": true,
+  "interrupted_recovery_verified": true,
+  "mysoc_conflict_refused": true,
+  "mysoc_exact_retry_verified": true,
+  "paid_ai_guard_verified": true,
+  "scope": "disposable nested Docker product fixture; not live A tenant delivery",
+  "synthetic_event_archived": true,
+  "target_artifact_sha256": "605b41c1903c1c1eb5d2423d0873cb2af6a147988e9f05bb5c3de627f7a6010f",
+  "target_version": "3.3.152.43"
+}

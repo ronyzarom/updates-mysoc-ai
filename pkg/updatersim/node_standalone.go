@@ -179,7 +179,9 @@ func (s *Simulator) applyIndependentStandalone(ctx context.Context, u Update) er
 		case "recovery_required", "restoring":
 			action = "recover"
 		case "switching", "verifying":
-			action = "status"
+			// A interrupted product worker cannot advance itself. Reconcile the
+			// same durable operation instead of polling its frozen phase forever.
+			action = "recover"
 		default:
 			return fmt.Errorf("unknown Node transaction phase")
 		}

@@ -1,0 +1,448 @@
+{
+  "standalone-fixture-result": {
+    "status": "functional-health-passed",
+    "health": {
+      "live": {
+        "installation_id": "fixture-node-1",
+        "installation_mode": "independent-standalone",
+        "instance_id": "fixture-customer-1",
+        "node_id": "1",
+        "pod_authority_enabled": false,
+        "status": "alive",
+        "updater_id": "fixture-updater-1",
+        "version": "3.3.152.43"
+      },
+      "ready": {
+        "build_date": "2026-09-18T17:07:17Z",
+        "checks": {
+          "postgres": {
+            "ok": true
+          },
+          "redis": {
+            "ok": true
+          }
+        },
+        "git_commit": "5024e4e2b9c4518f57b4675d7d9faffa043803ba",
+        "instance_id": "fixture-customer-1",
+        "status": "healthy",
+        "version": "3.3.152.43"
+      },
+      "pipeline": {
+        "asset_aggregator": {
+          "observed": 0,
+          "flushed": 0,
+          "dropped_cardinality": 0,
+          "flush_failed_total": 0,
+          "flush_aborted_total": 0,
+          "shards": 16,
+          "live_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0
+        },
+        "detection": {
+          "tenant_count": 0,
+          "detection_dropped": 0,
+          "entity_dropped": 0,
+          "finding_dropped": 0,
+          "alert_dropped": 0,
+          "detection_queue_depth_sum": 0,
+          "detection_queue_capacity_sum": 0,
+          "entity_queue_depth_sum": 0,
+          "entity_queue_capacity_sum": 0,
+          "finding_queue_depth_sum": 0,
+          "finding_queue_capacity_sum": 0,
+          "alert_queue_depth_sum": 0,
+          "alert_queue_capacity_sum": 0,
+          "worker_count_total": 0
+        },
+        "enabled": true,
+        "http_pool": {
+          "idle": 1,
+          "in_use": 0,
+          "max_idle_closed": 0,
+          "max_lifetime_closed": 0,
+          "max_open": 30,
+          "open": 1,
+          "wait_count": 0,
+          "wait_duration_ms": 0
+        },
+        "instance_id": "fixture-customer-1",
+        "ioc_aggregator": {
+          "observed": 0,
+          "flushed": 0,
+          "dropped_cardinality": 0,
+          "flush_failed_total": 0,
+          "flush_aborted_total": 0,
+          "shards": 16,
+          "live_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0
+        },
+        "mapping_activity": {
+          "observed": 0,
+          "flushed": 0,
+          "flush_failed": 0,
+          "pending_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0,
+          "flush_interval_sec": 60
+        },
+        "raw_log_flush": {
+          "failed_rows": 0,
+          "flush_batches": 0,
+          "flush_duration_ns": 0,
+          "flush_errors": 0,
+          "flush_max_duration_ns": 0,
+          "flush_rows": 0,
+          "queue_capacity": 1200000,
+          "queue_high_water": 0
+        },
+        "raw_logs": {
+          "dropped_queue_full": 0,
+          "enqueued": 0,
+          "flushed": 0,
+          "queue_depth": 0
+        },
+        "snapshot": {
+          "pod_attribution_rejected": 0,
+          "server": {
+            "messages_received": 0,
+            "messages_processed": 0,
+            "parse_errors": 0,
+            "binary_frames_rejected": 0,
+            "source_unknown": 0,
+            "source_wrong_port": 0,
+            "source_enforced_drops": 0,
+            "dropped_messages_queue_full": 0,
+            "active_connections": 0,
+            "bytes_received": 0,
+            "queue_depth": 0,
+            "queue_capacity": 1000000,
+            "num_workers": 32
+          },
+          "handler_entered_ok": 0,
+          "dropped_no_tenant": 0,
+          "tenant_rejected": 0,
+          "dropped_memory_tier_rejected": 0,
+          "tenant_processor_errored": 0,
+          "retention_detect_only": 0,
+          "retention_ignored": 0,
+          "webhook_ingested": 0,
+          "rest_ingested": 0
+        },
+        "swf_agents": {
+          "observed": 0,
+          "flushed": 0,
+          "flush_failed": 0,
+          "dropped": 0,
+          "pending_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0,
+          "flush_interval_sec": 60
+        },
+        "version": "3.3.152.43",
+        "writer_pool": {
+          "capacity": 16,
+          "in_use": 0,
+          "acquired_total": 0,
+          "released_total": 0,
+          "contended_total": 0,
+          "timed_out_total": 0
+        }
+      },
+      "archive": {
+        "bucket": "/var/lib/siemcore/archives/objects",
+        "chunk_backlog_count": 0,
+        "chunk_backlog_oldest_age_s": 0,
+        "chunk_dir": "/var/lib/siemcore/chunks",
+        "chunk_dir_census": {
+          "invalid_tenant_count": 0,
+          "protocol_mismatch_count": 0,
+          "unreadable_count": 0,
+          "orphaned_in_progress_count": 0,
+          "quarantined_bytes": 0,
+          "oldest_quarantined_age_s": 0
+        },
+        "chunk_protocol": 2,
+        "chunk_protocol_min": 0,
+        "chunk_protocol_mismatches": 0,
+        "consumer_stats": {
+          "name": "archive",
+          "queue_len": 0,
+          "queue_cap": 100000,
+          "enqueued": 0,
+          "dropped": 0,
+          "processed": 0,
+          "errors": 0
+        },
+        "disk_critical_gb": 18,
+        "disk_free_bytes": 1029998514176,
+        "disk_free_gb": "959.3",
+        "disk_status": "ok",
+        "disk_warn_gb": 25,
+        "failed_archive_job_count": 0,
+        "failed_archive_job_oldest_age_s": 0,
+        "local_retention": {
+          "enabled": true,
+          "last_run_at": "0001-01-01T00:00:00Z",
+          "deleted_objects_total": 0,
+          "deleted_rows_total": 0,
+          "freed_bytes_total": 0,
+          "pending_objects": 0
+        },
+        "node_id": "fixture-customer-1-archiver",
+        "panics_recovered": 0,
+        "poll_interval_s": 5,
+        "quarantined_invalid_tenant": 0,
+        "quarantined_protocol": 0,
+        "quarantined_unreadable": 0,
+        "retired_manifest_count": 0,
+        "role": "archiver",
+        "status": "ok",
+        "unuploaded_manifest_count": 0,
+        "unuploaded_manifest_oldest_age_s": 0,
+        "upload_backoff_skips": 0,
+        "upload_backoff_waiting": 0,
+        "version": "3.3.152.43"
+      },
+      "binary_sha256": "9306434ae7c11e61fdd91e9ab3d7f47f916175eb2655138d991f99f87ae8893f",
+      "container_ids": [
+        "72ce60224dc4d80b04e5b00a1533ae0237a40fd07571112ce0e4400f541080c0",
+        "bdb6aeb7d933869a17006c9c0f5d951428d6dd5d8c1ca804338bb542124e169a"
+      ]
+    },
+    "bootstrap_bytes_preserved": true,
+    "data_ids_preserved": true,
+    "root_signature_admission_tested": false,
+    "full_pipeline_probe_pending": true
+  },
+  "standalone-pipeline-result": {
+    "status": "pipeline-and-guards-passed",
+    "raw_log_rows": 1,
+    "synthetic_event_archived": true,
+    "archive_checksum_verified": true,
+    "archive_retrieval_verified": true,
+    "paid_ai_guard_verified": true,
+    "mysoc_exact_retry_verified": true,
+    "mysoc_conflict_refused": true,
+    "bootstrap_bytes_preserved": true,
+    "health": {
+      "live": {
+        "installation_id": "fixture-node-1",
+        "installation_mode": "independent-standalone",
+        "instance_id": "fixture-customer-1",
+        "node_id": "1",
+        "pod_authority_enabled": false,
+        "status": "alive",
+        "updater_id": "fixture-updater-1",
+        "version": "3.3.152.43"
+      },
+      "ready": {
+        "build_date": "2026-09-18T17:07:17Z",
+        "checks": {
+          "postgres": {
+            "ok": true
+          },
+          "redis": {
+            "ok": true
+          }
+        },
+        "git_commit": "5024e4e2b9c4518f57b4675d7d9faffa043803ba",
+        "instance_id": "fixture-customer-1",
+        "status": "healthy",
+        "version": "3.3.152.43"
+      },
+      "pipeline": {
+        "asset_aggregator": {
+          "observed": 0,
+          "flushed": 0,
+          "dropped_cardinality": 0,
+          "flush_failed_total": 0,
+          "flush_aborted_total": 0,
+          "shards": 16,
+          "live_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0
+        },
+        "detection": {
+          "tenant_count": 0,
+          "detection_dropped": 0,
+          "entity_dropped": 0,
+          "finding_dropped": 0,
+          "alert_dropped": 0,
+          "detection_queue_depth_sum": 0,
+          "detection_queue_capacity_sum": 0,
+          "entity_queue_depth_sum": 0,
+          "entity_queue_capacity_sum": 0,
+          "finding_queue_depth_sum": 0,
+          "finding_queue_capacity_sum": 0,
+          "alert_queue_depth_sum": 0,
+          "alert_queue_capacity_sum": 0,
+          "worker_count_total": 0
+        },
+        "enabled": true,
+        "http_pool": {
+          "idle": 1,
+          "in_use": 0,
+          "max_idle_closed": 0,
+          "max_lifetime_closed": 0,
+          "max_open": 30,
+          "open": 1,
+          "wait_count": 0,
+          "wait_duration_ms": 0
+        },
+        "instance_id": "fixture-customer-1",
+        "ioc_aggregator": {
+          "observed": 0,
+          "flushed": 0,
+          "dropped_cardinality": 0,
+          "flush_failed_total": 0,
+          "flush_aborted_total": 0,
+          "shards": 16,
+          "live_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0
+        },
+        "mapping_activity": {
+          "observed": 0,
+          "flushed": 0,
+          "flush_failed": 0,
+          "pending_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0,
+          "flush_interval_sec": 60
+        },
+        "raw_log_flush": {
+          "failed_rows": 0,
+          "flush_batches": 0,
+          "flush_duration_ns": 0,
+          "flush_errors": 0,
+          "flush_max_duration_ns": 0,
+          "flush_rows": 0,
+          "queue_capacity": 1200000,
+          "queue_high_water": 0
+        },
+        "raw_logs": {
+          "dropped_queue_full": 0,
+          "enqueued": 0,
+          "flushed": 0,
+          "queue_depth": 0
+        },
+        "snapshot": {
+          "pod_attribution_rejected": 0,
+          "server": {
+            "messages_received": 0,
+            "messages_processed": 0,
+            "parse_errors": 0,
+            "binary_frames_rejected": 0,
+            "source_unknown": 0,
+            "source_wrong_port": 0,
+            "source_enforced_drops": 0,
+            "dropped_messages_queue_full": 0,
+            "active_connections": 0,
+            "bytes_received": 0,
+            "queue_depth": 0,
+            "queue_capacity": 1000000,
+            "num_workers": 32
+          },
+          "handler_entered_ok": 0,
+          "dropped_no_tenant": 0,
+          "tenant_rejected": 0,
+          "dropped_memory_tier_rejected": 0,
+          "tenant_processor_errored": 0,
+          "retention_detect_only": 0,
+          "retention_ignored": 0,
+          "webhook_ingested": 0,
+          "rest_ingested": 0
+        },
+        "swf_agents": {
+          "observed": 0,
+          "flushed": 0,
+          "flush_failed": 0,
+          "dropped": 0,
+          "pending_keys": 0,
+          "last_flush_keys": 0,
+          "last_flush_duration_ms": 0,
+          "flush_interval_sec": 60
+        },
+        "version": "3.3.152.43",
+        "writer_pool": {
+          "capacity": 16,
+          "in_use": 0,
+          "acquired_total": 0,
+          "released_total": 0,
+          "contended_total": 0,
+          "timed_out_total": 0
+        }
+      },
+      "archive": {
+        "bucket": "/var/lib/siemcore/archives/objects",
+        "chunk_backlog_count": 0,
+        "chunk_backlog_oldest_age_s": 0,
+        "chunk_dir": "/var/lib/siemcore/chunks",
+        "chunk_dir_census": {
+          "invalid_tenant_count": 0,
+          "protocol_mismatch_count": 0,
+          "unreadable_count": 0,
+          "orphaned_in_progress_count": 0,
+          "quarantined_bytes": 0,
+          "oldest_quarantined_age_s": 0
+        },
+        "chunk_protocol": 2,
+        "chunk_protocol_min": 0,
+        "chunk_protocol_mismatches": 0,
+        "consumer_stats": {
+          "name": "archive",
+          "queue_len": 0,
+          "queue_cap": 100000,
+          "enqueued": 0,
+          "dropped": 0,
+          "processed": 1,
+          "errors": 0
+        },
+        "disk_critical_gb": 18,
+        "disk_free_bytes": 1029993299968,
+        "disk_free_gb": "959.3",
+        "disk_status": "ok",
+        "disk_warn_gb": 25,
+        "failed_archive_job_count": 0,
+        "failed_archive_job_oldest_age_s": 0,
+        "local_retention": {
+          "enabled": true,
+          "last_run_at": "2026-09-18T17:14:36.550224126Z",
+          "deleted_objects_total": 0,
+          "deleted_rows_total": 0,
+          "freed_bytes_total": 0,
+          "pending_objects": 0
+        },
+        "node_id": "fixture-customer-1-archiver",
+        "panics_recovered": 0,
+        "poll_interval_s": 5,
+        "quarantined_invalid_tenant": 0,
+        "quarantined_protocol": 0,
+        "quarantined_unreadable": 0,
+        "retired_manifest_count": 0,
+        "role": "archiver",
+        "status": "ok",
+        "unuploaded_manifest_count": 0,
+        "unuploaded_manifest_oldest_age_s": 0,
+        "upload_backoff_skips": 0,
+        "upload_backoff_waiting": 0,
+        "version": "3.3.152.43"
+      },
+      "binary_sha256": "9306434ae7c11e61fdd91e9ab3d7f47f916175eb2655138d991f99f87ae8893f",
+      "container_ids": [
+        "72ce60224dc4d80b04e5b00a1533ae0237a40fd07571112ce0e4400f541080c0",
+        "bdb6aeb7d933869a17006c9c0f5d951428d6dd5d8c1ca804338bb542124e169a"
+      ]
+    }
+  },
+  "standalone-recovery-result": {
+    "status": "passed",
+    "interrupted_recovery_verified": true,
+    "same_operation": "a0c79324-4696-4c1e-be52-b24aded3559e",
+    "bootstrap_bytes_preserved": true,
+    "data_identity_preserved": true,
+    "management_restored": true
+  }
+}

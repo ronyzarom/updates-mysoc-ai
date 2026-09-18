@@ -21,9 +21,10 @@ HISTORY_ROOTS = (
 
 
 class SourceLoader:
-    def __init__(self, root='/', owner=0):
+    def __init__(self, root='/', owner=0, expected_operation=None):
         self.root = Path(root)
         self.owner = owner  # fixture identity only; production constructs default.
+        self.expected_operation = expected_operation
 
     def path(self, absolute):
         if not absolute.startswith('/') or '..' in Path(absolute).parts:
@@ -65,6 +66,13 @@ class SourceLoader:
         return found
 
     def measure(self, expected_inventory):
+        operations=self.path('/var/lib/siemcore-node-standalone/operations')
+        if operations.exists() or operations.is_symlink():
+            self.protected(operations)
+            for operation in operations.iterdir():
+                self.protected(operation)
+                if not operation.is_dir() or operation.name!=self.expected_operation:
+                    raise ValueError('prior_standalone_operation_requires_reconciliation')
         inventory = self.inventory()
         if inventory != expected_inventory:
             raise ValueError('historical_inventory_changed')

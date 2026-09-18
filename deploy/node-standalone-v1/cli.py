@@ -25,7 +25,7 @@ def main():
     if hashlib.sha256(manifest_raw).hexdigest()!=policy['component_manifest_sha256']:
         raise ValueError('component_manifest_mismatch')
     manifest=strict_json(manifest_raw)
-    expected={'cli.py','host.py','source_loader.py','artifacts.py','adapter.py','protocol.py','transaction.py','configuration_inventory.py','worker.py','supervisor.py'}
+    expected={'cli.py','host.py','source_loader.py','artifacts.py','adapter.py','protocol.py','transaction.py','configuration_inventory.py','worker.py','supervisor.py','capsule.py','QUALIFICATION.json'}
     if manifest.get('protocol')!='pod-node-standalone-v1' or set(manifest.get('files',{}))!=expected:
         raise ValueError('exact_standalone_component_required')
     for name,checksum in manifest['files'].items():

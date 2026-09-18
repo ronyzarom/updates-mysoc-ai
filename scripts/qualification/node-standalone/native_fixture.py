@@ -35,6 +35,7 @@ def main():
         parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--postgres',required=True);parser.add_argument('--redis',required=True)
     parser.add_argument('--resume-fixture-bootstrap',action='store_true')
+    parser.add_argument('--root-admission-fixture',action='store_true')
     args=parser.parse_args()
     if os.geteuid()!=0 or os.environ.get('INDEPENDENT_NODE_FIXTURE')!='1':
         raise SystemExit('fresh disposable nested host required')
@@ -51,7 +52,27 @@ def main():
         shutil.copyfile(args.predecessor/'pod/bin/siemcore',fixture_source/'siemcore')
         shutil.copyfile(args.source/'deploy/cascade/greenfield-hook.py',fixture_source/'greenfield-hook.py')
     run(['docker','load','-i',str(args.predecessor/'images'/('siemcore-'+versions['predecessor']+'.tar'))])
-    run(['python3',str(args.source/'deploy/cluster/updater/tests/node_signed_root_fixture.py'),'--node','1','--version',versions['predecessor'],'--postgres',args.postgres,'--redis',args.redis,'--product','siemcore:'+versions['predecessor'],'--source',str(fixture_source)])
+    bootstrap_command=['python3',str(args.source/'deploy/cluster/updater/tests/node_signed_root_fixture.py'),'--node','1','--version',versions['predecessor'],'--postgres',args.postgres,'--redis',args.redis,'--product','siemcore:'+versions['predecessor'],'--source',str(fixture_source)]
+    if args.root_admission_fixture and not existing:
+        run(bootstrap_command+['--prepare-only'])
+        # Sign the exact retained source archive with a disposable fixture key
+        # BEFORE first bootstrap. No post-bootstrap trust/receipt rewriting.
+        import base64
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives import serialization
+        key=Ed25519PrivateKey.generate()
+        private(Path('/root/fixture-signing-key.bin'),key.private_bytes(serialization.Encoding.Raw,serialization.PrivateFormat.Raw,serialization.NoEncryption()))
+        archive=Path('/root/previous.tar.gz');checksum=hashlib.sha256(archive.read_bytes()).hexdigest()
+        release=dict(version=versions['predecessor'],channel='stable',sha256=checksum,
+                     public_key=key.public_key().public_bytes(serialization.Encoding.Raw,serialization.PublicFormat.Raw).hex(),
+                     signature=base64.b64encode(key.sign(('mysoc-release-v1\nsiemcore\n'+versions['predecessor']+'\n'+checksum).encode())).decode())
+        private(Path('/etc/siemcore/greenfield-release.json'),json.dumps(release).encode())
+        shutil.copyfile(archive,Path('/var/lib/siemcore-cascade-updater/artifacts')/('siemcore-'+versions['predecessor']+'.artifact'))
+        run(['python3',str(fixture_source/'greenfield-hook.py'),'apply'])
+        run(['python3',str(fixture_source/'greenfield-hook.py'),'health'])
+        print('PREPARED exact-source signed root fixture; product transition delegated to root adapter')
+        return
+    run(bootstrap_command)
     sys.path.insert(0,str(args.target/'updater'))
     import pod_node_standalone as product
     app=json.loads(Path('/etc/siemcore/greenfield.json').read_text())

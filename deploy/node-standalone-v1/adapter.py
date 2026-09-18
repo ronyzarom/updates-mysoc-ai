@@ -54,11 +54,11 @@ class Adapter:
                 raise ValueError('retained_binding_mismatch')
         elif action in ('status', 'recover'):
             raise ValueError('unknown_operation')
+        bundles = self.host.stage(binding)
         if retained and retained['phase'] == 'accepted':
             evidence = self.host.verify_accepted(binding)
             return dict(retained, health=evidence, observed_at=datetime.now(timezone.utc).isoformat())
         # Re-extract signatures on every call; no trusting stale extracted code.
-        bundles = self.host.stage(binding)
         if action == 'readiness':
             response = validate_response(self.worker(action, binding, bundles), binding)
             if response['phase'] not in ('prepared', 'blocked') or response['mutation'] != 'none':

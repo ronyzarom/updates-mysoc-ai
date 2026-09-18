@@ -32,10 +32,17 @@ class Host:
             raise ValueError('standalone_capability_disabled')
         if self.directory != ROOT/'operations'/self.policy['binding']['operation_id']:
             raise ValueError('fixed_operation_directory_required')
+        self.loader.expected_operation=self.policy['binding']['operation_id']
         url = urlsplit(self.policy['customer_url'])
         if url.scheme != 'https' or not url.hostname or url.username or url.password or url.port not in (None,443) or url.query or url.fragment or url.path not in ('','/'):
             raise ValueError('fixed_https_customer_origin_required')
-        self.pipeline_verifier = pipeline_verifier
+        qualification=strict_json(self.protected(Path(__file__).with_name('QUALIFICATION.json')).read_bytes())
+        required_tests=('synthetic_event_archived','archive_retrieval_verified','archive_checksum_verified',
+                        'paid_ai_guard_verified','mysoc_exact_retry_verified','mysoc_conflict_refused',
+                        'interrupted_recovery_verified','bootstrap_bytes_preserved','data_identity_preserved')
+        if qualification.get('target_artifact_sha256')!=self.policy['binding']['target']['artifact_sha256'] or any(qualification.get(k) is not True for k in required_tests):
+            raise ValueError('native_qualification_missing')
+        self.pipeline_verifier = pipeline_verifier or self.runtime_pipeline
 
     def data_identity(self):
         result = {}
@@ -127,6 +134,35 @@ class Host:
         atomic_json(self.directory/'accepted-mode.json',dict(protocol=binding['protocol'],operation_sha256=digest(binding),
                     installation_identity=binding['source'],effective_mode='independent-standalone',
                     version=binding['target']['version'],routine_updates_allowed=False,health=evidence))
+
+    def runtime_pipeline(self,binding):
+        node=binding['source']['node_id'];prefix='siemcore-standalone-'+node
+        records=strict_json(subprocess.check_output(['/usr/bin/docker','inspect',prefix+'-app',prefix+'-archiver'],timeout=15))
+        if len(records)!=2 or any(record['Image']!=self.manifest['runtime_image_id'] or record['State']['Running'] is not True or record['State'].get('Health',{}).get('Status')!='healthy' for record in records):
+            raise ValueError('standalone_runtime_image_or_health_mismatch')
+        binary=subprocess.check_output(['/usr/bin/docker','exec',prefix+'-app','sha256sum','/app/siemcore'],timeout=15).decode().split()[0]
+        if binary!=binding['target']['binary_sha256']:raise ValueError('running_binary_mismatch')
+        syslog=self._https('/health/syslog')
+        archive=strict_json(subprocess.check_output(['/usr/bin/docker','exec',prefix+'-archiver','curl','--fail','--silent','--max-time','8','http://127.0.0.1:8444/health/archive'],timeout=12))
+        if syslog.get('enabled') is not True or archive.get('status') not in ('healthy','ok'):
+            raise ValueError('ingest_or_archive_not_ready')
+        platform=strict_json(self.protected(Path(INPUTS)/'mysoc-bootstrap.json').read_bytes())
+        if platform['instance_id']!=binding['instance_id']:raise ValueError('customer_configuration_identity_mismatch')
+        def literal(value):return "'"+str(value).replace("'","''")+"'"
+        api_digest=hashlib.sha256(platform['api_key'].encode()).hexdigest()
+        sql=("SELECT json_build_object('paid_ai_disabled',(SELECT count(*)=0 FROM llm_config WHERE enabled),"
+             "'customer_attribution_verified',(SELECT count(*)=1 AND count(*) FILTER (WHERE enabled AND siemcore_instance="+literal(platform['instance_id'])+
+             " AND mysoc_endpoint_url="+literal(platform['endpoint_url'])+" AND heartbeat_interval_seconds="+str(int(platform['heartbeat_seconds']))+
+             " AND encode(sha256(convert_to(platform_api_key,'UTF8')),'hex')="+literal(api_digest)+")=1 FROM mysoc_platform_config));")
+        result=subprocess.run(['/usr/bin/docker','exec','-i','siemcore-unlinked-'+node+'-postgres','sh','-c',
+             'export PGPASSWORD="$(cat /run/secrets/application)"; exec psql -X -qAt -v ON_ERROR_STOP=1 -h /var/run/postgresql -U siemcore -d "$1"',
+             'standalone-readonly-health',strict_json(self.loader.read('/opt/siemcore-node-unlinked-'+node+'/settings.json'))['database']],
+             input=sql.encode(),capture_output=True,timeout=20)
+        if result.returncode:raise ValueError('readonly_application_policy_check_failed')
+        checks=strict_json(result.stdout)
+        return dict(archive_ready=True,pipeline_verified=True,paid_ai_disabled=checks.get('paid_ai_disabled'),
+                    customer_attribution_verified=checks.get('customer_attribution_verified'),
+                    evidence_scope='runtime-readiness; synthetic pipeline qualified separately',binary_sha256=binary)
 
     def verify_restored(self, binding):
         if self.data_identity() != self.policy['data_identity']:
