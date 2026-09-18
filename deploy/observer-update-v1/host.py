@@ -89,13 +89,23 @@ class Host:
         link = Path('/etc/siemcore-pod-observer/link.json')
         if link.exists() or link.is_symlink():raise ValueError('linked Observer refused')
         if initial:
-            # Initial implementation intentionally admits only first security
-            # hop. Future accepted-predecessor chaining requires qualification.
             previous = binding['predecessor']
-            if (previous['version'] != self.bootstrap['version'] or
+            ancestor=self.directory/'previous-operation.json'
+            if ancestor.exists():
+                import uuid
+                operation=private_json(ancestor)['operation_id']
+                if str(uuid.UUID(operation))!=operation:raise ValueError('invalid predecessor operation')
+                directory=self.directory.parent/operation
+                journal=private_json(directory/'adapter-journal.json')
+                retained=private_json(directory/'binding.json')
+                if journal.get('phase')!='accepted' or journal.get('operation_sha256')!=digest(retained) or retained['target']!=previous:
+                    raise ValueError('predecessor not accepted')
+                for field in ('machine_id','installation_id','updater_instance_id','server_type','bootstrap_policy_sha256','signing_public_key_sha256'):
+                    if retained[field]!=binding[field]:raise ValueError('predecessor identity changed')
+            elif (previous['version'] != self.bootstrap['version'] or
                     previous['artifact_sha256'] != self.bootstrap['sha256'] or
                     previous['artifact_signature'] != self.bootstrap['signature']):
-                raise ValueError('predecessor is not the pinned initial installation')
+                raise ValueError('predecessor is not a qualified installation')
 
     def preservation(self, previous):
         paths = [APPLICATION, BOOTSTRAP_RELEASE, BOOTSTRAP_JOURNAL, CONFIG,

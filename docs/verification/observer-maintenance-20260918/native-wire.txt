@@ -1,0 +1,5 @@
+=== RUN   TestObserverNativeCommandIntegration
+--- PASS: TestObserverNativeCommandIntegration (1.44s)
+PASS
+
+{"fixture": "maintenance-success", "product_pid_unchanged": true, "updater_active": true, "synthetic_updater": true}

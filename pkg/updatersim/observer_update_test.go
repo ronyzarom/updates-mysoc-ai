@@ -138,3 +138,52 @@ func TestObserverOptInCannotAffectNormal(t *testing.T) {
 		t.Fatal("Normal queried Observer", e)
 	}
 }
+
+func TestObserverNextAutomaticUpgradeRetainsAcceptedPredecessor(t *testing.T) {
+	s, u := observerSecurityFixture(t)
+	s.state.ObserverUpdateOperation = &ObserverUpdateOperation{OperationID: "bd12f2a6-bfbe-46ae-bbd8-7f3ce341f8e8", TargetVersion: u.FromVersion, Phase: "accepted"}
+	old := s.state.ObserverUpdateOperation.OperationID
+	s.observerAdapterCall = func(_ context.Context, a string, q observerRequest) (observerResponse, error) {
+		if a == "readiness" {
+			return observerResponse{ServerType: "observer-unlinked", AdapterManifestSHA256: strings.Repeat("b", 64), Capabilities: []string{observerUpdateProtocol}}, nil
+		}
+		if q.OperationID == old {
+			t.Fatal("reused prior operation identity")
+		}
+		return observerResponse{OperationID: q.OperationID, OperationSHA256: strings.Repeat("c", 64), TargetVersion: q.Target.Version, ArtifactSHA256: q.Target.SHA256, Phase: "accepted"}, nil
+	}
+	if err := s.applyObserverSecurityUpdate(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	if s.state.ObserverUpdateOperation.TargetVersion != u.ToVersion {
+		t.Fatal("next upgrade not retained")
+	}
+}
+
+// Opt-in native fixture: run as the actual unprivileged service user inside the
+// disposable systemd container after installing the protected maintenance kit.
+func TestObserverNativeCommandIntegration(t *testing.T) {
+	if os.Getenv("OBSERVER_NATIVE_TEST") != "1" {
+		t.Skip("native installed fixture only")
+	}
+	raw, err := os.ReadFile("/fixture/native-request.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var q observerRequest
+	if err = json.Unmarshal(raw, &q); err != nil {
+		t.Fatal(err)
+	}
+	r, err := invokeObserverAdapter(context.Background(), "readiness", observerRequest{Protocol: observerUpdateProtocol})
+	if err != nil || len(r.Capabilities) != 1 {
+		t.Fatal(r, err)
+	}
+	r, err = invokeObserverAdapter(context.Background(), "apply", q)
+	if err != nil || r.Phase != "accepted" {
+		t.Fatal(r, err)
+	}
+	r, err = invokeObserverAdapter(context.Background(), "status", q)
+	if err != nil || r.Phase != "accepted" {
+		t.Fatal(r, err)
+	}
+}

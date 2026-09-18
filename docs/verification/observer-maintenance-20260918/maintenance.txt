@@ -1,0 +1,2 @@
+{"fixture": "maintenance-success", "product_pid_unchanged": true, "updater_active": true, "synthetic_updater": true}
+{"fixture": "maintenance-rollback", "product_pid_unchanged": true, "updater_active": true, "synthetic_updater": true}

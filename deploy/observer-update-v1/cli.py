@@ -55,14 +55,14 @@ def admission():
     return policy,app
 
 
-def create_binding(host,operation,target):
+def create_binding(host,operation,target,previous_binding=None):
     if set(target)!={'version','sha256','signature'}:
         raise ValueError('exact signed target receipt required')
     if not re.fullmatch(r'\d+\.\d+\.\d+\.\d+',target['version']) or not re.fullmatch('[0-9a-f]{64}',target['sha256']):
         raise ValueError('invalid target receipt')
     previous=host.bootstrap
     def artifact(version,sha,signature):return dict(product='siemcore',version=version,architecture='linux/amd64',artifact_sha256=sha,artifact_signature=signature,binary_sha256='')
-    predecessor=artifact(previous['version'],previous['sha256'],previous['signature'])
+    predecessor=dict(previous_binding['target']) if previous_binding else artifact(previous['version'],previous['sha256'],previous['signature'])
     desired=artifact(target['version'],target['sha256'],target['signature'])
     for name,item in [('predecessor',predecessor),('target',desired)]:
         bundle,_=host.stage_one(item,'admission-'+name,derive_binary=True)
@@ -96,11 +96,11 @@ def main():
                 directory=ROOT/'operations'/operation
                 retained=private_json(directory/'adapter-journal.json')
                 if retained.get('phase')!='accepted':raise ValueError('retained operation requires reconciliation')
-                binding=private_json(directory/'binding.json');artifact=binding['target'];eligible=False
+                binding=private_json(directory/'binding.json');artifact=binding['target']
             else:
                 artifact=dict(version=host.bootstrap['version'],binary_sha256=policy['bootstrap_binary_sha256'])
                 binding=dict(installation_id=app['installation_id'],updater_instance_id=app['updater_instance_id'])
-            health=validate_health(host.probe(binding,'target'),binding,artifact,require_closed=not eligible)
+            health=validate_health(host.probe(binding,'target'),binding,artifact,require_closed=active.exists())
             print(json.dumps(dict(protocol=PROTOCOL,capabilities=[PROTOCOL] if eligible else [],adapter_manifest_sha256=policy['component_manifest_sha256'],server_type='observer-unlinked',observed_at=datetime.now(timezone.utc).isoformat(),health=health,eligible_for_security_upgrade=eligible,ui_security_compliant=health['ui_closed'])))
             return
         if set(request)!={'protocol','operation_id','target'} or request['protocol']!=PROTOCOL or str(uuid.UUID(request['operation_id']))!=request['operation_id']:
@@ -109,8 +109,15 @@ def main():
         if ROOT.stat().st_mode&0o077:raise ValueError('private operation root required')
         operations=ROOT/'operations';operations.mkdir(mode=0o700,exist_ok=True);protected(operations)
         active=ROOT/'active-operation.json'
+        previous_binding=None
+        previous_id=None
         if active.exists() and private_json(active)!=dict(operation_id=request['operation_id']):
-            raise ValueError('retained operation cannot be replaced')
+            previous_id=private_json(active)['operation_id']
+            if str(uuid.UUID(previous_id))!=previous_id:raise ValueError('invalid retained identity')
+            previous_directory=operations/previous_id
+            retained=private_json(previous_directory/'adapter-journal.json')
+            if action!='apply' or retained.get('phase')!='accepted':raise ValueError('retained operation cannot be replaced')
+            previous_binding=private_json(previous_directory/'binding.json')
         directory=operations/request['operation_id']
         if not directory.exists():
             if action!='apply':raise ValueError('unknown operation')
@@ -120,11 +127,12 @@ def main():
         if binding_file.exists():binding=private_json(binding_file)
         else:
             if action!='apply':raise ValueError('operation not admitted')
-            binding=create_binding(host,request['operation_id'],request['target'])
+            binding=create_binding(host,request['operation_id'],request['target'],previous_binding)
+            if previous_id:atomic_json(directory/'previous-operation.json',dict(operation_id=previous_id))
         target=request['target'];bound=binding['target']
         if target!={'version':bound['version'],'sha256':bound['artifact_sha256'],'signature':bound['artifact_signature']}:
             raise ValueError('target changed during retained operation')
-        if not active.exists():atomic_json(active,dict(operation_id=request['operation_id']))
+        if not active.exists() or previous_id:atomic_json(active,dict(operation_id=request['operation_id']))
         coordinator=Adapter(directory,host.verify_binding,host.stage,lambda a,b,bundles,d:invoke(a,b,bundles,d,lock.fileno(),900 if a!='status' else 30),host.probe,host.stopped,protected,host.preservation)
         result=coordinator.run(action,binding)
         print(json.dumps(dict(result,observed_at=datetime.now(timezone.utc).isoformat(),target_version=bound['version'],artifact_sha256=bound['artifact_sha256']),sort_keys=True))

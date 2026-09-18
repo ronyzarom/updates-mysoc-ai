@@ -27,7 +27,7 @@ from worker import invoke
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding,PublicFormat
 
-mode=sys.argv[1];assert mode in ('success','health-failure','interrupted','installed-cli')
+mode=sys.argv[1];assert mode in ('success','health-failure','interrupted','installed-cli','maintenance-success','maintenance-rollback')
 assert os.geteuid()==0 and Path('/fixture/ISOLATED_CONTAINER').exists()
 
 def write(path,data,mode=0o600):
@@ -95,6 +95,12 @@ for attempt in range(30):
  except Exception:time.sleep(.1)
 else:raise AssertionError('fixture predecessor health failed')
 
+if mode.startswith('maintenance-'):
+ Path('/var/lib/siemcore-observer-update').chmod(0o700)
+ import maintenance_fixture
+ maintenance_fixture.qualify(globals(),mode=='maintenance-rollback')
+ sys.exit(0)
+
 if mode=='installed-cli':
  Path('/var/lib/siemcore-observer-update').chmod(0o700)
  Path('/var/lib/siemcore-observer-update/operations').chmod(0o700)
@@ -154,5 +160,9 @@ if mode!='health-failure':
  assert execute('apply')['phase']=='accepted'
  assert (directory/'adapter-journal.json').read_bytes()==before and run(['systemctl','show','siemcore-pod-unlinked.service','-p','MainPID'])==pid
 if mode=='installed-cli':
- ready=cli('readiness',dict(protocol=PROTOCOL));assert ready['ui_security_compliant'] and not ready['eligible_for_security_upgrade'] and ready['capabilities']==[]
+ ready=cli('readiness',dict(protocol=PROTOCOL));assert ready['ui_security_compliant'] and ready['eligible_for_security_upgrade'] and ready['capabilities']==[PROTOCOL]
+ following,_=artifact('3.3.152.39',True)
+ next_request=dict(protocol=PROTOCOL,operation_id=str(uuid.uuid4()),target=dict(version=following['version'],sha256=following['artifact_sha256'],signature=following['artifact_signature']))
+ assert cli('apply',next_request)['phase']=='accepted'
+ assert cli('status',next_request)['phase']=='accepted'
 print(json.dumps({'fixture':mode,'phase':result['phase'],'root_and_exact_product_worker':True,'real_systemd':True,'synthetic_signed_executable':True,'network':'none','public_artifact_or_live_host':False}),flush=True)

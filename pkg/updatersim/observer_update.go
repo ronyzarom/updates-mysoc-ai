@@ -126,6 +126,9 @@ func (s *Simulator) observerUpdateReady(ctx context.Context) ([]string, error) {
 
 func (s *Simulator) applyObserverSecurityUpdate(ctx context.Context, u Update) error {
 	operation := s.state.ObserverUpdateOperation
+	if operation != nil && operation.Phase == "accepted" && operation.TargetVersion == u.FromVersion && operation.TargetVersion != u.ToVersion {
+		operation = nil // Root independently requires the previous accepted receipt.
+	}
 	if operation == nil {
 		capabilities, err := s.observerUpdateReady(ctx)
 		if err != nil {

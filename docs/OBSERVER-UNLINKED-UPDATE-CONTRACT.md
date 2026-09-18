@@ -278,3 +278,19 @@ no bootstrap replay, database operations or public dependency fallback.
 After fixture acceptance: one signed isolated alpha upgrade on the current
 Observer; verify application health, UI protection, journal, restart/heartbeat and
 five-minute stability. No other fleet assignment, hold or release target changes.
+
+
+## Accepted update chaining
+
+After accepted health, a subsequent newer signed release may create a new operation.
+The root adapter retains the original bootstrap policy and every prior operation.
+Its predecessor must exactly match the target of the previous root-journal accepted
+operation, with identical installation, machine and pinned signing identity. New
+admission independently checks predecessor health and both signed archives. Neither
+a version directory nor updater-owned state can establish this chain. A nonterminal
+or blocked root operation cannot be superseded. Installed CLI fixtures exercise two
+consecutive updates (.37 -> .38 -> .39 synthetic signed services).
+
+Current product recovery remains conservative: failed targets isolate management
+rather than attempt an unqualified predecessor restoration. Successful routine
+updates require no additional operator approval after maintenance activation.
