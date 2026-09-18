@@ -1,0 +1,22 @@
+{
+  "node_id": "2",
+  "tls_login_logout": true,
+  "activation_rejected": true,
+  "root_hook_health": true,
+  "health": {
+    "authority_enabled": false,
+    "binary_sha256": "424ad4ffd095ae9ae1b241da5db73158cb49244e08b5c1fc8d3f033aaf828745",
+    "data_ready": true,
+    "installation_complete": true,
+    "installation_id": "fixture-node-2",
+    "installation_state": "installed-unlinked",
+    "link_ready": false,
+    "management_ready": true,
+    "node_id": "2",
+    "pod_ready": false,
+    "processing_enabled": false,
+    "status": "healthy",
+    "updater_id": "fixture-updater-2",
+    "version": "3.3.152.99"
+  }
+}

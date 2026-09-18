@@ -1,0 +1,56 @@
+{
+  "node_id": "1",
+  "first_install_by_kit": true,
+  "kit_version": "1.16.1.28-r1",
+  "architecture": "arm64",
+  "updater_version": "updater-simulator 1.16.1.28\n  Git Commit: 4f7753d\n  Build Time: unknown",
+  "signature_required": true,
+  "archive_sha256": "2ff62142d47316571fd2b57449c3032a57f5c774dbe7ac6c29b62938ebdbb090",
+  "success_report": {
+    "artifact_digest": "2ff62142d47316571fd2b57449c3032a57f5c774dbe7ac6c29b62938ebdbb090",
+    "instance_id": "fixture-updater-1",
+    "from_version": "0.0.0",
+    "to_version": "3.3.152.99",
+    "success": true
+  },
+  "installed_identity": {
+    "server_type": "pod-node",
+    "node_id": "1"
+  },
+  "restart_heartbeat_identity": {
+    "kind": "pod-node",
+    "node_id": "1"
+  },
+  "service_active": true,
+  "protect_home": true,
+  "self_update_channel": "stable",
+  "self_update_enabled": true,
+  "exact_install_retry_preserved_containers": true,
+  "self_checks": [
+    {
+      "instance_id": "fixture-updater-1",
+      "current_version": "1.16.1.28",
+      "updater_version": "1.16.1.28",
+      "os": "linux",
+      "arch": "arm64",
+      "hostname": "3adbed8a4e4a",
+      "channel": "stable",
+      "product_tier": "siemcore",
+      "parent_instance_id": "fixture-parent",
+      "cached_dependencies": null
+    },
+    {
+      "instance_id": "fixture-updater-1",
+      "current_version": "1.16.1.28",
+      "updater_version": "1.16.1.28",
+      "os": "linux",
+      "arch": "arm64",
+      "hostname": "3adbed8a4e4a",
+      "channel": "stable",
+      "product_tier": "siemcore",
+      "parent_instance_id": "fixture-parent",
+      "cached_dependencies": null
+    }
+  ],
+  "alpha_fixture_only": true
+}

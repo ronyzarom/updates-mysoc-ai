@@ -69,17 +69,31 @@ allowed only when authenticated linking is operational. State remains
 `installed-unlinked`; `processing_enabled`, `authority_enabled`, and `pod_ready`
 remain false. Bootstrap makes no Observer/peer calls and claims no role IP.
 
-## Planned CLI (not yet enabled)
+## Candidate kit CLI
 
-The existing clean installer will use `--server-type pod-node --node-id 1`
-(or `2`) with `--greenfield-input /root/node-install.json` and the normal
-parent/enrollment/signing options. No `--pod-id` is supplied. Production binary
-capability output deliberately does not advertise the new type yet. Installer
-and runtime also explicitly refuse unqualified independent-node delivery.
-Updater self-update remains the normal stable channel and alpha fleet group;
-product channels and prerequisites remain separate.
+Candidate kit `1.16.1.28-r1` uses `--server-type pod-node --node-id 1`
+(or `2`) with `--greenfield-input /etc/siemcore-input/node-install.json` and the
+normal parent/enrollment/signing options. No `--pod-id` is supplied. Keep all
+referenced credentials and TLS material under protected `/etc` paths: the
+systemd service retains `ProtectHome=true`.
 
-## Qualification
+The candidate binary advertises `pod-node`; this is an immutable installation
+type, not permission to process traffic. The installer enables
+`independent_node_bootstrap` only for `node-unlinked` envelopes and only when
+`INDEPENDENT-NODE-BOOTSTRAP.json` binds the bundled hook to `PROVISIONING_COMMIT`.
+Normal and Observer executor configurations do not gain this switch.
+Updater self-update remains enabled on stable; alpha targeting is assigned by
+the parent fleet policy. Local fixture alpha responses do not verify live alpha.
+
+The dedicated packager `scripts/packaging/independent_node_kit.py` requires clean
+committed Updates and product sources, an architecture-matching ELF binary,
+and a valid Ed25519 receipt checked against an independently supplied public key.
+It creates a new archive and checksum manifest without publishing anything.
+Repository signing and publication remain separate release operations.
+
+## Qualification history
+
+The following records describe successive checkpoints, not current release approval.
 
 Updates boundary fixtures cover both nodes, exact envelope validation, private
 settings/digest/machine checks, immutable identity persistence, rejection of
@@ -171,3 +185,12 @@ Execution now has an explicit default-off `independent_node_bootstrap` switch
 for matching protected-node executors. The ordinary installer and published
 capabilities remain gated pending versioned kit qualification; no fleet changes
 are implied by these local passes.
+
+### Versioned kit qualification
+
+Candidate `1.16.1.28-r1` now passes actual `install.sh` plus systemd relay first
+installation on both independent node slots, exact installer retry, restart,
+identity reporting and authenticated management checks. See
+[kit evidence](verification/independent-node-kit-20260918/README.md).
+This is local Linux ARM64 qualification using disposable signatures. Live
+AMD64, fleet alpha verification, release signing and publication remain separate.
