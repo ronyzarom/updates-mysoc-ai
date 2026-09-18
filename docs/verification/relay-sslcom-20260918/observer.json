@@ -1,0 +1,10 @@
+{
+  "phase": "dual-trust-prepared",
+  "service": "siemcore-cascade-updater",
+  "prior_ca_sha256": "4ee3ec7c63af477fe91ad33967baeb9d38a6eac6263fde0dca1c3d49eddc2d46",
+  "new_ca_sha256": "c88f8822233e75ae5829be7e8c21d3c7d8b6ec059096148405759a5d55c5bfc5",
+  "product_versions": {
+    "siemcore": "3.3.152.39"
+  },
+  "application_processes_unchanged": true
+}
