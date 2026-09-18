@@ -12,68 +12,225 @@
   "cases": [
     {
       "name": "first-hop-readiness-open-ui-is-not-compliance",
-      "given": {"version": "3.3.152.37", "installation_state": "installed-unlinked", "exact_identity_health": true, "ui_auth_enforced": false},
+      "given": {
+        "version": "3.3.152.37",
+        "installation_state": "installed-unlinked",
+        "exact_identity_health": true,
+        "ui_auth_enforced": false
+      },
       "operation": "readiness",
-      "expect": {"eligible_for_security_upgrade": true, "ui_security_compliant": false, "ui_closed": false, "operator_login_usable": false},
-      "forbidden_actions": ["product_mutation", "credential_creation", "authority_activation"]
+      "expect": {
+        "eligible_for_security_upgrade": true,
+        "ui_security_compliant": false,
+        "ui_closed": false,
+        "operator_login_usable": false
+      },
+      "forbidden_actions": [
+        "product_mutation",
+        "credential_creation",
+        "authority_activation"
+      ]
     },
     {
       "name": "first-hop-failed-target-stops-without-unsafe-predecessor",
-      "given": {"predecessor_version": "3.3.152.37", "predecessor_ui_auth_enforced": false, "target_health": "failed", "target_process_group_stop": "verified", "restart_prevention": "verified", "ui_listener": "closed"},
+      "given": {
+        "predecessor_version": "3.3.152.37",
+        "predecessor_ui_auth_enforced": false,
+        "target_health": "failed",
+        "target_process_group_stop": "verified",
+        "restart_prevention": "verified",
+        "ui_listener": "closed"
+      },
       "operation": "recover",
-      "expect": {"phase": "blocked", "error_code": "predecessor_ui_unprotected", "management_running": false, "ui_closed": true, "operator_login_usable": false, "update_success": false, "updater_status_available": true},
-      "required_actions": ["persist_recovery_required_before_stop", "stop_failed_target", "verify_entire_process_group_terminated", "verify_service_cannot_restart", "verify_ui_listener_closed", "retain_original_journal"],
-      "forbidden_actions": ["start_predecessor", "report_restored", "report_update_success", "generic_rollback", "replace_operation"]
+      "expect": {
+        "phase": "blocked",
+        "error_code": "predecessor_ui_unprotected",
+        "management_running": false,
+        "ui_closed": true,
+        "operator_login_usable": false,
+        "update_success": false,
+        "updater_status_available": true
+      },
+      "required_actions": [
+        "persist_recovery_required_before_stop",
+        "stop_failed_target",
+        "verify_entire_process_group_terminated",
+        "verify_service_cannot_restart",
+        "verify_ui_listener_closed",
+        "retain_original_journal"
+      ],
+      "forbidden_actions": [
+        "start_predecessor",
+        "report_restored",
+        "report_update_success",
+        "generic_rollback",
+        "replace_operation"
+      ]
     },
     {
       "name": "failed-target-stop-cannot-be-proven",
-      "given": {"predecessor_version": "3.3.152.37", "target_health": "failed", "target_process_group_stop": "unknown"},
+      "given": {
+        "predecessor_version": "3.3.152.37",
+        "target_health": "failed",
+        "target_process_group_stop": "unknown"
+      },
       "operation": "recover",
-      "expect": {"phase": "blocked", "error_code": "stop_unconfirmed", "ui_security_compliant": false, "update_success": false},
-      "forbidden_actions": ["claim_management_stopped", "claim_ui_closed", "start_predecessor", "report_restored", "clear_operation"]
+      "expect": {
+        "phase": "blocked",
+        "error_code": "stop_unconfirmed",
+        "ui_security_compliant": false,
+        "update_success": false
+      },
+      "forbidden_actions": [
+        "claim_management_stopped",
+        "claim_ui_closed",
+        "start_predecessor",
+        "report_restored",
+        "clear_operation"
+      ]
     },
     {
       "name": "interrupted-stop-reconciles-same-operation",
-      "given": {"predecessor_version": "3.3.152.37", "phase": "recovery_required", "crash_after": "stop_requested_before_stop_verified"},
+      "given": {
+        "predecessor_version": "3.3.152.37",
+        "phase": "recovery_required",
+        "crash_after": "stop_requested_before_stop_verified"
+      },
       "operation": "status_then_recover_same_binding",
-      "expect": {"original_operation_retained": true, "must_measure_process_group_and_listener": true, "may_report_restored": false},
-      "forbidden_actions": ["start_predecessor", "create_replacement_operation", "trust_old_stop_request_as_completion"]
+      "expect": {
+        "original_operation_retained": true,
+        "must_measure_process_group_and_listener": true,
+        "may_report_restored": false
+      },
+      "forbidden_actions": [
+        "start_predecessor",
+        "create_replacement_operation",
+        "trust_old_stop_request_as_completion"
+      ]
     },
     {
       "name": "service-manager-restarts-failed-target",
-      "given": {"predecessor_version": "3.3.152.37", "target_parent_exited": true, "target_descendant_or_restart_exists": true},
+      "given": {
+        "predecessor_version": "3.3.152.37",
+        "target_parent_exited": true,
+        "target_descendant_or_restart_exists": true
+      },
       "operation": "recover",
-      "expect": {"phase": "blocked", "error_code": "stop_unconfirmed", "update_success": false},
-      "forbidden_actions": ["claim_management_stopped", "start_predecessor", "report_restored"]
+      "expect": {
+        "phase": "blocked",
+        "error_code": "stop_unconfirmed",
+        "update_success": false
+      },
+      "forbidden_actions": [
+        "claim_management_stopped",
+        "start_predecessor",
+        "report_restored"
+      ]
     },
     {
       "name": "missing-password-is-closed-not-usable-login",
-      "given": {"target_exact_identity_health": true, "credential_file": "absent", "unauthenticated_ui_http": 503},
+      "given": {
+        "target_exact_identity_health": true,
+        "credential_file": "absent",
+        "unauthenticated_ui_http": 503
+      },
       "operation": "measure_target",
-      "expect": {"ui_closed": true, "operator_login_usable": false, "management_health_available": true},
-      "forbidden_actions": ["report_operator_login_usable", "generate_password", "disable_health_authentication"]
+      "expect": {
+        "ui_closed": true,
+        "operator_login_usable": false,
+        "management_health_available": true
+      },
+      "forbidden_actions": [
+        "report_operator_login_usable",
+        "generate_password",
+        "disable_health_authentication"
+      ]
     },
     {
       "name": "password-protected-target-acceptance",
-      "given": {"target_exact_identity_health": true, "credential_file": "protected_valid", "unauthenticated_ui_http": 401, "wrong_password_ui_http": 401, "authenticated_ui_http": 200, "all_config_and_identity_digests_unchanged": true},
+      "given": {
+        "target_exact_identity_health": true,
+        "credential_file": "protected_valid",
+        "unauthenticated_ui_http": 401,
+        "wrong_password_ui_http": 401,
+        "authenticated_ui_http": 200,
+        "all_config_and_identity_digests_unchanged": true
+      },
       "operation": "accept",
-      "expect": {"phase": "accepted", "ui_closed": true, "operator_login_usable": true, "update_success": true},
-      "required_actions": ["persist_acceptance_before_success_report"]
+      "expect": {
+        "phase": "accepted",
+        "ui_closed": true,
+        "operator_login_usable": true,
+        "update_success": true
+      },
+      "required_actions": [
+        "persist_acceptance_before_success_report"
+      ]
     },
     {
       "name": "future-protected-predecessor-may-restore",
-      "given": {"predecessor_signed_ui_capability": true, "predecessor_exact_identity_health": true, "predecessor_unauthenticated_ui_http": 401, "predecessor_authenticated_ui_http": 200, "target_health": "failed", "target_process_group_stop": "verified"},
+      "given": {
+        "predecessor_signed_ui_capability": true,
+        "predecessor_exact_identity_health": true,
+        "predecessor_unauthenticated_ui_http": 401,
+        "predecessor_authenticated_ui_http": 200,
+        "target_health": "failed",
+        "target_process_group_stop": "verified"
+      },
       "operation": "recover",
-      "expect": {"phase": "restored", "ui_closed": true, "operator_login_usable": true, "update_success": false},
-      "required_actions": ["verify_retained_predecessor_signature", "measure_restored_health_and_ui", "preserve_failed_operation_history"],
-      "forbidden_actions": ["infer_ui_capability_from_version_only", "report_failed_target_success"]
+      "expect": {
+        "phase": "restored",
+        "ui_closed": true,
+        "operator_login_usable": true,
+        "update_success": false
+      },
+      "required_actions": [
+        "verify_retained_predecessor_signature",
+        "measure_restored_health_and_ui",
+        "preserve_failed_operation_history"
+      ],
+      "forbidden_actions": [
+        "infer_ui_capability_from_version_only",
+        "report_failed_target_success"
+      ]
     },
     {
       "name": "changed-retry-cannot-disable-ui-security-floor",
-      "given": {"existing_operation": "blocked", "retry_ui_protection_required": false},
+      "given": {
+        "existing_operation": "blocked",
+        "retry_ui_protection_required": false
+      },
       "operation": "recover",
-      "expect": {"request_rejected": true, "original_operation_retained": true},
-      "forbidden_actions": ["product_mutation", "start_predecessor", "clear_journal"]
+      "expect": {
+        "request_rejected": true,
+        "original_operation_retained": true
+      },
+      "forbidden_actions": [
+        "product_mutation",
+        "start_predecessor",
+        "clear_journal"
+      ]
+    },
+    {
+      "name": "blocked-first-hop-survives-reboot",
+      "given": {
+        "predecessor_version": "3.3.152.37",
+        "phase": "blocked",
+        "error_code": "predecessor_ui_unprotected"
+      },
+      "operation": "restart_updater_and_reboot_fixture_host",
+      "expect": {
+        "phase": "blocked",
+        "management_running": false,
+        "updater_status_available": true,
+        "original_operation_retained": true
+      },
+      "forbidden_actions": [
+        "start_predecessor",
+        "start_failed_target",
+        "clear_journal",
+        "disable_updater"
+      ]
     }
   ]
 }

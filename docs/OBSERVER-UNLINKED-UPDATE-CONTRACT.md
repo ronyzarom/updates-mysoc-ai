@@ -187,7 +187,8 @@ enforce UI passwords. For the first .37-to-security-build transition, never star
 
 1. Durably record recovery_required, the original binding and failure evidence.
 2. Stop the failed target management service and its complete process group.
-   Verify that it cannot restart (including service-manager restart policy), no
+   Verify durable restart inhibition survives updater restart and host reboot
+   (including service-manager restart policy), no
    descendants remain, and the UI listener is closed. An unverified stop remains
    blocked with stop_unconfirmed; it is not proof of a safe stopped state.
 3. Record blocked with reason `predecessor_ui_unprotected`, preserving all
