@@ -1,0 +1,27 @@
+{
+  "stage": "applied",
+  "from_version": "3.3.152.36",
+  "target": "3.3.152.39",
+  "transaction_sha256": "eb4a1f628eb29cca1451200dec5c6097eea2541468de57b505e4378b40487e00",
+  "retained_archive_sha256": "231bf4006d5f96c62843db1c8bbf7cfef2b33684af6fbffe0edccbc18507eb8b",
+  "retained_signature": "H1IdOvj9dUGy6r2jV25u/9d58jdWvBz7RjAludB6JyKBTMZxg2pgU0TKBH+rzhOlcCT0yTDxRydT0Yxs60vMBA==",
+  "archive_exists": true,
+  "image_inventory": {
+    "sha256:6ca2ecf897c8773405d6c7c840d9e94210284472bba74251145a8308e11a1b30": false,
+    "sha256:bd04a84ea6c2865305080a479db487d3a27be8463477525f5090f81cf4f71bdf": true
+  },
+  "runtime_predecessor_images": {
+    "siemcore-app-a": "sha256:bd04a84ea6c2865305080a479db487d3a27be8463477525f5090f81cf4f71bdf",
+    "siemcore-archiver-app-a": "sha256:bd04a84ea6c2865305080a479db487d3a27be8463477525f5090f81cf4f71bdf"
+  },
+  "retained_file_names": [
+    ".env",
+    ".node.json",
+    "VERSION",
+    "docker-compose.override.yml",
+    "docker-compose.yml",
+    "siemcore.env"
+  ],
+  "policy_revision": 8,
+  "rollback_executed": false
+}

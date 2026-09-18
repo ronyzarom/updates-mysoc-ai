@@ -1,0 +1,662 @@
+{
+  "schema": 1,
+  "hostname": "ip-172-26-13-54",
+  "install_dir": "/opt/siemcore-app-app-a",
+  "cascade_root": "/opt/siemcore-cascade",
+  "journal_dir": "/var/lib/siemcore-recovery",
+  "cluster_id": "testing",
+  "node_id": "app-a",
+  "project_name": "siemcore-app-app-a",
+  "containers": {
+    "siemcore": "siemcore-app-a",
+    "siemcore-archiver": "siemcore-archiver-app-a"
+  },
+  "health_url": "http://127.0.0.1:8443/health",
+  "dashboard_dir": "/opt/siemcore/dashboard",
+  "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
+  "allowed_transitions": [
+    [
+      "3.3.151.17",
+      "3.3.151.18"
+    ],
+    [
+      "3.3.151.18",
+      "3.3.151.19"
+    ],
+    [
+      "3.3.151.19",
+      "3.3.151.20"
+    ],
+    [
+      "3.3.151.20",
+      "3.3.152.19"
+    ],
+    [
+      "3.3.152.19",
+      "3.3.152.22"
+    ],
+    [
+      "3.3.152.22",
+      "3.3.152.23"
+    ],
+    [
+      "3.3.152.23",
+      "3.3.152.26"
+    ],
+    [
+      "3.3.152.26",
+      "3.3.152.36"
+    ],
+    [
+      "3.3.152.36",
+      "3.3.152.39"
+    ]
+  ],
+  "apply_timeout": 480,
+  "health_timeout": 120,
+  "releases": {
+    "3.3.151.17": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.151.17.artifact",
+      "sha256": "1412fd0cb1f3986e970b9ef2664cc81578c607434de59bf8987692b89a953e9c",
+      "signature": "KsJBotQIigaS3uzCxs289VPoJVgfESpzr7uIxHo1l0YdDJhyxQxeQ3gbdzRoYBU/HkIEZKNJeE2V2BGAjDfbBg=="
+    },
+    "3.3.151.18": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.151.18.artifact",
+      "sha256": "49520a92eb7d047962673644a74290951728f0c872a2a2e53bf3f9579160eb3a",
+      "signature": "6eFTn9aI/o9UTA16VMB1UYpimLu15qBlIYWvXVBxeLgaH16fjohPx1XkjuHyqSeHQu4/PHvwyRNBEtqoEpotCQ=="
+    },
+    "3.3.151.19": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.151.19.artifact",
+      "sha256": "b07dee366677c9cb8a60e3a6de9faf275827504c3cffddcf345e1bb28ad15d75",
+      "signature": "W6VWeljZc16nPNILlQ5ZL5x+wwvI3De38LDgtlHYKHDYAy9knIAyeh6bVVsjnu6E0UZVTlgylbodaJQCReRlCQ=="
+    },
+    "3.3.151.20": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.151.20.artifact",
+      "sha256": "4be2d31e4aa483cee32146a165e66a2f6e23cdbf8c19f2f3a920e94839ebaefa",
+      "signature": "13sQ/jQvE4D/FgmAQMHOce3xi1gp2lZ+3F7SHjhQu1T499fb2wzj1VEI//eptGVkY9ALw0+YshQaGpjjTFQEBA=="
+    },
+    "3.3.152.19": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.152.19.artifact",
+      "sha256": "5046ab08b695e35e6f50d428ba8d2e4754cac508e04b221f608716320df0714c",
+      "signature": "d+0KMWaYMG2m8g44k60v7SUboFEY6XsYLXo0sim2cbtc8rfPzOB9Kk8jgU0irQBJVgI2Q33wjOKYo7CoaU6lCg=="
+    },
+    "3.3.152.22": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/3.3.152.22.artifact",
+      "sha256": "ca41b9c9d36ed50e5e466621d5fa5057c4e8a246eb31b6707456637a2b3ac355",
+      "signature": "Iw5PdTbfG0JzYam5oGhaGdZDJoo7sbyosRuxLNoNiVAAYWnq1zKlL0xklxzfabYTxgUHII88U2AcsWptz4deDA=="
+    },
+    "3.3.152.23": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/3.3.152.23.artifact",
+      "sha256": "ebd2db716f27f4fe77510aff30ee7662951cd290a898c813ca47c0e4a7602dd4",
+      "signature": "KSXdILmvJptn0Uegqkng6zxg8S0fuDWyWqilJkqxXEX3kdr2W0Q7HMxxIXau1RtRKm9RoHfHZAy048XOWD1ZDw=="
+    },
+    "3.3.152.26": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/3.3.152.26.artifact",
+      "sha256": "337b07001bfc8b5409314607e3dd780bff81249fcedab726d37be924eb18b764",
+      "signature": "Owp5U7XdoKL/zDI1CSz7Q596rC6kWKKoXCwk8n2fcT6pQkWxisus09OOVNCWMcRv0EV5flMJBdaSmiGchK8ZBw=="
+    },
+    "3.3.152.36": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.152.36.artifact",
+      "sha256": "231bf4006d5f96c62843db1c8bbf7cfef2b33684af6fbffe0edccbc18507eb8b",
+      "signature": "H1IdOvj9dUGy6r2jV25u/9d58jdWvBz7RjAludB6JyKBTMZxg2pgU0TKBH+rzhOlcCT0yTDxRydT0Yxs60vMBA=="
+    },
+    "3.3.152.39": {
+      "artifact": "/var/lib/siemcore-cascade-updater/artifacts/siemcore-3.3.152.39.artifact",
+      "sha256": "87880575107db69282ee727bd61ef04a33de63196fe407a8de3fb216094522af",
+      "signature": "H9mkAowvJf7Aao1h1h2czkgtVnnpl8UPvqUpCuVn6FABiLYNVPxoDnz0NdF33ZHz73+3IEJr81DpYt9GGs58AA=="
+    }
+  },
+  "allow_dynamic_archiver_debug_port": true,
+  "expected_override_sha256": "6c0ced765584cc1c41b822051908097523a0af3fa8d49fd443cf51bfd08e5c61",
+  "expected_port_bindings": {
+    "siemcore-app-a": {
+      "12201/udp": [
+        {
+          "HostIp": "",
+          "HostPort": "12201"
+        }
+      ],
+      "1514/tcp": [
+        {
+          "HostIp": "",
+          "HostPort": "1514"
+        },
+        {
+          "HostIp": "",
+          "HostPort": "514"
+        }
+      ],
+      "1514/udp": [
+        {
+          "HostIp": "",
+          "HostPort": "1514"
+        },
+        {
+          "HostIp": "",
+          "HostPort": "514"
+        }
+      ],
+      "6514/tcp": [
+        {
+          "HostIp": "",
+          "HostPort": "6514"
+        }
+      ],
+      "8443/tcp": [
+        {
+          "HostIp": "",
+          "HostPort": "8443"
+        }
+      ]
+    },
+    "siemcore-archiver-app-a": {
+      "8444/tcp": [
+        {
+          "HostIp": "",
+          "HostPort": ""
+        }
+      ]
+    }
+  },
+  "expected_mounts": {
+    "siemcore-app-a": [
+      {
+        "Type": "bind",
+        "Source": "/etc/siemcore",
+        "Destination": "/etc/siemcore",
+        "RW": false
+      },
+      {
+        "Type": "bind",
+        "Source": "/opt/siemcore/tls",
+        "Destination": "/etc/siemcore/tls",
+        "RW": false
+      },
+      {
+        "Type": "volume",
+        "Name": "siemcore-app-app-a_siemcore-state",
+        "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-state/_data",
+        "Destination": "/var/lib/siemcore",
+        "RW": true
+      },
+      {
+        "Type": "volume",
+        "Name": "siemcore-app-app-a_siemcore-archives",
+        "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+        "Destination": "/var/lib/siemcore/archives",
+        "RW": true
+      },
+      {
+        "Type": "volume",
+        "Name": "siemcore-app-app-a_siemcore-chunks",
+        "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+        "Destination": "/var/lib/siemcore/chunks",
+        "RW": true
+      },
+      {
+        "Type": "volume",
+        "Name": "siemcore-app-app-a_siemcore-logs",
+        "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-logs/_data",
+        "Destination": "/var/lib/siemcore/logs",
+        "RW": true
+      }
+    ],
+    "siemcore-archiver-app-a": [
+      {
+        "Type": "bind",
+        "Source": "/etc/siemcore",
+        "Destination": "/etc/siemcore",
+        "RW": false
+      },
+      {
+        "Type": "volume",
+        "Name": "siemcore-app-app-a_siemcore-archives",
+        "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+        "Destination": "/var/lib/siemcore/archives",
+        "RW": true
+      },
+      {
+        "Type": "volume",
+        "Name": "siemcore-app-app-a_siemcore-chunks",
+        "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+        "Destination": "/var/lib/siemcore/chunks",
+        "RW": true
+      }
+    ]
+  },
+  "policy_revision": 8,
+  "expected_mounts_by_version": {
+    "3.3.152.19": {
+      "siemcore-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/opt/siemcore/tls",
+          "Destination": "/etc/siemcore/tls",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/siemcore-pod-controller",
+          "Destination": "/run/siemcore-pod-controller",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-state",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-state/_data",
+          "Destination": "/var/lib/siemcore",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-logs",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-logs/_data",
+          "Destination": "/var/lib/siemcore/logs",
+          "RW": true
+        }
+      ],
+      "siemcore-archiver-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        }
+      ]
+    },
+    "3.3.152.22": {
+      "siemcore-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/opt/siemcore/tls",
+          "Destination": "/etc/siemcore/tls",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/siemcore-pod-controller",
+          "Destination": "/run/siemcore-pod-controller",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-state",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-state/_data",
+          "Destination": "/var/lib/siemcore",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-logs",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-logs/_data",
+          "Destination": "/var/lib/siemcore/logs",
+          "RW": true
+        }
+      ],
+      "siemcore-archiver-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        }
+      ]
+    },
+    "3.3.152.23": {
+      "siemcore-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/opt/siemcore/tls",
+          "Destination": "/etc/siemcore/tls",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/siemcore-pod-controller",
+          "Destination": "/run/siemcore-pod-controller",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-state",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-state/_data",
+          "Destination": "/var/lib/siemcore",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-logs",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-logs/_data",
+          "Destination": "/var/lib/siemcore/logs",
+          "RW": true
+        }
+      ],
+      "siemcore-archiver-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        }
+      ]
+    },
+    "3.3.152.26": {
+      "siemcore-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/opt/siemcore/tls",
+          "Destination": "/etc/siemcore/tls",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/siemcore-pod-controller",
+          "Destination": "/run/siemcore-pod-controller",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-state",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-state/_data",
+          "Destination": "/var/lib/siemcore",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-logs",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-logs/_data",
+          "Destination": "/var/lib/siemcore/logs",
+          "RW": true
+        }
+      ],
+      "siemcore-archiver-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        }
+      ]
+    },
+    "3.3.152.36": {
+      "siemcore-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/opt/siemcore/tls",
+          "Destination": "/etc/siemcore/tls",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/siemcore-pod-controller",
+          "Destination": "/run/siemcore-pod-controller",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-state",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-state/_data",
+          "Destination": "/var/lib/siemcore",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-logs",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-logs/_data",
+          "Destination": "/var/lib/siemcore/logs",
+          "RW": true
+        }
+      ],
+      "siemcore-archiver-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        }
+      ]
+    },
+    "3.3.152.39": {
+      "siemcore-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/opt/siemcore/tls",
+          "Destination": "/etc/siemcore/tls",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/run/siemcore-pod-controller",
+          "Destination": "/run/siemcore-pod-controller",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-state",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-state/_data",
+          "Destination": "/var/lib/siemcore",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-logs",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-logs/_data",
+          "Destination": "/var/lib/siemcore/logs",
+          "RW": true
+        }
+      ],
+      "siemcore-archiver-app-a": [
+        {
+          "Type": "bind",
+          "Source": "/etc/siemcore",
+          "Destination": "/etc/siemcore",
+          "RW": false
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-archives",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-archives/_data",
+          "Destination": "/var/lib/siemcore/archives",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "siemcore-app-app-a_siemcore-chunks",
+          "Source": "/var/lib/docker/volumes/siemcore-app-app-a_siemcore-chunks/_data",
+          "Destination": "/var/lib/siemcore/chunks",
+          "RW": true
+        }
+      ]
+    }
+  }
+}

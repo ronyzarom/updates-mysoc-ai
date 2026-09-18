@@ -1,0 +1,11 @@
+{
+  "fleet_controls_unchanged": true,
+  "instances_compared": 31,
+  "benchmark_hold": {
+    "id": "105bf567-ee95-40f2-9c7f-9fa4159bb1c9",
+    "instance_id": "siemcore-bench-20260912-01",
+    "group": "alpha",
+    "automatic": false,
+    "deleted_at": null
+  }
+}

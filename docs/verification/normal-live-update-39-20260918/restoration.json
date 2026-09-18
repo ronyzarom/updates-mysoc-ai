@@ -1,0 +1,17 @@
+{
+  "original_configuration_restored": true,
+  "config_sha256": "40f6414c51d61d06c2817d6d8050f18cad2dce73545b2e07ada1d8819711cde9",
+  "application_containers_not_restarted": true,
+  "product_channel": "stable",
+  "self_update_channel": "stable (default)",
+  "updater_version": "1.16.1.24",
+  "version": "3.3.152.39",
+  "recovery_stage": "applied",
+  "attempt": {
+    "artifact_digest": "87880575107db69282ee727bd61ef04a33de63196fe407a8de3fb216094522af",
+    "from_version": "3.3.152.36",
+    "target_version": "3.3.152.39",
+    "success": true,
+    "timestamp": "2026-09-18T08:31:26.495550137Z"
+  }
+}
