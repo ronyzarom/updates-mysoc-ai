@@ -1,0 +1,1 @@
+{"id" : "eef75af7-6b99-47c5-b978-108107b64fe9", "product" : "siemcore", "version" : "3.3.152.39", "channel" : "obs-test-20260918", "target_groups" : ["alpha"], "sha256" : "87880575107db69282ee727bd61ef04a33de63196fe407a8de3fb216094522af", "signature" : "H9mkAowvJf7Aao1h1h2czkgtVnnpl8UPvqUpCuVn6FABiLYNVPxoDnz0NdF33ZHz73+3IEJr81DpYt9GGs58AA==", "size" : 65319752}

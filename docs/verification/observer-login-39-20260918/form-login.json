@@ -1,0 +1,24 @@
+{
+  "anonymous_root": 401,
+  "login_page": 200,
+  "icon": 200,
+  "wrong_password": 401,
+  "form_login": 303,
+  "secure_session_attributes": true,
+  "session_root": 200,
+  "cross_origin_rejected": 403,
+  "logout": 303,
+  "logged_out_session_rejected": 401,
+  "health": {
+    "authority_enabled": false,
+    "binary_sha256": "7ac4774e5421c78021d1b09eced00ac18b3f99fd2eff54b56ddbbae7096bf1c3",
+    "installation_id": "observer-8079452056575878166-v1",
+    "installation_state": "installed-unlinked",
+    "management_ready": true,
+    "pod_ready": false,
+    "processing_enabled": false,
+    "status": "healthy",
+    "updater_id": "bezeq-pod-test-observer-8079452056575878166",
+    "version": "3.3.152.39"
+  }
+}

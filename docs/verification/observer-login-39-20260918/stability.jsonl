@@ -1,0 +1,8 @@
+{"event": "accepted", "operation_id": "ac7cda0f-f96c-4d57-b8f8-35835677ef63", "operation_sha256": "b438d6594d3cff1132ce2ae30a13e01358ba9ad2a4857940527fd1db583a4cf3", "previous_operation": "5b9fce01-a90d-4c25-977f-ea6bffd999ea", "product_binary_sha256": "7ac4774e5421c78021d1b09eced00ac18b3f99fd2eff54b56ddbbae7096bf1c3"}
+{"sample": 0, "elapsed_seconds": 0, "product_pid": "11590", "updater_pid": "10338", "ui_status": 401, "basic_auth_challenge": false, "version": "3.3.152.39", "journals_unchanged": true, "health": "passed"}
+{"sample": 1, "elapsed_seconds": 50, "product_pid": "11590", "updater_pid": "10338", "ui_status": 401, "basic_auth_challenge": false, "version": "3.3.152.39", "journals_unchanged": true, "health": "passed"}
+{"sample": 2, "elapsed_seconds": 100, "product_pid": "11590", "updater_pid": "10338", "ui_status": 401, "basic_auth_challenge": false, "version": "3.3.152.39", "journals_unchanged": true, "health": "passed"}
+{"sample": 3, "elapsed_seconds": 150, "product_pid": "11590", "updater_pid": "10338", "ui_status": 401, "basic_auth_challenge": false, "version": "3.3.152.39", "journals_unchanged": true, "health": "passed"}
+{"sample": 4, "elapsed_seconds": 200, "product_pid": "11590", "updater_pid": "10338", "ui_status": 401, "basic_auth_challenge": false, "version": "3.3.152.39", "journals_unchanged": true, "health": "passed"}
+{"sample": 5, "elapsed_seconds": 250, "product_pid": "11590", "updater_pid": "10338", "ui_status": 401, "basic_auth_challenge": false, "version": "3.3.152.39", "journals_unchanged": true, "health": "passed"}
+{"sample": 6, "elapsed_seconds": 300, "product_pid": "11590", "updater_pid": "10338", "ui_status": 401, "basic_auth_challenge": false, "version": "3.3.152.39", "journals_unchanged": true, "health": "passed"}
