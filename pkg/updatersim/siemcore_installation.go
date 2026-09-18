@@ -88,6 +88,9 @@ func rememberSiemCoreInstallation(cfg *Config, state *State) error {
 }
 func (s *Simulator) validateSiemCoreExecution() error {
 	p, ok := s.config.Product("siemcore")
+	if s.config.Simulation.Filesystem.IndependentNodeUpdate && (!ok || p.ServerType != "pod-node") {
+		return fmt.Errorf("independent node update executor cannot serve other installation types")
+	}
 	if s.config.Simulation.Filesystem.IndependentNodeBootstrap && (!ok || p.ServerType != "pod-node") {
 		return fmt.Errorf("independent node bootstrap cannot serve other installation types")
 	}

@@ -259,6 +259,7 @@ type SimulationConfig struct {
 type FilesystemConfig struct {
 	// IndependentNodeBootstrap is default-off until the matching kit is qualified.
 	IndependentNodeBootstrap bool                       `yaml:"independent_node_bootstrap,omitempty"`
+	IndependentNodeUpdate    bool                       `yaml:"independent_node_update,omitempty"`
 	ObserverUnlinkedUpdate   bool                       `yaml:"observer_unlinked_update,omitempty"`
 	ObserverMaintenance      *ObserverMaintenanceConfig `yaml:"observer_maintenance,omitempty"`
 	PodMaintenance           *PodMaintenanceConfig      `yaml:"pod_maintenance,omitempty"`

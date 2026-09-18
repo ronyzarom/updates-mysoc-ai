@@ -23,6 +23,10 @@ func (s *Simulator) podCapabilities(ctx context.Context, product string) (string
 		}
 		role = mapped
 	}
+	if product == "siemcore" && p.ServerType == "pod-node" && s.config.Simulation.Filesystem.IndependentNodeUpdate {
+		caps, err := s.nodeUpdateReady(ctx)
+		return role, caps, err
+	}
 	if product == "siemcore" && role == "observer-unlinked" && s.config.Simulation.Filesystem.ObserverUnlinkedUpdate {
 		caps, err := s.observerUpdateReady(ctx)
 		return role, caps, err

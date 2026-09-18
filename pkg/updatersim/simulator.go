@@ -23,6 +23,7 @@ var ErrCycleInProgress = errors.New("simulator cycle already in progress")
 
 // Simulator runs safe updater protocol cycles.
 type Simulator struct {
+	nodeAdapterCall     func(context.Context, string, nodeRequest) (nodeResponse, error)
 	observerAdapterCall func(context.Context, string, observerRequest) (observerResponse, error)
 	config              *Config
 	client              *Client
@@ -267,6 +268,10 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	}
 
 	if mode == ModeReal {
+		if pending, err := s.resumePendingIndependentNode(ctx); pending {
+			_, heartbeatErr := s.SendHeartbeat(ctx)
+			return errors.Join(err, heartbeatErr)
+		}
 		if pending, err := s.resumePendingIndependentObserver(ctx); pending {
 			_, heartbeatErr := s.SendHeartbeat(ctx)
 			return errors.Join(err, heartbeatErr)
@@ -436,7 +441,13 @@ func (s *Simulator) processOfferAttempt(
 			return errors.Join(err, SaveState(s.config.Simulation.StateFile, s.state), s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{InstanceID: s.config.Instance.ID, FromVersion: update.FromVersion, ToVersion: update.ToVersion, Success: false, Error: err.Error(), Kind: "pod_maintenance", Stage: "maintenance"}))
 		}
 	} else if p, ok := s.config.Product(update.Product); ok && update.Product == "siemcore" && p.ServerType == "pod-node" {
-		if err := s.applyIndependentNode(ctx, update); err != nil {
+		var nodeErr error
+		if s.config.Simulation.Filesystem.IndependentNodeUpdate && update.FromVersion != "" && update.FromVersion != "0.0.0" && update.FromVersion != "0.0.0.0" {
+			nodeErr = s.applyIndependentNodeUpdate(ctx, update)
+		} else {
+			nodeErr = s.applyIndependentNode(ctx, update)
+		}
+		if err := nodeErr; err != nil {
 			return s.failAndRollback(ctx, update, err)
 		}
 	} else if p, ok := s.config.Product(update.Product); ok && update.Product == "siemcore" && p.ServerType == "observer-unlinked" {
@@ -499,7 +510,11 @@ func (s *Simulator) failAndRollback(
 		errorMessage += "; independent Observer transaction retained for exact retry; rollback unsupported"
 	}
 	if retainedNode {
-		errorMessage += "; independent POD node transaction retained for exact retry; rollback unsupported"
+		if s.config.Simulation.Filesystem.IndependentNodeUpdate {
+			errorMessage += "; independent POD node operation retained for protected reconciliation"
+		} else {
+			errorMessage += "; independent POD node transaction retained for exact retry; rollback unsupported"
+		}
 	}
 	if rollbackErr != nil {
 		errorMessage += "; rollback: " + rollbackErr.Error()
