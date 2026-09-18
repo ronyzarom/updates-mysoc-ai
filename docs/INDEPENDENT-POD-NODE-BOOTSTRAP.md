@@ -154,3 +154,10 @@ and schema using synthetic bindings. It does not yet exercise both complete
 installer envelopes, signed artifact delivery, management startup, or final
 installation acceptance. Receipts correctly remain `installation_complete=false`
 and `processing_enabled=false`. Delivery gates remain disabled.
+
+The expanded native fixture was independently rebuilt/rerun after management
+support landed: `TestNativeUnlinkedNodeSchema` passed (0.39s), and
+`TestNativeUnlinkedNodeManagement` passed (0.03s) against real local data services.
+This tests the management handler, including disabled mutations and dependency
+failure status. It still does not qualify the TLS listener/login roundtrip or
+the full signed installer. No delivery gates were changed.
