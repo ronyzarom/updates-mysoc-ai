@@ -36,3 +36,18 @@ of linked-POD readiness or qualified node upgrades. See `native-node-a.json`.
 Temporary binary/directory removed afterward. No installer, service, enrollment,
 product apply, certificate change or fleet mutation was executed. Full native
 installation remains pending the coordinated product inputs and authorization.
+
+## Coordinated product candidate selection
+
+Read-only origin catalog check on 2026-09-18 found latest `3.3.152.39` and no
+`3.3.152.40`. Coordinated `.40` with SiemCore for node A; this is not a database
+reservation and must be rechecked immediately before publication. Proposed
+product channel `node-a-20260918`, target group alpha only; zero existing releases
+or reported SiemCore instances used that channel at the check. Only A may be
+configured for this product channel. This is channel/ring isolation, not a
+per-instance ACL. Updater self-update channel remains stable. No publication or
+host assignment was performed by this check.
+
+Prior dependency runtime evidence uses ARM64 PostgreSQL and Redis with UID999.
+Those fixture digests/UIDs are not AMD64 qualification. Product owner must verify
+authorized AMD64 image digests and users before creating A's protected settings.
