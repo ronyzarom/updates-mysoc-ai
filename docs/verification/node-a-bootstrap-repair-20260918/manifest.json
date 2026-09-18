@@ -1,0 +1,16 @@
+{
+  "archive": "node-a-bootstrap-health-repair-1.16.1.28-r3.tar.gz",
+  "files": {
+    "bootstrap-health-repair.json": "90dbac22ee3ddbf021d17d6c24e4306898b4156e0b5e1f694df09a7c83b13dde",
+    "bootstrap-health-repair.json.sig": "a5fa93780bc6e8df18294d7e81a9516e59e9226e8df6995a642b978baee1ebb9",
+    "bootstrap-health-repair.py": "f57de8169a0c4508c26d7c63d9447948257ac79c2843515c8505b1b4a394964e",
+    "greenfield-hook.py": "622e390f49f0684f05df523b94f45dc4479d4e0a8507972ba9a959901b08299e",
+    "install.py": "61dbc4a2610bae7812614d4a418b5b8368d1eb22b9ab9ce929f71d55725a871a"
+  },
+  "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
+  "repair_id": "04705744-f59d-4771-9188-b6a8c929f497",
+  "scope": "node-a-bootstrap-health-repair",
+  "sha256": "41b0a92c2b6516bc6f011291b96e59d7b7590acb214bcacfdd7286161fee161b",
+  "size": 12881,
+  "version": "1.16.1.28-r3"
+}

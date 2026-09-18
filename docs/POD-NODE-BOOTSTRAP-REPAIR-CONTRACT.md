@@ -1,6 +1,7 @@
 # Narrow independent-node bootstrap health repair
 
-Proposed with SiemCore on 2026-09-18; not implemented or enabled by this document.
+Implemented and qualified on node A on 2026-09-18. See
+[the signed native repair evidence](verification/node-a-bootstrap-repair-20260918/README.md).
 Scope: recover original incomplete node A bootstrap `.40` after Docker29 returned
 `CAP_DAC_OVERRIDE`/`CAP_NET_BIND_SERVICE` instead of their unprefixed spellings.
 Actual image, binary, identities and effective capability set match. No bypass

@@ -1,0 +1,31 @@
+{
+  "action": "docker-cap-prefix-v1",
+  "binary_sha256": "6cf6f20d6a120701011986521b2a564c3e9d2ef289427bf545f9ffbba8e30b3d",
+  "configuration_sha256": "3387582a0fec5435597178635b709f1127d9ac6ed2ddaba91de28037aa224594",
+  "containers": {
+    "management": "c56d80bedcc9befe97a58cf7321ce1be64e8e4fe1f096359e7acc4066e965456",
+    "postgres": "df3055b37035976ce66e5e10a74cc139c1f6844596b4624fbc1f5062904f5c81",
+    "redis": "d7a4a1aab0d9d1932b9b2e5db533637b69d7e57bede0c64292fc34515ba3f580"
+  },
+  "identity": {
+    "installation_id": "node-d6e43db4-e83e-4e7d-939e-909b7644961a",
+    "machine_id": "bed377a24032485c8a58d8734eab6368",
+    "node_id": "1",
+    "updater_instance_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d"
+  },
+  "original_hook_sha256": "d47ca7f8fc6f9e2e75004665b043ad43b6a94b56ed83244abb9643b140b123cc",
+  "original_journal_sha256": "a6b5591c1d25c6f8ee66f019fb8d4458df339cbb161491db184146f7285b8c71",
+  "policy_sha256": "231dc00b6de99c3ff2b2c58da24a32ed81f2a9ad363042cb51bd637e94baa854",
+  "product": "siemcore",
+  "protocol": "pod-node-bootstrap-health-repair-v1",
+  "release": {
+    "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
+    "sha256": "1d79b0c3cbdc54cb36fbcd337c6a5e9583659f5765ea17064034ea3b752dd7fc",
+    "signature": "yy0sDVONHjB0RTAuaK6SMlZJnvHku6MUeFEQjMqIiU7PSga6cTPu7oZBr+nh3OD/2CT54Z7OmIax5QW/LIOdDg=="
+  },
+  "repair_id": "04705744-f59d-4771-9188-b6a8c929f497",
+  "repair_module_sha256": "f57de8169a0c4508c26d7c63d9447948257ac79c2843515c8505b1b4a394964e",
+  "runtime_image_id": "sha256:f4632a921ca7d1ed6ec971ec2468192c564c887cdc71fe1ca6133d2fb5774f38",
+  "updater_sha256": "77d44297f4acdccce6905665bd08ab1f940839967a6992bf125bf5a5b5a42267",
+  "version": "3.3.152.40"
+}

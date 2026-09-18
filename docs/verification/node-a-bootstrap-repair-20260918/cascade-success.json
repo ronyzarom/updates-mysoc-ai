@@ -1,0 +1,22 @@
+{
+  "instance_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d",
+  "update_group": "alpha",
+  "auto_update_enabled": true,
+  "status": "online",
+  "last_heartbeat": "2026-09-18T12:55:39.16879+00:00",
+  "last_update_target_version": "3.3.152.40",
+  "last_update_success": true,
+  "last_update_error": "",
+  "last_update_at": "2026-09-18T12:54:34.20321+00:00",
+  "products": [
+    {
+      "name": "siemcore",
+      "status": "running",
+      "uptime": 72,
+      "channel": "node-a-20260918",
+      "version": "3.3.152.40",
+      "last_restart": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "updater_version": "1.16.1.28"
+}
