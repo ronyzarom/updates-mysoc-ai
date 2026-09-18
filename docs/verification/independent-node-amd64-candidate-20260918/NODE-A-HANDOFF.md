@@ -50,3 +50,24 @@ assignment after enrollment, preserve every other fleet row/hold, and verify
 signed apply, service restart, cascade heartbeat and exact application health.
 An installed-unlinked node must retain processing/authority/POD/link readiness
 false. Do not report bootstrap success from publication or CLI capability alone.
+
+## Parent verification result
+
+Read-only Observer configuration confirms actual parent
+`https://testing.mysoc.ai:18443`, with CA file
+`/etc/siemcore-cascade-updater/mysoc-relay-ca.pem`.
+A TLS-only probe found subject and issuer `CN=mysoc-cascade-relay`, expiry
+2036-08-18, and public-trust verification failed because it is self-signed.
+No credentials were sent in that probe.
+
+This endpoint currently fails the mandatory SSL.com deployment gate. Do not
+copy its old CA to A as a workaround or silently switch to application port443.
+Coordinate a compliant relay endpoint while preserving trust for existing
+CA-pinned children. No parent TLS or other-host change is authorized by the
+A-only installation handoff; this finding was sent to the product coordinator.
+
+Once compliant enrollment succeeds, retrieve A's newly assigned origin UUID
+and use supported `PUT /api/v1/instances/{uuid}` with
+`{"update_group":"alpha","auto_update_enabled":true}`. Compare all other
+fleet control rows and explicit holds before/after. An alpha fixture response
+is not proof of real membership.
