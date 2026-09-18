@@ -2,6 +2,8 @@ package updatersim
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -109,5 +111,42 @@ func TestStandaloneSuccessorRequiresExactRestoredRootBinding(t *testing.T) {
 				t.Fatal("restored history not preserved", pending, err)
 			}
 		})
+	}
+}
+
+func TestRestoredStandaloneStillChecksSignedSelfUpdate(t *testing.T) {
+	heartbeats, selfChecks, productChecks := 0, 0, 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/heartbeat" {
+			heartbeats++
+			writeTestJSON(t, w, HeartbeatResponse{Status: "ok"})
+		} else if strings.Contains(r.URL.Path, "/updates/updater-") {
+			selfChecks++
+			writeTestJSON(t, w, UpdateCheckResponse{})
+		} else {
+			productChecks++
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	s, u := standaloneFixture(t)
+	cfg := newSimulatorTestConfig(t, server.URL, ModeReal)
+	s.client, _ = NewClient(cfg.Server)
+	s.logger = discardLogger()
+	s.binaryVersion = "1.16.1.33"
+	s.config.SelfUpdate.Channel = "stable"
+	old := &NodeStandaloneOperation{OperationID: "b71bd9f1-45f1-4aa2-bd4e-bd043937a552", OperationSHA256: strings.Repeat("a", 64), Phase: "restored", FromVersion: u.FromVersion, TargetVersion: u.ToVersion}
+	s.state.NodeStandaloneOperation = old
+	s.standaloneAdapterCall = func(_ context.Context, action string, q standaloneRequest) (standaloneResponse, error) {
+		if action != "readiness" {
+			t.Fatal("restored operation must not reapply", action)
+		}
+		return standaloneResponse{OperationID: old.OperationID, ServerType: "pod-node", NodeID: "1", AdapterManifestSHA256: strings.Repeat("b", 64)}, nil
+	}
+	if err := s.RunCycle(context.Background(), ModeReal); err == nil {
+		t.Fatal("product hold disappeared")
+	}
+	if heartbeats != 1 || selfChecks != 1 || productChecks != 0 || s.state.NodeStandaloneOperation != old {
+		t.Fatalf("heartbeat=%d self=%d products=%d", heartbeats, selfChecks, productChecks)
 	}
 }

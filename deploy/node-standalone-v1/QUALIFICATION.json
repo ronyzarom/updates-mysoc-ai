@@ -7,8 +7,9 @@
   "mysoc_conflict_refused": true,
   "mysoc_exact_retry_verified": true,
   "paid_ai_guard_verified": true,
-  "scope": "disposable nested Docker product fixture; not live A tenant delivery",
+  "real_gcs_verified": true,
+  "scope": "disposable nested Docker with real GCS synthetic archive retrieval; not live A delivery",
   "synthetic_event_archived": true,
-  "target_artifact_sha256": "605b41c1903c1c1eb5d2423d0873cb2af6a147988e9f05bb5c3de627f7a6010f",
-  "target_version": "3.3.152.43"
+  "target_artifact_sha256": "d64f270af60b756cf0062cef897c56d5fecfecff25c1a83323453655d5d8d22f",
+  "target_version": "3.3.152.44"
 }

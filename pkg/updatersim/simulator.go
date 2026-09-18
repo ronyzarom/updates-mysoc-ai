@@ -271,6 +271,16 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	if mode == ModeReal {
 		if pending, err := s.resumePendingIndependentStandalone(ctx); pending {
 			_, heartbeatErr := s.SendHeartbeat(ctx)
+			// A terminal restored application must not prevent delivery of the
+			// updater that can authorize its signed successor. In-flight work
+			// still completes reconciliation before any binary replacement.
+			if op := s.state.NodeStandaloneOperation; op != nil && op.Phase == "restored" {
+				selfErr := s.maybeSelfUpdate(ctx, mode)
+				if errors.Is(selfErr, ErrRestartPending) {
+					return selfErr
+				}
+				return errors.Join(err, heartbeatErr, selfErr)
+			}
 			return errors.Join(err, heartbeatErr)
 		}
 		if pending, err := s.resumePendingIndependentNode(ctx); pending {

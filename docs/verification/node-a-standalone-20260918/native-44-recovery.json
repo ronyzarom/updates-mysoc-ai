@@ -1,0 +1,8 @@
+{
+  "target_version": "3.3.152.44",
+  "interrupted_recovery_verified": true,
+  "exact_recovery_retry": true,
+  "data_ids_preserved": true,
+  "bootstrap_bytes_preserved": true,
+  "processing_stopped": true
+}
