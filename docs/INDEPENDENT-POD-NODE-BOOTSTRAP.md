@@ -99,3 +99,17 @@ kit qualification. No new kit version has been published for this contract.
 - `TestInstallationIdentityRetainedAcrossHeartbeats`: all 24 database cases passed on a new local PostgreSQL16 tmpfs fixture. Covers direct and relay heartbeat routes, omitted/mutated identities, and update-attempt reporting. Fixture removed afterward; no existing database was used.
 - `bash -n kits/siemcore/install.sh` and `git diff --check`: passed.
 - Root product lifecycle, real dependency installation, end-to-end signature execution, and clean-host readiness are not qualified by these boundary tests.
+
+### Joint admission and reporting follow-up
+
+Run `python3 scripts/qualification/independent-node/check-contract.py
+--siemcore-source /path/to/siemcore-source` to compare both implementations.
+All 31 cases pass against the product source on 2026-09-18. This uses invalid
+fixture signing material and performs validation only; it does not qualify
+signed delivery or runtime installation.
+
+Updater retained-retry tests additionally recreate the Simulator before replay
+and reject modified signatures and artifact kinds. Targeted Go tests pass.
+The dashboard recognizes immutable `pod-node` and `observer-unlinked` identities
+as read-only POD node/Observer labels without implying linkage, readiness, or
+processing authority. Five badge tests and TypeScript checking pass.

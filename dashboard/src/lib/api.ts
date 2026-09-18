@@ -273,7 +273,7 @@ export interface InstanceTreeResponse {
 }
 
 export interface InstallationIdentity {
-  kind: "normal" | "pod";
+  kind: "normal" | "pod" | "pod-node" | "observer-unlinked";
   pod_id?: string;
   node_id?: string;
 }

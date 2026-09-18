@@ -84,6 +84,28 @@ func TestIndependentObserverRetainedRetry(t *testing.T) {
 				if string(before) != string(after) {
 					t.Fatal("retry rewrote transaction")
 				}
+
+				// Restarting the updater does not lose the retained staging binding.
+				restarted := &Simulator{executor: e}
+				replay := restarted.applyIndependentObserver
+				if kind == "node" {
+					replay = restarted.applyIndependentNode
+				}
+				if err := replay(context.Background(), update); err != nil {
+					t.Fatal(err)
+				}
+				for _, field := range []string{"signature", "kind"} {
+					changed := update
+					switch field {
+					case "signature":
+						changed.ArtifactSignature = "different-signature"
+					case "kind":
+						changed.SelectedArtifactKind = "update"
+					}
+					if replay(context.Background(), changed) == nil {
+						t.Fatalf("changed %s accepted", field)
+					}
+				}
 				changed := update
 				changed.ArtifactSHA256 = "other"
 				if apply(context.Background(), changed) == nil {
