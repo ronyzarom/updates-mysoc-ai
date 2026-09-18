@@ -1,4 +1,4 @@
-import base64,copy,hashlib,importlib.util,json,unittest
+import base64,copy,hashlib,importlib.util,json,unittest,tempfile,os
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding,PublicFormat
@@ -16,3 +16,14 @@ class RepairTests(unittest.TestCase):
    with self.subTest(index=index),self.assertRaises(Exception):m.validate(*bad)
   bad=copy.deepcopy(args);bad[0]['release']['signature']=base64.b64encode(b'x'*64).decode()
   with self.assertRaises(Exception):m.validate(*bad)
+
+ def test_receipt_exact_retry_conflict_and_symlink_refusal(self):
+  with tempfile.TemporaryDirectory() as directory:
+   # macOS /tmp is itself a symlink; use the canonical fixture location.
+   root=Path(directory).resolve();receipt=root/'receipt.json';expected={'version':'1.16.1.33'}
+   m.save_receipt(receipt,expected);m.save_receipt(receipt,expected)
+   before=receipt.read_bytes()
+   with self.assertRaises(ValueError):m.save_receipt(receipt,{'version':'other'})
+   self.assertEqual(receipt.read_bytes(),before)
+   link=root/'link';link.symlink_to(root,target_is_directory=True)
+   with self.assertRaises(ValueError):m.protected_ancestors(link/'release'/'file')
