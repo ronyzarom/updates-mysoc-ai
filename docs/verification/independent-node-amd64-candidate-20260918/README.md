@@ -51,3 +51,33 @@ host assignment was performed by this check.
 Prior dependency runtime evidence uses ARM64 PostgreSQL and Redis with UID999.
 Those fixture digests/UIDs are not AMD64 qualification. Product owner must verify
 authorized AMD64 image digests and users before creating A's protected settings.
+
+## Actual isolated publication and native bootstrap
+
+Common SiemCore3.3.152.40 archive SHA
+1d79b0c3cbdc54cb36fbcd337c6a5e9583659f5765ea17064034ea3b752dd7fc,
+65,359,811bytes, published node-a-20260918/alpha only at12:31:37Z. Metadata,
+Ed25519 signature and full parent-license-authenticated download verified.
+The first verification script received401 from its unauthenticated download
+step AFTER successful publication. This was initially misattributed to upload
+authentication; catalog reconciliation corrected that diagnosis. A redundant
+file transfer was stopped before any second POST; the release was never overwritten.
+
+Actual kit installer completed on A; UUIDf00a55b8-bd5a-4e44-a3f1-0e2b00b0f463
+assigned alpha/automatictrue via supported API. All other fleet controls and
+benchmark hold unchanged. Updater1.16.1.28, stable self-update, SSL.com relay TLS.
+At12:37:32Z the updater accepted .40;12:37:38Z verified the artifact;12:37:39Z
+invoked the protected root apply boundary. No manual product apply occurred.
+
+At12:38:15Z the root final readiness verifier failed closed with ValueError.
+PG/Redis/management containers and HTTPS health are running, but original root
+journal remains installing; this is NOT accepted updater bootstrap success.
+Cause confirmed: Docker29 returns CAP_DAC_OVERRIDE/CAP_NET_BIND_SERVICE while
+product verification expects unprefixed spellings. Image/binary/identities and
+actual allowed capability set match. No data/container recreation or artifact
+rewrite was performed. Exact original transaction is retained for retry.
+
+`node-a-failed-bootstrap-binding.json` records nonsecret original journal,
+policy/config/artifact hashes and retained container IDs. The narrow signed
+health-only repair contract is `docs/POD-NODE-BOOTSTRAP-REPAIR-CONTRACT.md`.
+Product normalization fix is source-only pending reviewed signed root repair.
