@@ -1,0 +1,6 @@
+.................
+----------------------------------------------------------------------
+Ran 17 tests in 0.715s
+
+OK
+Bootstrap envelope valid; signed product validates application prerequisites.

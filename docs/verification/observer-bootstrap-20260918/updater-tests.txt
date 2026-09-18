@@ -1,0 +1,3 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/pkg/updatersim	9.792s
+?   	github.com/cyfox-labs/updates-mysoc-ai/pkg/types	[no test files]
+ok  	github.com/cyfox-labs/updates-mysoc-ai/cmd/updater-simulator/cmd	(cached)

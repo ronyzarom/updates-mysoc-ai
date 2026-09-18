@@ -1,0 +1,24 @@
+PACKAGE.json: OK
+PROVISIONING_COMMIT: OK
+README.md: OK
+START-HERE.txt: OK
+UPDATER-SIGNATURE.json: OK
+bin/siemcore-cascade-updater-linux-amd64: OK
+config.yaml: OK
+docs/RELAY-DEPLOYMENT.md: OK
+docs/SIEMCORE-CLEAN-INSTALL-PARAMETERS.md: OK
+docs/SIEMCORE-INSTALLATION-ROLES.md: OK
+docs/UPDATE-ENTRYPOINT-CONTRACT.md: OK
+docs/UPDATER-GUIDELINES.md: OK
+greenfield-bootstrap.py: OK
+greenfield-hook.py: OK
+install.sh: OK
+installation-type.py: OK
+recovery/artifact.py: OK
+recovery/recovery.py: OK
+recovery/supervise.py: OK
+siemcore-cascade-updater.service: OK
+updater-simulator 1.16.1.26
+  Git Commit: 849a21f
+  Build Time: 2026-09-18T03:36:47Z
+{"schema":1,"server_types":["normal","pod-active","pod-stby","pod-observer","observer-unlinked"],"lifecycle_ready":false}

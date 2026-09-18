@@ -1,0 +1,2 @@
+ok  	github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing	0.366s
+ok  	github.com/cyfox-labs/updates-mysoc-ai/internal/server/api	0.762s
