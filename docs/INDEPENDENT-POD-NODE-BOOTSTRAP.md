@@ -194,3 +194,24 @@ identity reporting and authenticated management checks. See
 [kit evidence](verification/independent-node-kit-20260918/README.md).
 This is local Linux ARM64 qualification using disposable signatures. Live
 AMD64, fleet alpha verification, release signing and publication remain separate.
+
+## Deployment TLS requirement — user direction 2026-09-18
+
+Every deployed TLS listener must use an SSL.com-issued server certificate with
+its valid full chain and matching protected private key. This covers management
+and customer HTTPS, ingestion TLS, exposed updater/relay HTTPS, Observer authority,
+and database TLS. There is no self-signed server fallback for deployment.
+
+Deployment validation must inventory all listeners, verify certificate issuer
+chain, expiry, hostname/SAN coverage and key matching, and confirm the running
+listener serves the approved certificate. Missing certificate inputs block that
+listener's deployment; do not silently generate a replacement CA/certificate.
+For exposed updater/relay HTTPS, supply both `--relay-cert-file` and
+`--relay-key-file`; the existing generic self-provisioning default does not meet
+this deployment requirement. This document records the gate; it does not claim
+an automatic issuer-enforcement implementation or live certificate changes.
+
+Private fixture CAs and loopback test certificates used in qualification are
+isolated test inputs only. They must never be selected in deployment settings.
+Product database TLS settings remain unresolved until a complete SSL.com-compatible
+configuration is provided and validated; do not substitute the fixture CA.
