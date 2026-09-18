@@ -1,0 +1,32 @@
+{
+  "relay": {
+    "verified": true,
+    "issuer": [
+      [
+        [
+          "countryName",
+          "US"
+        ]
+      ],
+      [
+        [
+          "organizationName",
+          "SSL Corporation"
+        ]
+      ],
+      [
+        [
+          "commonName",
+          "SSL.com TLS Issuing RSA CA R1"
+        ]
+      ]
+    ]
+  },
+  "postgres": {
+    "verified": true,
+    "verification": "system trust and hostname passed",
+    "certificate_subject": [
+      "Peer certificate: CN = *.siemcore.ai"
+    ]
+  }
+}
