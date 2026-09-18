@@ -45,9 +45,11 @@ for initial qualification. Updater self-update remains stable/alpha/enabled.
 
 Root-private durable journal directory:
 `/var/lib/siemcore-observer-update/operations/<operation_id>/`.
-One host-wide execution lock serializes readiness, apply, reconciliation and
-recovery; never have separate concurrent bootstrap/update/recovery writers.
-Unknown fields, duplicate JSON keys, symlinks and invalid enum/types are rejected.
+The existing root lock `/var/lib/siemcore-greenfield/hook.lock` serializes
+readiness, apply, reconciliation and recovery; never have separate concurrent bootstrap/update/recovery writers.
+The root adapter owns this lock; the invoked product worker must not acquire it
+again and deadlock. Unknown fields, duplicate JSON keys, symlinks and invalid
+enum/types are rejected.
 
 Immutable operation object (UTF-8, RFC8785 canonical JSON for its SHA256):
 
@@ -76,7 +78,8 @@ Immutable operation object (UTF-8, RFC8785 canonical JSON for its SHA256):
     "artifact_signature": "<base64 Ed25519 release signature>",
     "binary_sha256": "<verified packaged executable digest>"
   },
-  "signing_public_key_sha256": "<SHA256 of pinned raw 32-byte public key>"
+  "signing_public_key_sha256": "<SHA256 of pinned raw 32-byte public key>",
+  "ui_protection_required": true
 }
 ```
 
@@ -105,7 +108,13 @@ Product-owned executor receives the same immutable binding and root-derived
 verified staging locations over a private descriptor/file. Product output cannot
 impersonate a root completion receipt.
 
-Responses contain exactly protocol, operation_id, operation_sha256, phase,
+Readiness (before an operation exists) returns protocol, capabilities,
+adapter_manifest_sha256, observed_at and measured health; it contains no operation
+ID. Accept its measurement for at most 10 seconds, then remeasure under the lock.
+Readiness/status calls have a 30-second maximum; apply/recover have a configured
+bounded deadline (initially 15 minutes) and supervised worker process group.
+
+Operation responses contain exactly protocol, operation_id, operation_sha256, phase,
 observed_at (UTC), and measured health when available. Failures add error_code
 and mutation (`none`, `possible`, `confirmed`); no exception text containing
 credentials. Execution deadline expiry is an uncertain result, never success or
@@ -169,6 +178,23 @@ No generic filesystem rollback is allowed to claim success for this type.
 Updater current/previous pointers are reconciled only after the root transaction
 proves accepted/restored state. Interrupted pointer reconciliation is idempotent;
 it must not start a second application transaction or delete retained artifacts.
+
+## First-hop security recovery gate requiring product agreement
+
+The retained .37 predecessor does not enforce UI passwords. Preserving
+`ui.htpasswd` alone therefore cannot make a .37 rollback fail closed. Do not
+report `restored` merely because .37 management health passes while UI access
+has become anonymous again.
+
+Before qualifying .37-to-security-build recovery, SiemCore must provide a tested
+UI protection mechanism that remains enforced when the predecessor runs, with
+health/machine authentication still available, OR agree that this first-hop
+recovery cannot restore a serving .37 instance and remains explicitly blocked
+with management stopped. The latter is controlled failure, not successful
+rollback or qualified unattended recovery. No such protection layer is currently
+claimed to exist. This is an explicit review decision before removing guards.
+Both successful acceptance and `restored` require unauthenticated UI rejection;
+`ui_protection_required` is immutable and cannot be disabled by a retry.
 
 ## Protected adapter delivery — separate from product execution
 
