@@ -1,0 +1,44 @@
+{
+  "release": {
+    "version": "3.3.152.40",
+    "channel": "node-a-20260918",
+    "sha256": "1d79b0c3cbdc54cb36fbcd337c6a5e9583659f5765ea17064034ea3b752dd7fc",
+    "signature": "yy0sDVONHjB0RTAuaK6SMlZJnvHku6MUeFEQjMqIiU7PSga6cTPu7oZBr+nh3OD/2CT54Z7OmIax5QW/LIOdDg==",
+    "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57"
+  },
+  "catalog": {
+    "artifact_path": "/home/bitnami/updates-mysoc-ai/data/releases/siemcore/3.3.152.40/siemcore-universal-3.3.152.40.tar.gz",
+    "artifact_size": 65359811,
+    "channel": "node-a-20260918",
+    "checksum": "1d79b0c3cbdc54cb36fbcd337c6a5e9583659f5765ea17064034ea3b752dd7fc",
+    "created_at": "2026-09-18T12:31:37.417623Z",
+    "id": "fd059923-1655-477d-8d70-c2b4a650b847",
+    "manifest": {
+      "artifacts": [
+        {
+          "arch": "",
+          "checksum": "1d79b0c3cbdc54cb36fbcd337c6a5e9583659f5765ea17064034ea3b752dd7fc",
+          "kind": "bootstrap",
+          "name": "siemcore-universal-3.3.152.40.tar.gz",
+          "size": 65359811
+        }
+      ],
+      "channel": "node-a-20260918",
+      "product": "siemcore",
+      "version": "3.3.152.40"
+    },
+    "product": "siemcore",
+    "product_name": "siemcore",
+    "release_notes": "Isolated node A independent bootstrap native qualification; unlinked, processing disabled. Source4d81a6b002dd260bd5e516c031428d76004dd793. Not qualified for broader rollout.",
+    "released_at": "2026-09-18T12:31:37.417623Z",
+    "signature": "yy0sDVONHjB0RTAuaK6SMlZJnvHku6MUeFEQjMqIiU7PSga6cTPu7oZBr+nh3OD/2CT54Z7OmIax5QW/LIOdDg==",
+    "size": 65359811,
+    "target_groups": [
+      "alpha"
+    ],
+    "version": "3.3.152.40"
+  },
+  "download_verified": true,
+  "download_size": 65359811,
+  "verification_route": "parent license authenticated origin download"
+}

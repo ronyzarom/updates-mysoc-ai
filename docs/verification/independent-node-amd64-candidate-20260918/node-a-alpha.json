@@ -1,0 +1,10 @@
+{
+  "instance": {
+    "id": "f00a55b8-bd5a-4e44-a3f1-0e2b00b0f463",
+    "instance_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d",
+    "update_group": "alpha",
+    "auto_update_enabled": true
+  },
+  "other_fleet_controls_unchanged": true,
+  "benchmark_hold_preserved": true
+}

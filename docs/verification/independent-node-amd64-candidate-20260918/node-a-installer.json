@@ -1,0 +1,8 @@
+{
+  "installer": "completed",
+  "updater_instance_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d",
+  "kit_version": "1.16.1.28-r2",
+  "product_target": "3.3.152.40",
+  "product_apply_verified": false,
+  "log_path": "/var/lib/updates-node-a-install-20260918/install.log"
+}
