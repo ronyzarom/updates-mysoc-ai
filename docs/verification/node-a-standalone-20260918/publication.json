@@ -1,15 +1,15 @@
 {
   "updater": {
     "product": "updater-linux-amd64",
-    "version": "1.16.1.31",
-    "sha256": "7996edbdae72e3c4573bc1694a7b5016760e52beb21e78828a905d4c3b812728",
-    "size": 10657976,
+    "version": "1.16.1.33",
+    "sha256": "f2a8a9ed4b76c2d85f3600c642f7c09bb152d2da4bddce172f31cb08de6837fc",
+    "size": 10629304,
     "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
-    "signature": "NDklFoynPaB1ucS0+k43pThw8OGh72OHkM/9XkwFAbNW1yL5U4lPJIJ1wBpLEoP7hFyClmsBeUrQh0x/2dqYBw==",
+    "signature": "WBhxNNXbcB5I19z//vQ5IphvoJJeK5yBSsLrx9cBnPjX0yTK/nVkApyrMIIJ0T2DwbkUn/2BBXiveyruqBgDBA==",
     "channel": "stable",
     "target_groups": "alpha",
-    "release_notes": "Gated independent-node standalone transition support. Normal and Observer update paths preserved. Product enablement requires separate signed host-bound prerequisites.",
-    "filename": "updater-simulator-1.16.1.31-linux-amd64"
+    "release_notes": "Retain restored standalone operation history while allowing signed updater self-update checks; exact signed successor admission. Normal and Observer execution unchanged.",
+    "filename": "updater-simulator-1.16.1.33-linux-amd64"
   },
   "prerequisite": {
     "archive": "node-a-standalone-prerequisite-1.16.1.31-r1.tar.gz",
@@ -38,7 +38,7 @@
   },
   "phase1_script_sha256": "ce3390f50379940cd0186317ba043c3b4e63457d03c6e2e756b709059a709879",
   "phase2_script_sha256": "33cf6fd5afb1963d8a27e5b90dd3a1a554ddf50dd65f507a5c64019bea074257",
-  "status": "signed root component correction pending; isolated product offer temporarily withheld",
+  "status": ".33 deployed automatically to MySoc/Normal/Observer; A .31 terminal restored; .44 native GCS qualified, unpublished; signed repair exception pending",
   "benchmark_hold_preserved": true,
   "phase2_retry_script_sha256": "38125d21e0c97a27415af50c62358325cbdf08393f224b5bc089b94b650559bc",
   "catalog_migration": {
@@ -54,5 +54,57 @@
     "script_sha256": "9dfcad27348cabe8e5121849de3c9472bf9683a1acf58a3ad4e3b9aae147d36c",
     "reason": "Docker mount enumeration order varies; compare exact mount records independent of order"
   },
-  "python_tests_passed": 31
+  "python_tests_passed": 39,
+  "authentication_recovered_via": "User-authenticated GCP Console start; read-only verification over Tailscale",
+  "previous_updater": {
+    "product": "updater-linux-amd64",
+    "version": "1.16.1.31",
+    "sha256": "7996edbdae72e3c4573bc1694a7b5016760e52beb21e78828a905d4c3b812728",
+    "size": 10657976,
+    "public_key": "1f1aa11a80d6ac549a26bb25daac4798c42dd469138680e68f89832bd32e7f57",
+    "signature": "NDklFoynPaB1ucS0+k43pThw8OGh72OHkM/9XkwFAbNW1yL5U4lPJIJ1wBpLEoP7hFyClmsBeUrQh0x/2dqYBw==",
+    "channel": "stable",
+    "target_groups": "alpha",
+    "release_notes": "Gated independent-node standalone transition support. Normal and Observer update paths preserved. Product enablement requires separate signed host-bound prerequisites.",
+    "filename": "updater-simulator-1.16.1.31-linux-amd64"
+  },
+  "updater_repair_pending": {
+    "archive": "node-a-updater-repair-1.16.1.33-r2.tar.gz",
+    "files": {
+      "PACKAGE.json": "5e2fd520f024b289e5614c7cf8e60ceeee33f1475b3bcb45d5394de7722875a9",
+      "install.py": "9d823cbf0f881418191a9ff15a09910cdf6d8b8d5a150e4fb50e0d8551e5449c",
+      "updater": "f2a8a9ed4b76c2d85f3600c642f7c09bb152d2da4bddce172f31cb08de6837fc"
+    },
+    "scope": "node-a-updater-repair-only",
+    "sha256": "9d3afb6fa9bf0945ff2c537b0ac4df053d7ba4193661b000f48997b1325f5772",
+    "size": 4291969,
+    "source_commit": "80edbec7b7cbf52a2a7770a341a336cf02324226",
+    "version": "updater-1.16.1.33-repair-r2"
+  },
+  "successor_pending": {
+    "archive": "node-a-standalone-successor-1.16.1.33-r1.tar.gz",
+    "files": {
+      "PACKAGE.json": "a6a05de3c115a722bf4e33993b1a0c23ff68321e73f4d50e05352a64a2956766",
+      "POLICY.json": "4e55377cfddaf1e8bb0cab0f4c389885b149d2178f8d7984a9280af7416430b7",
+      "component/COMPONENT.json": "a8425f2c9a47cb938d1ecef72327352db95d14e63f926e6f13b11dd539766f69",
+      "component/QUALIFICATION.json": "30f38b17936818a78b3bbc72c4f0c25fa3252ee95841cbeeb2e3d39a9d22f058",
+      "component/adapter.py": "67d2d8ab5e3a16303ceca86a428ed5ab5afe10b6960c7e9d6940379be21565d2",
+      "component/artifacts.py": "9277e62d391c8baed05090106ada179bd1cd0ee28936f71110f6beb6fbab8202",
+      "component/capsule.py": "d0eeafb473d13456c3751843a81947f88a1e3164efafe105579e2b16862d92d2",
+      "component/cli.py": "7702c5f67c51c24449af9ef54049835bf377848164413f73ad9840d3cf3144c6",
+      "component/configuration_inventory.py": "1b8bc150dda289cc89317a0fea2bf393d2a8e109e652082b6cc900f241b01519",
+      "component/host.py": "4a867e29e454db93d4aedd5407d7d6671b722737eb2a5f81b3a6cbe16e713f10",
+      "component/protocol.py": "acc8406c1ac5d723c65b40761aca99f504c721a144ea626cbfd8feb5528b7d7e",
+      "component/source_loader.py": "ec64bef063ae1477be9a8d2f7262456b63a6509d23e21fc8bfc366e11c05bc3f",
+      "component/supervisor.py": "4ceff18cbb19735180dfe3a2900b1f42ef29bad8e9e1d7f5d2b7f92a2fb8eb74",
+      "component/transaction.py": "41689ac888bd44a74f27b4b97d5f96038d1aed700dd2e0645f848fcd5594caf0",
+      "component/worker.py": "1c86104bb1e9947ed4cfaf018bf6a510836d71bbb2505bd9e802d637509348e0",
+      "install.py": "4634e3a628308b79a522989bf732e126a5729fc08cc3d4731477ab18df6cc9e0"
+    },
+    "scope": "node-a-standalone-successor",
+    "sha256": "7bec871bba9ff37f3b19c610487e958a8ea873f8dd8aaec75c15ffc269828970",
+    "size": 24147,
+    "source_commit": "a765d6fc8a45b284ed9ee4d3c3137c740fde0f0d",
+    "version": "1.16.1.33-r1"
+  }
 }

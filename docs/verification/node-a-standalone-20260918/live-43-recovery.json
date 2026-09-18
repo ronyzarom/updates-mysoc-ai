@@ -1,0 +1,146 @@
+{
+  "adapter-journal.json": {
+    "error_code": "standalone_transition_failed",
+    "mutation": "confirmed",
+    "observed_at": "2026-09-18T19:36:52.795861+00:00",
+    "operation_id": "ac7abbac-dec0-494e-880b-ee61428465bb",
+    "operation_sha256": "40779deeb57374ac936ac0298f0645906459b8fd342f610f98f1604cd6a138db",
+    "phase": "restored",
+    "protocol": "pod-node-standalone-v1"
+  },
+  "product-journal.json": {
+    "binding": {
+      "bootstrap_receipt_sha256": "a0bfcd26476a8d3817210cab57652b6aeb57da415952a54af7c5d3daabcabb04",
+      "configuration_sha256": "54b28019bcefe635ea627a8d63746433bcdff5aaeba1b054fa65561a6ec83059",
+      "instance_id": "siemcore-bezeq-pod-test",
+      "operation_id": "ac7abbac-dec0-494e-880b-ee61428465bb",
+      "protocol": "pod-node-standalone-v1",
+      "source": {
+        "installation_id": "node-d6e43db4-e83e-4e7d-939e-909b7644961a",
+        "machine_id": "bed377a24032485c8a58d8734eab6368",
+        "node_id": "1",
+        "updater_instance_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d"
+      },
+      "source_artifact_sha256": "5781c30da2cfc47220d8e116267f8cc9f5656c54139c95f6675385feee058ea7",
+      "source_evidence_sha256": "3ff1f86671ed2919badf5df9bbc0dabd38d10b95da24540c3fc0005071fd5c99",
+      "source_mode": "independent-management",
+      "source_version": "3.3.152.41",
+      "target": {
+        "architecture": "linux/amd64",
+        "artifact_sha256": "605b41c1903c1c1eb5d2423d0873cb2af6a147988e9f05bb5c3de627f7a6010f",
+        "binary_sha256": "9306434ae7c11e61fdd91e9ab3d7f47f916175eb2655138d991f99f87ae8893f",
+        "product": "siemcore",
+        "source_commit": "5024e4e2b9c4518f57b4675d7d9faffa043803ba",
+        "version": "3.3.152.43"
+      },
+      "target_mode": "independent-standalone"
+    },
+    "error_code": "standalone_transition_failed",
+    "mutation": "confirmed",
+    "observed_at": "2026-09-18T19:36:52.670348+00:00",
+    "operation_id": "ac7abbac-dec0-494e-880b-ee61428465bb",
+    "operation_sha256": "40779deeb57374ac936ac0298f0645906459b8fd342f610f98f1604cd6a138db",
+    "phase": "restored",
+    "preserved": {
+      "bootstrap": "a0bfcd26476a8d3817210cab57652b6aeb57da415952a54af7c5d3daabcabb04",
+      "inputs": {
+        "credentials/application": "8834dc01184de8fa4329157be5e8ddca10c66a5dd17f66e92e74750319f61789",
+        "credentials/postgres": "6c6c6bf5b2b078db683a496403f5268a8d06353e5d5e1edb84454afded0ee8d1",
+        "credentials/redis": "b70498effe1136d60089f3c779d32822bafcf0bbf87efcd013ddc91d6dac6802",
+        "management.crt": "03365a2b05865d9ddeba089d781a5030bcfa993b8454c264f04544510924cc2d",
+        "management.key": "6fcabd861e85bdf4248ce687cc2103ba000428c366151309fe9647047d6c0a30",
+        "settings.json": "bed04a7e9c9364774cd85a8675c7a00584931af60a8379c5dfe5364cb53bcd69",
+        "tls/ca.crt": "fb222dcfc76bd143b5f3e5f5aa643a8045cb6ebdeb93fd64d62dc75a74a10e20",
+        "tls/client.crt": "62ab580946089a9dc3da6356298d2a7c2009974933792a70ef6351319f2acd24",
+        "tls/client.key": "8d391e37ee560e64364b6f06f99eecaccd1d09efa8edea4d09a05d6054aabeb4",
+        "tls/server.crt": "03365a2b05865d9ddeba089d781a5030bcfa993b8454c264f04544510924cc2d",
+        "tls/server.key": "6fcabd861e85bdf4248ce687cc2103ba000428c366151309fe9647047d6c0a30",
+        "ui.htpasswd": "1b20c5eea43e0d2a1cec43078c0a6a08c48e6e7ffbda908e16df9026b716fa05"
+      },
+      "runtime": "20fa7b906c89d5c7686a990ba7d1063bd191343690aa8f5e174ca5eb2a0182fb",
+      "stage": "4a79a9c5c0411b4994bcdf8081e4e0eba35171e4c873aeaf880a30b35de03bdf"
+    },
+    "protocol": "pod-node-standalone-v1",
+    "schema_sha256": "c90297902c963f7c8901d79dfb2885eab6663c07114de75e4dac15ccde31bfa3"
+  },
+  "standalone-intent.json": {
+    "binding": {
+      "bootstrap_receipt_sha256": "a0bfcd26476a8d3817210cab57652b6aeb57da415952a54af7c5d3daabcabb04",
+      "configuration_sha256": "54b28019bcefe635ea627a8d63746433bcdff5aaeba1b054fa65561a6ec83059",
+      "instance_id": "siemcore-bezeq-pod-test",
+      "operation_id": "ac7abbac-dec0-494e-880b-ee61428465bb",
+      "protocol": "pod-node-standalone-v1",
+      "source": {
+        "installation_id": "node-d6e43db4-e83e-4e7d-939e-909b7644961a",
+        "machine_id": "bed377a24032485c8a58d8734eab6368",
+        "node_id": "1",
+        "updater_instance_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d"
+      },
+      "source_artifact_sha256": "5781c30da2cfc47220d8e116267f8cc9f5656c54139c95f6675385feee058ea7",
+      "source_evidence_sha256": "3ff1f86671ed2919badf5df9bbc0dabd38d10b95da24540c3fc0005071fd5c99",
+      "source_mode": "independent-management",
+      "source_version": "3.3.152.41",
+      "target": {
+        "architecture": "linux/amd64",
+        "artifact_sha256": "605b41c1903c1c1eb5d2423d0873cb2af6a147988e9f05bb5c3de627f7a6010f",
+        "binary_sha256": "9306434ae7c11e61fdd91e9ab3d7f47f916175eb2655138d991f99f87ae8893f",
+        "product": "siemcore",
+        "source_commit": "5024e4e2b9c4518f57b4675d7d9faffa043803ba",
+        "version": "3.3.152.43"
+      },
+      "target_mode": "independent-standalone"
+    },
+    "effective_mode": "independent-management",
+    "mutation": "none",
+    "operation_id": "ac7abbac-dec0-494e-880b-ee61428465bb",
+    "operation_sha256": "40779deeb57374ac936ac0298f0645906459b8fd342f610f98f1604cd6a138db",
+    "phase": "admitted-awaiting-product",
+    "protocol": "pod-node-standalone-v1",
+    "routine_updates_allowed": false,
+    "source_mode": "independent-management",
+    "target_mode": "independent-standalone"
+  },
+  "bootstrap_sha256": "a0bfcd26476a8d3817210cab57652b6aeb57da415952a54af7c5d3daabcabb04",
+  "health": {
+    "authority_enabled": false,
+    "binary_sha256": "d1b47d42d7036995b678708edc97f283e53d1f3584a9474136a89fb71510f698",
+    "data_ready": true,
+    "installation_complete": true,
+    "installation_id": "node-d6e43db4-e83e-4e7d-939e-909b7644961a",
+    "installation_state": "installed-unlinked",
+    "link_ready": false,
+    "management_ready": true,
+    "node_id": "1",
+    "pod_ready": false,
+    "processing_enabled": false,
+    "status": "healthy",
+    "updater_id": "siemcore-node-4a3160d7-956f-4e9b-8c0c-3bceb525b91d",
+    "version": "3.3.152.41"
+  },
+  "containers": [
+    {
+      "id": "df3055b37035976ce66e5e10a74cc139c1f6844596b4624fbc1f5062904f5c81",
+      "name": "/siemcore-unlinked-1-postgres",
+      "running": true,
+      "restarting": false
+    },
+    {
+      "id": "d7a4a1aab0d9d1932b9b2e5db533637b69d7e57bede0c64292fc34515ba3f580",
+      "name": "/siemcore-unlinked-1-redis",
+      "running": true,
+      "restarting": false
+    },
+    {
+      "id": "e653cb0b0d9dd2663ad4408e7df6b3761d893e5b270d2bb54889a3a905f42d0f",
+      "name": "/siemcore-standalone-1-app",
+      "running": false,
+      "restarting": false
+    },
+    {
+      "id": "38b07c40f837c9e0871ff5b6c869d1e7e679b4d7c8959777023da4bea55717aa",
+      "name": "/siemcore-standalone-1-archiver",
+      "running": false,
+      "restarting": false
+    }
+  ]
+}

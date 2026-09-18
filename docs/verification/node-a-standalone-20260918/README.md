@@ -18,8 +18,16 @@ The independent-node application transition uses signed **3.3.152.43**, digest `
 2. The agreed isolated channel exceeded the catalog's VARCHAR(20) limit. Migration 018 widens only release channel metadata to 64 characters, preserving existing values/targets. PostgreSQL temporary-table validation and repository tests passed. The Updates service restarted to refresh cached statement plans.
 3. Docker returns retained mount records in varying order. Five read-only inspections confirmed identical PostgreSQL/Redis IDs, images and mount sets. Signed component repair **1.16.1.31-r2** compares records independently of order while rejecting duplicate destinations and any changed/missing/extra property. It preserves the original operation and refuses repair if product execution has started.
 
-## Current rollout hold
+## Current rollout — 2026-09-18 19:59 UTC
 
-The isolated .43 target list is temporarily empty while component repair completes. GCP authentication expired after the approved A stop but before start; SiemCore is renewing login to start the same VM and finish the repair. No application transition has executed. Restore alpha targeting only after root admission passes, then verify cascade application, retained data identities, application/archive health and reporting before routing the stable customer IP.
+Updater **1.16.1.33** is published on stable/alpha. MySoc, Normal testing SiemCore, and the independent Observer automatically downloaded, verified, restarted, and reported fresh heartbeats. MySoc 1.3.19.2 and SiemCore/Observer 3.3.152.39 remain healthy. Effective local self-update channel is stable; central alpha and automatic updates are enabled. Benchmark automatic updates remain disabled.
 
-Routine later standalone upgrades and linking remain separate qualified workflows; this operation does not silently enable them. No Normal or Observer installation is reclassified.
+A's .43 attempt failed on absent archiver configuration. Its exact operation recovered .41 management successfully, with processing stopped and original data/bootstrap retained (`live-43-recovery.json`). The .43 target groups are empty. Product .44 is signed but **unpublished**.
+
+The immutable .44 artifact passed disposable native tests with the real approved GCS backend: synthetic event ingestion, upload, download/checksum, configuration retry/conflict, paid-AI guard, preserved bootstrap/data IDs, interrupted recovery and exact retry. See `native-44-gcs.json` and `native-44-recovery.json`. SiemCore additionally passed three runtime marker adoption interruption/refusal tests. Fixture containers and their synthetic volume were removed; no live database was copied.
+
+A remains on updater1.16.1.31 because terminal restored-operation reconciliation returns before checking self-updates. The .33 regression fix keeps that product hold while permitting signed self-updates. Full Go updater tests pass, plus 39 Python prerequisite/repair tests. Normal/Observer execution is unchanged.
+
+A requires an explicit one-time delivery exception under AGENTS.md. Prepared, signed, host-bound updater repair **1.16.1.33-r2** validates VM/machine/installation identity, exact configuration, terminal operation, old binary and target signature. It preserves updater state and rejects conflicting receipts/unsafe destination paths. The successor root kit **1.16.1.33-r1** then authorizes new operation `098b3762-9ff2-40e3-b397-f1a05a83a7d3`, retaining the restored prior operation. Neither kit has been applied. SiemCore has the concrete startup scripts for review; user exception is pending.
+
+After repair authorization and root readiness, .44 can be offered only on `node-a-standalone-20260918`/alpha through cascade. Live acceptance and public routing remain pending. B and production databases are untouched. Later linking and routine standalone upgrades remain separately qualified workflows.
