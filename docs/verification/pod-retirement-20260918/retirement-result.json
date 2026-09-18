@@ -1,0 +1,55 @@
+{
+  "api_results": [
+    {
+      "id": "5a8aa484-52b6-41ad-8e5c-5a40f810d8a7",
+      "instance_id": "bezeq-pod-test-a-7631443060152631202",
+      "http_status": 200
+    },
+    {
+      "id": "054e68fd-c983-439d-9fb2-b92b3cd3a905",
+      "instance_id": "bezeq-pod-test-b-5012156962629255074",
+      "http_status": 200
+    },
+    {
+      "id": "54c75109-183e-4ef6-ae31-ab62ec862fdc",
+      "instance_id": "bezeq-pod-test-witness-8916397017694216169",
+      "http_status": 200
+    }
+  ],
+  "retired": [
+    {
+      "id": "5a8aa484-52b6-41ad-8e5c-5a40f810d8a7",
+      "instance_id": "bezeq-pod-test-a-7631443060152631202",
+      "auto_update_enabled": false,
+      "update_group": "alpha",
+      "status": "decommissioned",
+      "deleted_at": "2026-09-18T01:56:01.022275+00:00",
+      "customer_id": "testing-mysoc-ai",
+      "parent_instance_id": "mysoc-testing-mysoc-ai"
+    },
+    {
+      "id": "054e68fd-c983-439d-9fb2-b92b3cd3a905",
+      "instance_id": "bezeq-pod-test-b-5012156962629255074",
+      "auto_update_enabled": false,
+      "update_group": "alpha",
+      "status": "decommissioned",
+      "deleted_at": "2026-09-18T01:56:01.025828+00:00",
+      "customer_id": "testing-mysoc-ai",
+      "parent_instance_id": "mysoc-testing-mysoc-ai"
+    },
+    {
+      "id": "54c75109-183e-4ef6-ae31-ab62ec862fdc",
+      "instance_id": "bezeq-pod-test-witness-8916397017694216169",
+      "auto_update_enabled": false,
+      "update_group": "alpha",
+      "status": "decommissioned",
+      "deleted_at": "2026-09-18T01:56:01.028854+00:00",
+      "customer_id": "testing-mysoc-ai",
+      "parent_instance_id": "mysoc-testing-mysoc-ai"
+    }
+  ],
+  "unrelated_controls_preserved": true,
+  "registration_history_preserved": true,
+  "credentials_revoked": false,
+  "credential_limitation": "Supported retirement tombstones identity; does not permanently revoke relay enrollment credentials."
+}

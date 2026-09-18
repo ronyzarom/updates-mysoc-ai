@@ -1,0 +1,45 @@
+{
+  "verified_at": "2026-09-18T01:55:05.562556+00:00",
+  "items": [
+    {
+      "name": "bezeq-pod-test-b",
+      "id": "5012156962629255074",
+      "zone": "me-west1-b"
+    },
+    {
+      "name": "bezeq-rehearsal-02-b",
+      "id": "2947681477544519660",
+      "zone": "me-west1-b"
+    },
+    {
+      "name": "bezeq-updater-clean-b",
+      "id": "2650113842491336120",
+      "zone": "me-west1-b"
+    },
+    {
+      "name": "bezeq-pod-test-a",
+      "id": "7631443060152631202",
+      "zone": "me-west1-a"
+    },
+    {
+      "name": "bezeq-rehearsal-02-a",
+      "id": "4841813487313889260",
+      "zone": "me-west1-a"
+    },
+    {
+      "name": "bezeq-updater-clean-a",
+      "id": "4523889034422560290",
+      "zone": "me-west1-a"
+    },
+    {
+      "name": "bezeq-pod-test-witness",
+      "id": "8916397017694216169",
+      "zone": "me-west1-c"
+    },
+    {
+      "name": "bezeq-rehearsal-02-witness",
+      "id": "4699137594318530070",
+      "zone": "me-west1-c"
+    }
+  ]
+}
