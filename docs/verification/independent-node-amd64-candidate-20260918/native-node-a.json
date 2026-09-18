@@ -1,0 +1,17 @@
+{
+  "architecture": "x86_64",
+  "sha256": "77d44297f4acdccce6905665bd08ab1f940839967a6992bf125bf5a5b5a42267",
+  "version": "updater-simulator 1.16.1.28\n  Git Commit: 73f8cad\n  Build Time: unknown",
+  "installation_types": {
+    "schema": 1,
+    "server_types": [
+      "normal",
+      "pod-active",
+      "pod-stby",
+      "pod-observer",
+      "observer-unlinked",
+      "pod-node"
+    ],
+    "lifecycle_ready": false
+  }
+}

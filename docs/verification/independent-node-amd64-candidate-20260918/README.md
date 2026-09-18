@@ -24,3 +24,15 @@ Node A provisioning and SSL.com certificate staging belong to the coordinated
 SiemCore task. Remaining full-bootstrap inputs include the common signed AMD64
 product receipt/capability, immutable prerequisite digests, complete protected
 local settings with SSL.com-compatible database TLS, and actual machine binding.
+
+## Native node A CLI check
+
+Using the authorized IAP route to newly provisioned `bezeq-pod-test-a`, copied
+only the signed candidate binary into a unique temporary directory. Verified
+host `x86_64`, exact binary SHA256, executable `version` output `1.16.1.28` /
+`73f8cad`, and `installation-types` output including `pod-node`. The response
+correctly retains `lifecycle_ready=false`: capability admission is not a claim
+of linked-POD readiness or qualified node upgrades. See `native-node-a.json`.
+Temporary binary/directory removed afterward. No installer, service, enrollment,
+product apply, certificate change or fleet mutation was executed. Full native
+installation remains pending the coordinated product inputs and authorization.
