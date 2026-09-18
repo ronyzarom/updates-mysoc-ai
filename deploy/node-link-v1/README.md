@@ -7,8 +7,8 @@ flag. These responses do not constitute a final product wire schema.
 
 ## Offline contract integration
 
-`product_contract.py` snapshots SiemCore's first parser (`c43c463`), SHA256
-`183ccfc9c5b952bf4c8b26e1468674e4680dc3a18bce0779c810bf8e60e65b95`.
+`product_contract.py` snapshots SiemCore's reviewed parser (`e1374ec`), SHA256
+`6f5d6b7617afc01d41b43a28fa44428e43edb8af0f88a9c1bbe865e24a3687b4`.
 `admission.py` compares the entire binding against a supplied protected-policy
 binding, checks plan bytes, and rejects equivalent Observer/customer origins.
 `release_verification.py` verifies both archive byte digests and Ed25519 detached
@@ -32,7 +32,7 @@ workflow, not inferred from a metadata change.
 
 Local tests: `python3 -m unittest scripts.tests.test_node_link_scaffold
 scripts.tests.test_node_link_contract scripts.tests.test_node_link_admission
-scripts.tests.test_node_link_journal` (19 tests). These are fixture checks, not
+scripts.tests.test_node_link_journal` (20 tests). These are fixture checks, not
 native adoption qualification.
 
 ## Integration boundary

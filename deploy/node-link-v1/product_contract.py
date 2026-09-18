@@ -42,6 +42,7 @@ def _url(value):
             or parsed.path not in ('', '/') or parsed.port not in (None, 443)):
         raise ValueError('invalid_endpoint')
     _text(parsed.hostname, '[A-Za-z0-9][A-Za-z0-9.-]{0,252}')
+    return (parsed.hostname.lower().rstrip('.'), parsed.port or 443)
 
 def _object(pairs):
     result = {}
@@ -92,9 +93,11 @@ def parse_request(raw):
     _exact(o, 'installation_id endpoint registry_sha256 generation')
     _text(o['installation_id'], '[A-Za-z0-9][A-Za-z0-9_-]{0,100}')
     _url(o['endpoint']); _digest(o['registry_sha256'])
+    if o['installation_id'] in (b['source']['installation_id'], b['peer']['installation_id']):
+        raise ValueError('distinct_observer_identity_required')
     if type(o['generation']) is not int or not 0 < o['generation'] < 2**63:
         raise ValueError('invalid_generation')
-    if o['endpoint'].rstrip('/') == b['pod']['customer_url'].rstrip('/'):
+    if _url(o['endpoint']) == _url(b['pod']['customer_url']):
         raise ValueError('observer_must_use_fixed_endpoint')
     _digest(q['operation_sha256'])
     if binding_digest(b) != q['operation_sha256']:

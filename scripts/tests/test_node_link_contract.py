@@ -29,6 +29,9 @@ class Admission(unittest.TestCase):
     def test_identity_conflicts(self):
         for key in request()['binding']['source']:
             self.reject(lambda q:q['binding']['peer'].update({key:q['binding']['source'][key]}))
+    def test_observer_is_separate_installation(self):
+        for who in ('source','peer'):
+            self.reject(lambda q:q['binding']['observer'].update(installation_id=q['binding'][who]['installation_id']))
     def test_processing_cannot_be_granted(self):
         self.reject(lambda q:q['binding'].update(expected_state='active'))
         self.reject(lambda q:q['binding'].update(processing_allowed=True))
@@ -37,7 +40,7 @@ class Admission(unittest.TestCase):
         for value in (True,0,-1,2**63,'1'):
             self.reject(lambda q:q['binding']['observer'].update(generation=value))
     def test_endpoint_and_path_injection(self):
-        for url in ('http://observer.example.com','https://user:password@observer.example.com','https://observer.example.com/?token=secret','https://pod.example.com'):
+        for url in ('http://observer.example.com','https://user:password@observer.example.com','https://observer.example.com/?token=secret','https://pod.example.com','https://POD.example.com','https://pod.example.com:443/','https://pod.example.com./'):
             self.reject(lambda q:q['binding']['observer'].update(endpoint=url))
         self.reject(lambda q:q.update(adoption_plan='/tmp/foreign'))
         self.reject(lambda q:q.update(target_bundle='/verified/../foreign'))
