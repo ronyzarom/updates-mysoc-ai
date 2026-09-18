@@ -46,11 +46,14 @@ class Host:
         required = {'protocol', 'enabled', 'binding', 'historical_inventory', 'source_artifact',
                     'target_artifact', 'configuration_metadata', 'data_identity', 'customer_url',
                     'component_manifest_sha256'}
-        if set(self.policy) != required or self.policy['protocol'] != 'pod-node-standalone-v1' or self.policy['enabled'] is not True:
+        if set(self.policy) not in (required,required|{'previous_standalone'}) or self.policy['protocol'] != 'pod-node-standalone-v1' or self.policy['enabled'] is not True:
             raise ValueError('standalone_capability_disabled')
         if self.directory != ROOT/'operations'/self.policy['binding']['operation_id']:
             raise ValueError('fixed_operation_directory_required')
         self.loader.expected_operation=self.policy['binding']['operation_id']
+        self.loader.previous_standalone=self.policy.get('previous_standalone')
+        self.loader.successor_binding=self.policy['binding']
+        if ('previous_operation' in self.policy['binding']) != ('previous_standalone' in self.policy):raise ValueError('successor_policy_required')
         url = urlsplit(self.policy['customer_url'])
         if url.scheme != 'https' or not url.hostname or url.username or url.password or url.port not in (None,443) or url.query or url.fragment or url.path not in ('','/'):
             raise ValueError('fixed_https_customer_origin_required')

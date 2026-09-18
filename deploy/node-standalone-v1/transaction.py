@@ -29,12 +29,17 @@ def validate_binding(binding):
     fields = {'protocol', 'operation_id', 'source', 'source_version', 'source_artifact_sha256',
               'bootstrap_receipt_sha256', 'source_evidence_sha256', 'target',
               'configuration_sha256', 'instance_id', 'source_mode', 'target_mode'}
-    if not isinstance(binding, dict) or set(binding) != fields:
+    if not isinstance(binding, dict) or set(binding) not in (fields, fields | {'previous_operation'}):
         raise ValueError('exact_standalone_binding_required')
     if binding['protocol'] != PROTOCOL or binding['source_mode'] != 'independent-management' or binding['target_mode'] != 'independent-standalone':
         raise ValueError('unsupported_mode_transition')
     if str(uuid.UUID(binding['operation_id'])) != binding['operation_id']:
         raise ValueError('canonical_operation_id_required')
+    if 'previous_operation' in binding:
+        previous=binding['previous_operation']
+        if not isinstance(previous,dict) or set(previous)!={'operation_id','operation_sha256'} or str(uuid.UUID(previous['operation_id']))!=previous['operation_id'] or previous['operation_id']==binding['operation_id']:
+            raise ValueError('exact_previous_operation_required')
+        _sha(previous['operation_sha256'])
     identity = binding['source']
     if not isinstance(identity, dict) or set(identity) != {'machine_id', 'installation_id', 'updater_instance_id', 'node_id'}:
         raise ValueError('exact_identity_required')

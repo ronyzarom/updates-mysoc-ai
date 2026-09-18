@@ -32,22 +32,24 @@ type standaloneRequest struct {
 	Target      *nodeTarget `json:"target,omitempty"`
 }
 type standaloneResponse struct {
-	Protocol              string         `json:"protocol"`
-	OperationID           string         `json:"operation_id,omitempty"`
-	OperationSHA256       string         `json:"operation_sha256,omitempty"`
-	Phase                 string         `json:"phase,omitempty"`
-	ObservedAt            time.Time      `json:"observed_at"`
-	TargetVersion         string         `json:"target_version,omitempty"`
-	ArtifactSHA256        string         `json:"artifact_sha256,omitempty"`
-	ErrorCode             string         `json:"error_code,omitempty"`
-	Capabilities          []string       `json:"capabilities,omitempty"`
-	AdapterManifestSHA256 string         `json:"adapter_manifest_sha256,omitempty"`
-	NodeID                string         `json:"node_id,omitempty"`
-	ServerType            string         `json:"server_type,omitempty"`
-	Health                map[string]any `json:"health,omitempty"`
-	Eligible              bool           `json:"eligible_for_security_upgrade,omitempty"`
-	UICompliant           bool           `json:"ui_security_compliant,omitempty"`
-	Mutation              string         `json:"mutation,omitempty"`
+	PreviousOperationID     string         `json:"previous_operation_id,omitempty"`
+	PreviousOperationSHA256 string         `json:"previous_operation_sha256,omitempty"`
+	Protocol                string         `json:"protocol"`
+	OperationID             string         `json:"operation_id,omitempty"`
+	OperationSHA256         string         `json:"operation_sha256,omitempty"`
+	Phase                   string         `json:"phase,omitempty"`
+	ObservedAt              time.Time      `json:"observed_at"`
+	TargetVersion           string         `json:"target_version,omitempty"`
+	ArtifactSHA256          string         `json:"artifact_sha256,omitempty"`
+	ErrorCode               string         `json:"error_code,omitempty"`
+	Capabilities            []string       `json:"capabilities,omitempty"`
+	AdapterManifestSHA256   string         `json:"adapter_manifest_sha256,omitempty"`
+	NodeID                  string         `json:"node_id,omitempty"`
+	ServerType              string         `json:"server_type,omitempty"`
+	Health                  map[string]any `json:"health,omitempty"`
+	Eligible                bool           `json:"eligible_for_security_upgrade,omitempty"`
+	UICompliant             bool           `json:"ui_security_compliant,omitempty"`
+	Mutation                string         `json:"mutation,omitempty"`
 }
 
 func invokeStandaloneAdapter(ctx context.Context, action string, request standaloneRequest) (standaloneResponse, error) {
@@ -204,6 +206,33 @@ func (s *Simulator) resumePendingIndependentStandalone(ctx context.Context) (boo
 		return true, err
 	}
 	if op.Phase == "accepted" && p.CurrentVersion == op.TargetVersion {
+		return false, nil
+	}
+	if op.Phase == "restored" {
+		ready, err := s.standaloneReady(ctx)
+		if err != nil {
+			return true, err
+		}
+		if ready.OperationID == op.OperationID {
+			return true, fmt.Errorf("Node predecessor restored; signed successor required")
+		}
+		if ready.PreviousOperationID != op.OperationID || !nodeDigest(op.OperationSHA256) || ready.PreviousOperationSHA256 != op.OperationSHA256 || p.CurrentVersion != op.FromVersion {
+			return true, fmt.Errorf("Node successor does not bind restored operation")
+		}
+		for _, previous := range s.state.NodeStandaloneHistory {
+			if previous.OperationID == ready.OperationID || previous.OperationID == op.OperationID {
+				return true, fmt.Errorf("Node successor history conflict")
+			}
+		}
+		// One atomic state write retains the entire previous operation before
+		// allowing a fresh offer. Root owns signed successor authorization.
+		s.state.NodeStandaloneHistory = append(s.state.NodeStandaloneHistory, *op)
+		s.state.NodeStandaloneOperation = nil
+		if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
+			s.state.NodeStandaloneOperation = op
+			s.state.NodeStandaloneHistory = s.state.NodeStandaloneHistory[:len(s.state.NodeStandaloneHistory)-1]
+			return true, err
+		}
 		return false, nil
 	}
 	u := Update{Product: "siemcore", FromVersion: op.FromVersion, ToVersion: op.TargetVersion, ArtifactPath: op.ArtifactPath, ArtifactSHA256: op.SHA256, ArtifactSignature: op.Signature, Channel: op.Channel}

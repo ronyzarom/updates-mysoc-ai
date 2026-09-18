@@ -75,3 +75,39 @@ func TestStandaloneRetainsButDoesNotResumeAcceptedManagementHistory(t *testing.T
 		t.Fatal("unresolved management history ignored")
 	}
 }
+
+func TestStandaloneSuccessorRequiresExactRestoredRootBinding(t *testing.T) {
+	for _, bad := range []string{"", "digest", "identity", "same"} {
+		t.Run(bad, func(t *testing.T) {
+			s, u := standaloneFixture(t)
+			old := NodeStandaloneOperation{OperationID: "b71bd9f1-45f1-4aa2-bd4e-bd043937a552", OperationSHA256: strings.Repeat("a", 64), Phase: "restored", FromVersion: u.FromVersion, TargetVersion: u.ToVersion}
+			s.state.NodeStandaloneOperation = &old
+			s.standaloneAdapterCall = func(_ context.Context, action string, q standaloneRequest) (standaloneResponse, error) {
+				if action != "readiness" {
+					t.Fatal("must only read successor authorization")
+				}
+				r := standaloneResponse{OperationID: "7441fb5b-0f35-4709-ad20-45ba9009f794", PreviousOperationID: old.OperationID, PreviousOperationSHA256: old.OperationSHA256, ServerType: "pod-node", NodeID: "1", AdapterManifestSHA256: strings.Repeat("b", 64)}
+				if bad == "digest" {
+					r.PreviousOperationSHA256 = strings.Repeat("c", 64)
+				}
+				if bad == "identity" {
+					r.PreviousOperationID = r.OperationID
+				}
+				if bad == "same" {
+					r.OperationID = old.OperationID
+				}
+				return r, nil
+			}
+			pending, err := s.resumePendingIndependentStandalone(context.Background())
+			if bad != "" {
+				if !pending || err == nil || s.state.NodeStandaloneOperation != &old || len(s.state.NodeStandaloneHistory) != 0 {
+					t.Fatal("invalid successor admitted")
+				}
+				return
+			}
+			if pending || err != nil || s.state.NodeStandaloneOperation != nil || len(s.state.NodeStandaloneHistory) != 1 || s.state.NodeStandaloneHistory[0] != old {
+				t.Fatal("restored history not preserved", pending, err)
+			}
+		})
+	}
+}

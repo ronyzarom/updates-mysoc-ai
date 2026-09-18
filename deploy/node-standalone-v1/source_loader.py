@@ -10,7 +10,7 @@ from pathlib import Path
 import stat
 import uuid
 from protocol import strict_json
-from transaction import digest
+from transaction import digest, validate_binding
 
 HISTORY_ROOTS = (
     '/var/lib/siemcore-node-update',
@@ -21,10 +21,12 @@ HISTORY_ROOTS = (
 
 
 class SourceLoader:
-    def __init__(self, root='/', owner=0, expected_operation=None):
+    def __init__(self, root='/', owner=0, expected_operation=None, previous_standalone=None, successor_binding=None):
         self.root = Path(root)
         self.owner = owner  # fixture identity only; production constructs default.
         self.expected_operation = expected_operation
+        self.previous_standalone = previous_standalone
+        self.successor_binding = successor_binding
 
     def path(self, absolute):
         if not absolute.startswith('/') or '..' in Path(absolute).parts:
@@ -71,7 +73,7 @@ class SourceLoader:
             self.protected(operations)
             for operation in operations.iterdir():
                 self.protected(operation)
-                if not operation.is_dir() or operation.name!=self.expected_operation:
+                if not operation.is_dir() or operation.name not in (self.expected_operation,(self.previous_standalone or {}).get('operation_id')):
                     raise ValueError('prior_standalone_operation_requires_reconciliation')
         inventory = self.inventory()
         if inventory != expected_inventory:
@@ -139,6 +141,8 @@ class SourceLoader:
                     raise ValueError('update_ancestry_mismatch')
             if seen != set(updates):
                 raise ValueError('unreconciled_update_branch')
+        if self.previous_standalone is not None:
+            self.measure_previous_standalone(identity)
         linked = []
         for path in ('/opt/siemcore-node-unlinked-'+identity['node_id']+'/link.json', '/etc/siemcore-pod-node/link.json', '/etc/siemcore-pod-controller/controller.json', '/var/lib/siemcore-greenfield/pod-runtime.json'):
             if self.path(path).exists() or self.path(path).is_symlink():
@@ -146,3 +150,27 @@ class SourceLoader:
         evidence = dict(application=app, journals=records, current_version=current_version,
                         current_artifact_sha256=current_sha, linked_evidence=linked, inventory_complete=True)
         return evidence, bootstrap, release
+
+    def measure_previous_standalone(self, identity):
+        p=self.previous_standalone;b=self.successor_binding
+        required={'operation_id','operation_sha256','adapter_receipt_sha256','product_receipt_sha256'}
+        if not isinstance(p,dict) or set(p)!=required or b is None or b.get('previous_operation')!={k:p[k] for k in ('operation_id','operation_sha256')}:
+            raise ValueError('signed_previous_operation_required')
+        if str(uuid.UUID(p['operation_id']))!=p['operation_id']:raise ValueError('invalid_previous_operation')
+        base='/var/lib/siemcore-node-standalone/operations/'+p['operation_id']+'/'
+        intent=strict_json(self.read(base+'standalone-intent.json'));old=intent['binding'];validate_binding(old)
+        if digest(old)!=p['operation_sha256'] or old['operation_id']!=p['operation_id'] or old['source']!=identity or intent['operation_sha256']!=p['operation_sha256']:
+            raise ValueError('previous_standalone_binding_mismatch')
+        # This reviewed successor supports one restored first attempt. Never
+        # silently accept an unreviewed chain or unfinished operation.
+        if 'previous_operation' in old:raise ValueError('nested_successor_requires_review')
+        for key in ('source','source_version','source_artifact_sha256','bootstrap_receipt_sha256','configuration_sha256','source_evidence_sha256','instance_id','source_mode','target_mode'):
+            if old[key]!=b[key]:raise ValueError('successor_source_identity_changed')
+        if tuple(map(int,b['target']['version'].split('.')))<=tuple(map(int,old['target']['version'].split('.'))):raise ValueError('successor_requires_newer_target')
+        for kind in ('adapter','product'):
+            journal=strict_json(self.read(base+kind+'-journal.json'))
+            if journal.get('protocol')!='pod-node-standalone-v1' or journal.get('phase')!='restored' or journal.get('mutation')!='confirmed' or journal.get('operation_id')!=p['operation_id'] or journal.get('operation_sha256')!=p['operation_sha256']:
+                raise ValueError('previous_standalone_not_restored')
+            if kind=='product' and journal.get('binding')!=old:raise ValueError('previous_product_binding_changed')
+            if digest({k:v for k,v in journal.items() if k!='observed_at'})!=p[kind+'_receipt_sha256']:raise ValueError('previous_terminal_receipt_changed')
+        return dict(protocol='pod-node-standalone-v1',phase='restored',identity=identity,receipt_sha256=digest(p))

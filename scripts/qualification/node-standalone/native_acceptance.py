@@ -47,7 +47,7 @@ def main():
         else:raise AssertionError('enabled AI guard missing')
     finally:sql("DELETE FROM llm_config WHERE provider='fixture-never-call';")
     assert sql('SELECT count(*) FROM llm_config WHERE enabled;')=='0'
-    tenant='10000000-0000-0000-0000-000000000001'
+    tenant=str(uuid.uuid4())
     sql("INSERT INTO tenants(tenant_id,name) VALUES('"+tenant+"','standalone synthetic') ON CONFLICT DO NOTHING; INSERT INTO tenant_ip_mappings(tenant_id,cidr,label,enabled) VALUES('"+tenant+"','127.0.0.1/32','standalone fixture',true);")
     worker.compose('start','application')
     for attempt in range(40):
@@ -70,14 +70,18 @@ def main():
         time.sleep(2)
     else:raise RuntimeError('synthetic archive manifest not uploaded')
     matched=[]
-    for path in Path('/opt/siemcore-node-standalone-1/state/archives').rglob('*'):
-        if not path.is_file():continue
-        raw=path.read_bytes()
-        try:decoded=gzip.decompress(raw)
-        except (OSError,EOFError):decoded=raw
-        if marker.encode() in decoded:
-            checksum=hashlib.sha256(raw).hexdigest()
-            if any(row.get('checksum')==checksum for row in rows):matched.append(str(path))
+    if worker.env.get('ARCHIVE_BACKEND')=='gcs':
+        from native_gcs import verify_objects
+        matched=verify_objects(worker.config/'archive-credentials/gcp-archiver.json',worker.env['TIERED_GCS_BUCKET'],rows,marker)
+    else:
+        for path in Path('/opt/siemcore-node-standalone-1/state/archives').rglob('*'):
+            if not path.is_file():continue
+            raw=path.read_bytes()
+            try:decoded=gzip.decompress(raw)
+            except (OSError,EOFError):decoded=raw
+            if marker.encode() in decoded:
+                checksum=hashlib.sha256(raw).hexdigest()
+                if any(row.get('checksum')==checksum for row in rows):matched.append(str(path))
     if not matched:raise RuntimeError('archive bytes/checksum/retrieval not verified')
     worker.compose('start','application')
     for attempt in range(40):
@@ -86,7 +90,7 @@ def main():
             if attempt==39:raise
             time.sleep(2)
     assert Path('/var/lib/siemcore-greenfield/journal.json').read_bytes()==before
-    report=dict(status='pipeline-and-guards-passed',raw_log_rows=int(raw_count),synthetic_event_archived=True,
+    report=dict(status='pipeline-and-guards-passed',archive_backend=worker.env.get('ARCHIVE_BACKEND'),real_gcs_verified=worker.env.get('ARCHIVE_BACKEND')=='gcs',raw_log_rows=int(raw_count),synthetic_event_archived=True,
                 archive_checksum_verified=True,archive_retrieval_verified=True,paid_ai_guard_verified=True,
                 mysoc_exact_retry_verified=True,mysoc_conflict_refused=True,bootstrap_bytes_preserved=True,health=health)
     Path('/root/standalone-pipeline-result.json').write_text(json.dumps(report,indent=2))

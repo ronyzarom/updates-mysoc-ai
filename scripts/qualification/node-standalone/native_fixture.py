@@ -34,6 +34,9 @@ def main():
     for name in ('source','predecessor','target'):
         parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--postgres',required=True);parser.add_argument('--redis',required=True)
+    parser.add_argument('--gcs-credentials',type=Path)
+    parser.add_argument('--gcs-bucket')
+    parser.add_argument('--gcs-project')
     parser.add_argument('--resume-fixture-bootstrap',action='store_true')
     parser.add_argument('--root-admission-fixture',action='store_true')
     args=parser.parse_args()
@@ -94,6 +97,11 @@ def main():
          'REDIS_URL':'redis://:'+(node/'credentials/redis').read_text().strip()+'@siemcore-unlinked-1-redis:6379/0',
          'JWT_SECRET':secrets.token_hex(32),'SIEMCORE_FRONTEND_URL':'https://node1.fixture',
          'TIERED_INGEST_ENABLED':'true','TIERED_LOCAL_DIR':'/var/lib/siemcore/archives/objects','ARCHIVE_BACKEND':'local'}
+    if any((args.gcs_credentials,args.gcs_bucket,args.gcs_project)):
+        if not all((args.gcs_credentials,args.gcs_bucket,args.gcs_project)):raise ValueError('complete_fixture_gcs_configuration_required')
+        env.pop('TIERED_LOCAL_DIR',None)
+        env.update(ARCHIVE_BACKEND='gcs',TIERED_GCS_BUCKET=args.gcs_bucket,GCP_PROJECT_ID=args.gcs_project,TIERED_STORAGE_CLASS='STANDARD',TIERED_AUTO_PROVISION_BUCKET='false',GOOGLE_APPLICATION_CREDENTIALS='/run/siemcore-archive/gcp-archiver.json')
+        private(config/'archive-credentials/gcp-archiver.json',args.gcs_credentials.read_bytes())
     private(config/'application.env',''.join(key+'='+value+'\n' for key,value in env.items()).encode())
     private(config/'installation/tls.crt',(certroot/'leaf').read_bytes()+(certroot/'ca.crt').read_bytes())
     private(config/'installation/tls.key',(certroot/'key').read_bytes())

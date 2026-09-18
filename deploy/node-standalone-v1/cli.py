@@ -60,10 +60,13 @@ def main():
             from datetime import datetime,timezone
             from transaction import digest
             import json
-            print(json.dumps(dict(protocol=binding['protocol'],operation_id=binding['operation_id'],operation_sha256=digest(binding),
+            response=dict(protocol=binding['protocol'],operation_id=binding['operation_id'],operation_sha256=digest(binding),
                  observed_at=datetime.now(timezone.utc).isoformat(),server_type='pod-node',node_id=binding['source']['node_id'],
                  adapter_manifest_sha256=policy['component_manifest_sha256'],capabilities=['pod-node-standalone-v1'],
-                 target_version=binding['target']['version'],artifact_sha256=binding['target']['artifact_sha256']),sort_keys=True))
+                 target_version=binding['target']['version'],artifact_sha256=binding['target']['artifact_sha256'])
+            if 'previous_operation' in binding:
+                response.update(previous_operation_id=binding['previous_operation']['operation_id'],previous_operation_sha256=binding['previous_operation']['operation_sha256'])
+            print(json.dumps(response,sort_keys=True))
             return
         adapter=Adapter(directory,host,lambda action,b,bundles:invoke(action,b,bundles,directory,fd,900 if action!='status' else 30))
         import json
