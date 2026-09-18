@@ -84,6 +84,13 @@ if [[ ! "$SELF_UPDATE_CHANNEL" =~ ^[a-z][a-z0-9-]{0,19}$ ]]; then
     echo 'invalid self-update channel' >&2
     exit 1
 fi
+# Independent-node deployment must not silently create a relay certificate.
+# Full SSL.com chain/SAN validation is a deployment gate in addition to this
+# requirement for explicit server certificate material.
+if [[ "$SERVER_TYPE" == pod-node && ( -z "$RELAY_CERT_FILE" || -z "$RELAY_KEY_FILE" ) ]]; then
+    echo 'pod-node installation requires --relay-cert-file and --relay-key-file (approved SSL.com certificate)' >&2
+    exit 1
+fi
 if [[ -n "$RELAY_CERT_FILE" || -n "$RELAY_KEY_FILE" ]]; then
     [[ -n "$MODE" && -n "$RELAY_CERT_FILE" && -n "$RELAY_KEY_FILE" ]] || {
         echo 'relay certificate and key require both flags and --clean or --update' >&2; exit 1;
@@ -218,6 +225,11 @@ render_config() {
 # Validate the complete envelope before creating users or rewriting configuration.
 if [[ -n "$GREENFIELD_INPUT" ]]; then
     python3 ./greenfield-bootstrap.py --validate-install "$GREENFIELD_INPUT"
+    input_topology=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["application"]["topology"])' "$GREENFIELD_INPUT")
+    if [[ "$input_topology" == node-unlinked && ( -z "$RELAY_CERT_FILE" || -z "$RELAY_KEY_FILE" ) ]]; then
+        echo 'independent node bootstrap requires explicit approved SSL.com relay certificate and key' >&2
+        exit 1
+    fi
 fi
 
 # Validate type/binary compatibility before modifying the installed host.

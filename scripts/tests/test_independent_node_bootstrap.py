@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -105,3 +106,11 @@ class IndependentNodeTests(unittest.TestCase):
             application = dict(topology=topology)
             self.assertEqual(module.filesystem_block(application), module.FILESYSTEM_BLOCK)
             module.require_delivery(dict(application=application), '/nonexistent-kit')
+
+    def test_explicit_node_requires_relay_certificate_before_host_changes(self):
+        script = Path(__file__).parents[2] / 'kits/siemcore/install.sh'
+        for flags in ([], ['--relay-cert-file', '/missing-cert'], ['--relay-key-file', '/missing-key']):
+            result = subprocess.run(['bash', str(script), '--clean', '--server-type', 'pod-node', *flags], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('requires --relay-cert-file and --relay-key-file', result.stderr)
+            self.assertNotIn('creating service user', result.stdout)
