@@ -180,9 +180,32 @@ def read_input(source):
     return data
 
 
-def require_delivery(data):
-    if data['application'].get('topology') == 'node-unlinked':
-        raise ValueError('independent node delivery disabled pending joint product qualification')
+def require_delivery(data, kit=None):
+    if data['application'].get('topology') != 'node-unlinked':
+        return
+    kit = Path(kit) if kit is not None else Path(__file__).resolve().parent
+    marker = kit / 'INDEPENDENT-NODE-BOOTSTRAP.json'
+    if not marker.is_file() or marker.is_symlink():
+        raise ValueError('independent node delivery disabled: matching qualified kit required')
+    record = json.loads(marker.read_text(), object_pairs_hook=unique_object)
+    if (set(record) != {'schema', 'protocol', 'provisioning_commit', 'hook_sha256'}
+            or type(record['schema']) is not int or record['schema'] != 1
+            or record['protocol'] != 'pod-node-bootstrap-v1'
+            or not re.fullmatch(r'[0-9a-f]{40}', record['provisioning_commit'])
+            or not re.fullmatch(r'[0-9a-f]{64}', record['hook_sha256'])):
+        raise ValueError('invalid independent node kit capability')
+    commit = kit / 'PROVISIONING_COMMIT'
+    hook = kit / 'greenfield-hook.py'
+    if (commit.is_symlink() or hook.is_symlink()
+            or commit.read_text().strip() != record['provisioning_commit']
+            or hashlib.sha256(hook.read_bytes()).hexdigest() != record['hook_sha256']):
+        raise ValueError('independent node kit provisioning binding mismatch')
+
+
+def filesystem_block(application):
+    if application.get('topology') == 'node-unlinked':
+        return FILESYSTEM_BLOCK.replace('  filesystem:\n', '  filesystem:\n    independent_node_bootstrap: true\n')
+    return FILESYSTEM_BLOCK
 
 
 def main():
@@ -196,7 +219,7 @@ def main():
         return
     source, kit = Path(sys.argv[1]), Path(sys.argv[2])
     data = read_input(source)
-    require_delivery(data)
+    require_delivery(data, kit)
     receipt = Path('/etc/siemcore/updater-bootstrap.json')
     fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()
     if receipt.exists():
@@ -215,7 +238,7 @@ def main():
         raise ValueError('updater enrollment does not match bootstrap node identity')
     if 'public_key: "' + data['release']['public_key'] + '"' not in text:
         raise ValueError('updater and bootstrap signing pins differ')
-    block = FILESYSTEM_BLOCK
+    block = filesystem_block(data['application'])
     if re.search(r'^  executor:', text, re.M):
         if block not in text:
             raise ValueError('existing executor differs')

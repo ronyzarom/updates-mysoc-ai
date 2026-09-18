@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import stat
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -71,3 +72,36 @@ class IndependentNodeTests(unittest.TestCase):
         with patch.object(module.os, 'geteuid', return_value=0), patch.object(module.sys, 'argv', ['bootstrap', '--validate-install', '/root/input']), patch.object(module, 'read_input', return_value=self.fixture()), patch.object(module.subprocess, 'run') as run:
             with self.assertRaisesRegex(ValueError, 'delivery disabled'): module.main()
             run.assert_not_called()
+
+    def test_kit_marker_binds_reviewed_hook_and_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            kit = Path(tmp)
+            hook = kit / 'greenfield-hook.py'
+            hook.write_bytes(b'qualified hook fixture')
+            commit = kit / 'PROVISIONING_COMMIT'
+            commit.write_text('a' * 40 + '\n')
+            record = dict(schema=1, protocol='pod-node-bootstrap-v1', provisioning_commit='a'*40,
+                hook_sha256=hashlib.sha256(hook.read_bytes()).hexdigest())
+            marker = kit / 'INDEPENDENT-NODE-BOOTSTRAP.json'
+            marker.write_text(json.dumps(record))
+            module.require_delivery(self.fixture(), kit)
+            for field, value in [('schema', True), ('protocol', 'other'), ('extra', 1)]:
+                marker.write_text(json.dumps(dict(record, **{field:value})))
+                with self.assertRaises(ValueError): module.require_delivery(self.fixture(), kit)
+            marker.write_text(json.dumps(record))
+            hook.write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'binding'): module.require_delivery(self.fixture(), kit)
+            hook.write_bytes(b'qualified hook fixture')
+            commit.write_text('b'*40)
+            with self.assertRaisesRegex(ValueError, 'binding'): module.require_delivery(self.fixture(), kit)
+            commit.write_text('a'*40)
+            hook.rename(kit / 'real-hook')
+            hook.symlink_to(kit / 'real-hook')
+            with self.assertRaises(ValueError): module.require_delivery(self.fixture(), kit)
+
+    def test_node_execution_is_explicit_and_normal_observer_unchanged(self):
+        self.assertIn('independent_node_bootstrap: true', module.filesystem_block(self.fixture()['application']))
+        for topology in ('standalone', 'observer-unlinked', 'pod'):
+            application = dict(topology=topology)
+            self.assertEqual(module.filesystem_block(application), module.FILESYSTEM_BLOCK)
+            module.require_delivery(dict(application=application), '/nonexistent-kit')
