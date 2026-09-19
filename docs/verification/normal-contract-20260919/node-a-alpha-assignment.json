@@ -1,0 +1,18 @@
+{
+  "instance": {
+    "id": "722fc999-b49e-4262-836b-806a46310b68",
+    "instance_id": "siemcore-normal-db91d16e-97a5-452d-ae54-6db5c6d8f3bf",
+    "update_group": "alpha",
+    "auto_update_enabled": true
+  },
+  "other_fleet_controls_unchanged": true,
+  "benchmark_hold_preserved": true,
+  "origin_policy_check": {
+    "update_available": true,
+    "latest_version": "3.3.152.47",
+    "channel": "normal-a-20260919",
+    "update_group": "alpha",
+    "sha256": "7cf8b7b0011344ca8f568bb023d6bd69e0f01fc9dbd3e14271727da0b8172812"
+  },
+  "application_installed_verified": false
+}
