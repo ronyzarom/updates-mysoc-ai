@@ -10,8 +10,13 @@ assert os.geteuid()==0 and os.environ.get('NORMAL_CLEAN_FIXTURE')=='1'
 root=Path('/etc/normal-qualification');cfg=Path('/etc/siemcore-cascade-updater/config.yaml')
 app=json.loads(Path('/etc/siemcore/greenfield.json').read_text());c=yaml.safe_load(cfg.read_text())
 assert app['cluster_id']=='normal-fixture' and app['updater_instance_id']==c['instance']['id']=='fixture-normal-updater'
-assert json.loads((root/'kit-result.json').read_text())['first_install_by_kit']
+kit_result=json.loads((root/'kit-result.json').read_text());assert kit_result['first_install_by_kit']
+baseline_installation=kit_result['installed_identity'];assert baseline_installation=={'server_type':'normal'}
 assert c['self_update']['channel']=='stable'
+protected=[Path('/etc/siemcore/updater-bootstrap.json'),Path('/etc/siemcore/greenfield.json'),Path('/etc/siemcore/greenfield-release.json')]
+protected_before={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+hook=Path('/usr/local/lib/siemcore-cascade/greenfield-hook.py')
+assert hashlib.sha256(hook.read_bytes()).hexdigest()=='329e855866399e59e62219fcbd7d8b59087b472f60253c6ae95fe43e8ccedea8'
 service='siemcore-cascade-updater';subprocess.run(['systemctl','stop',service],check=True)
 key=Ed25519PrivateKey.from_private_bytes((root/'fixture-signing-key.raw').read_bytes())
 public=key.public_key().public_bytes(serialization.Encoding.Raw,serialization.PublicFormat.Raw).hex()
@@ -25,6 +30,7 @@ source=Path('/usr/local/lib/siemcore-cascade/recovery');sys.path.insert(0,str(so
 import recovery as r
 import port_normalization as n
 assert r.VERSION=='1.0.0.5'
+r.save_json(root/'cascade50-baseline.json',dict(installation=baseline_installation,protected_receipt_sha256=protected_before))
 container=json.loads(subprocess.check_output(['docker','inspect','siemcore-app-a']))[0]
 bindings=copy.deepcopy(container['NetworkSettings']['Ports'])
 install=Path('/opt/siemcore-app-app-a')
@@ -69,8 +75,10 @@ try:
  state=json.loads(Path('/var/lib/siemcore-cascade-updater/state.json').read_text());assert state['product_versions']['siemcore']==version
  tx=json.loads(Path('/var/lib/siemcore-recovery/transaction.json').read_text());assert tx['stage']=='applied' and tx['target']==version and 'port_normalization' in tx
  assert hashlib.sha256(cfg.read_bytes()).hexdigest()==plan['identity_files'][str(cfg)]
- result=dict(synthetic_only=True,actual_systemd_cascade=True,from_version='3.3.152.47',target_version=version,artifact_sha256=digest,signature_verified_by_updater=True,exact_endpoints_preserved=True,normal_identity_preserved=state['siemcore_installation']=={'kind':'normal'},recovery_stage=tx['stage'],health=health)
+ result=dict(synthetic_only=True,actual_systemd_cascade=True,from_version='3.3.152.47',target_version=version,artifact_sha256=digest,signature_verified_by_updater=True,exact_endpoints_preserved=True,normal_identity_preserved=state['siemcore_installation']==baseline_installation,recovery_stage=tx['stage'],health=health)
  assert result['normal_identity_preserved']
+ assert protected_before=={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in protected}
+ result.update(protected_receipt_sha256=protected_before,runtime_sha256=plan['runtime_files'],hook_sha256=hashlib.sha256(hook.read_bytes()).hexdigest())
  r.save_json(root/'cascade50-result.json',result);print(json.dumps(result),flush=True)
 finally:
  subprocess.run(['systemctl','stop',service],check=True)

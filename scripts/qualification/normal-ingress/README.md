@@ -24,7 +24,10 @@ the original fixture bootstrap trust, and exact `.50` bytes. The prerequisite
 runtime and hook must be installed first. It signs a measured fixture-only port
 retention authorization and requires successful report, Normal identity, exact
 endpoints, applied recovery journal, and healthy target. The updater is stopped
-when the loopback parent closes. This integration case is pending execution.
+when the loopback parent closes. This integration case passed. The original final assertion confused heartbeat
+`kind` with persisted `server_type`; the follow-up read-only verifier compares
+exact original installation identity and reconstructs protected bootstrap receipts
+from original inputs. The original failed assertion is retained in evidence.
 
 No test clones initialized disks, copies databases, changes real fleet assignments,
 or grants POD authority. Product publication and live rollout require separate
