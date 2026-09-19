@@ -139,3 +139,32 @@ tests. Corrected `.50` candidate is reserved but not published; immutable `.49`
 is unchanged. New baseline-only fixtures are being prepared:
 `bezeq-ingress-direct-20260919` (VM4385378830207112216) and
 `bezeq-ingress-crash-20260919` (VM5426915765356025313), both private me-west1-a.
+
+## Corrected .50 qualification and canary preparation
+
+Product `.50`, source `7832d56a0b41bbca0bdeaf82d7137bca5a4b2b58`, SHA
+`9167378baaf99483a0a72b4f896c9d969e70bfab978052f5f6b482f6b01203bc`, passes
+both fresh native direct and interrupted-pin drills, including actual port
+collision recovery, repeated rollback, exact endpoint retention, and final health.
+A third fresh VM (8169611730880778800) passes actual systemd updater delivery
+through the installed greenfield hook and recovery runtime. See the three JSON
+receipts. The initial integration harness final assertion confused persisted
+`server_type` with heartbeat `kind`; read-only verification confirms exact original
+installation identity and complete original bootstrap-input binding. No identity
+change or application retry was needed to resolve that assertion.
+
+Detached `.50` and root runtime signatures were produced at the existing origin;
+private signing material was not exported. Testing's recovery policy was extended
+from revision9 to10 for the exact49→50 transition and signed artifact, retaining
+prior entries and expected mounts. SHA
+`056a330397a4134e7a8a478541cd0880be9b65603c0e1edfd68f40272a82eb6c`.
+The active journal remained unchanged; the application stayed healthy49. Its
+updater is intentionally stopped until scoped publication, signed download, and
+read-only preflight succeed. Publication is owned by SiemCore coordination.
+
+Latest eligibility snapshot: obs-test-20260918 contains only testing and Observer,
+both alpha/auto=true/49. A/B remain normal-a-20260919, alpha/auto=true/47.
+Benchmark remains stable/alpha/auto=false. Subsequent live A/B rollout must be B
+first, with signed root prerequisite installation, exact final-config authorization,
+preflight, native cascade, and at least five minutes' verified health before A.
+No POD adoption or authority activation is included.
