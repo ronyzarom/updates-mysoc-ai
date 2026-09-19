@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Local synthetic contract checks against immutable Updates/SiemCore commits."""
+import argparse
 import base64
 import copy
 import hashlib
@@ -32,16 +33,24 @@ def export(repo, commit, name, root):
 
 def main():
     updates = Path(__file__).resolve().parents[3]
-    product = Path(sys.argv[1]).resolve()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('product_repository')
+    parser.add_argument('--product-commit', default=PRODUCT,
+                        help='Exact product revision to export and test (not working files)')
+    args = parser.parse_args()
+    product = Path(args.product_repository).resolve()
+    product_commit = subprocess.check_output(
+        ['git', 'rev-parse', '--verify', args.product_commit + '^{commit}'], cwd=product, text=True).strip()
+    repository_head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=product, text=True).strip()
     checks = []
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder)
         bootstrap = load('contract_bootstrap', export(updates, UPDATES, 'kits/siemcore/greenfield-bootstrap.py', root))
         packaging = load('contract_packaging', export(updates, UPDATES, 'scripts/packaging/normal_prerequisite_capability.py', root))
-        hook_path = export(product, PRODUCT, 'deploy/cascade/greenfield-hook.py', root)
+        hook_path = export(product, product_commit, 'deploy/cascade/greenfield-hook.py', root)
         hook = load('contract_hook', hook_path)
         for name in ('greenfield.py', 'greenfield_state.py', 'normal_prerequisites.py'):
-            export(product, PRODUCT, 'deploy/cluster/updater/' + name, root)
+            export(product, product_commit, 'deploy/cluster/updater/' + name, root)
         sys.path.insert(0, str(root / 'deploy/cluster/updater'))
         import greenfield
         import normal_prerequisites
@@ -59,8 +68,8 @@ def main():
         checks.append('both validators accept unchanged schema3 Normal without archive')
         kit = root / 'kit'; kit.mkdir()
         (kit / 'greenfield-hook.py').write_bytes(hook_path.read_bytes())
-        (kit / 'PROVISIONING_COMMIT').write_text(PRODUCT + '\n')
-        marker = packaging.marker_for_hook(hook_path, PRODUCT)
+        (kit / 'PROVISIONING_COMMIT').write_text(product_commit + '\n')
+        marker = packaging.marker_for_hook(hook_path, product_commit)
         (kit / 'NORMAL-PREREQUISITES.json').write_text(json.dumps(marker))
         bootstrap.require_delivery(dict(application=app), kit)
         checks.append('actual committed product hook passes exact marker/commit binding')
@@ -103,7 +112,9 @@ def main():
         run.assert_not_called()
         checks.append('product refuses unapproved prerequisite before Docker or execution')
         print(json.dumps(dict(updates_commit=subprocess.check_output(['git','rev-parse',UPDATES],cwd=updates,text=True).strip(),
-                              product_commit=PRODUCT, marker=marker, checks=checks,
+                              product_commit=product_commit, product_repository_head=repository_head,
+                              source_mode="immutable_git_objects", working_tree_files_tested=False,
+                              marker=marker, checks=checks,
                               result='passed', live_install=False, signature_verification_tested=False,
                               limitation='Synthetic contract checks; not artifact signing, native installation or security qualification.'), indent=2))
 
