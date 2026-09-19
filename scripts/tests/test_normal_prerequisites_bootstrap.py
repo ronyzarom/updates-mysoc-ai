@@ -19,7 +19,7 @@ class NormalPrerequisiteTests(unittest.TestCase):
   del app['normal_prerequisites']
   self.assertEqual(m.execution_receipt('e'*64,app),{'input_sha256':'e'*64})
  def fixture(self):
-  return {'application':{'schema':3,'topology':'single','cluster_id':'normal','instance_id':'app','updater_instance_id':'fresh','database_name':'siemcore','normal_prerequisites':{'schema':1,'path':'/root/provisioning/normal.json','sha256':'a'*64}},'release':{'version':'3.3.152.99','sha256':'b'*64,'signature':base64.b64encode(b'x'*64).decode(),'public_key':'c'*64,'channel':'normal-a-20260919','required_capabilities':['normal-prerequisites-v1']}}
+  return {'application':{'schema':3,'topology':'single','cluster_id':'normal','instance_id':'app','updater_instance_id':'fresh','database_name':'siemcore','normal_prerequisites':{'schema':1,'path':'/etc/siemcore/provisioning/normal.json','sha256':'a'*64}},'release':{'version':'3.3.152.99','sha256':'b'*64,'signature':base64.b64encode(b'x'*64).decode(),'public_key':'c'*64,'channel':'normal-a-20260919','required_capabilities':['normal-prerequisites-v1']}}
  def test_explicit_new_flow_preserved_and_old_shapes_unchanged(self):
   q=self.fixture();original=copy.deepcopy(q);m.validate(q);self.assertEqual(q,original)
   for schema in (1,3):
@@ -30,7 +30,7 @@ class NormalPrerequisiteTests(unittest.TestCase):
   cases=[]
   for name,bad in [('schema',True),('schema',1),('topology','pod'),('topology','node-unlinked')]:
    q=self.fixture();q['application'][name]=bad;cases.append(q)
-  for name,bad in [('schema',True),('schema',2),('path','relative'),('path','/root/../etc/a'),('path','/root//a'),('path','//root/a'),('path','/root/a/'),('path','/root/./a'),('sha256','A'*64)]:
+  for name,bad in [('schema',True),('schema',2),('path','relative'),('path','/root/normal.json'),('path','/home/user/normal.json'),('path','/run/user/0/normal.json'),('path','/root/../etc/a'),('path','/root//a'),('path','//root/a'),('path','/root/a/'),('path','/root/./a'),('sha256','A'*64)]:
    q=self.fixture();q['application']['normal_prerequisites'][name]=bad;cases.append(q)
   for caps in (None,[],['wrong'],['normal-prerequisites-v1','unknown'],['normal-prerequisites-v1']*2):
    q=self.fixture();q['release']['required_capabilities']=caps;cases.append(q)

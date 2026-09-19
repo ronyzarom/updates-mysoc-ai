@@ -11,7 +11,7 @@ The optional application setting is supported only for integer `schema: 3` and
 {
   "normal_prerequisites": {
     "schema": 1,
-    "path": "/root/provisioning/normal-handoff.json",
+    "path": "/etc/siemcore/provisioning/normal-handoff.json",
     "sha256": "<64 lowercase hexadecimal characters: raw manifest SHA-256>"
   }
 }
@@ -28,7 +28,10 @@ configuration. It is not accepted for POD nodes or Observer.
 Updates validates a canonical absolute path, root-owned protected directory
 ancestors, a non-symlink root-owned 0600 file of at most 65536 bytes, exact raw
 SHA-256, and a JSON object without duplicate keys. It forwards the reference
-unchanged. SiemCore owns the manifest's schema/profile, image identities,
+unchanged. Manifest paths under `/root`, `/home`, and `/run/user` are refused
+because the updater service hides them with `ProtectHome=true`. TLS paths and
+other product-owned references must also be available within that sandbox; the
+installer does not weaken it. SiemCore owns the manifest's schema/profile, image identities,
 security qualification, TLS validation and execution. Installer acceptance
 does not grant security approval or permit public dependency downloads.
 

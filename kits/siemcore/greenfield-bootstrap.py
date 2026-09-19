@@ -92,6 +92,9 @@ def validate_normal_prerequisites(app, release):
     if (not isinstance(name, str) or '\x00' in name or not Path(name).is_absolute()
             or '..' in Path(name).parts or str(Path(name)) != name or name.startswith('//')):
         raise ValueError('canonical absolute normal prerequisite path required')
+    if any(Path(name) == hidden or hidden in Path(name).parents
+           for hidden in (Path('/root'), Path('/home'), Path('/run/user'))):
+        raise ValueError('normal prerequisite path is hidden by updater ProtectHome')
     if not isinstance(value['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', value['sha256']):
         raise ValueError('raw normal prerequisite manifest checksum required')
     if release.get('required_capabilities') != [NORMAL_PREREQUISITES]:
