@@ -1,0 +1,25 @@
+{
+  "checked_at": "2026-09-19T09:24:50.878298+00:00",
+  "id": "a1d98dfb-69ae-4ed0-91b6-1f936abf6922",
+  "instance_id": "siemcore-normal-b-90881d89-d9b0-4e41-8643-3cf758903cc1",
+  "last_heartbeat": "2026-09-19T09:23:47.03569+00:00",
+  "update_group": "alpha",
+  "auto_update_enabled": true,
+  "parent_instance_id": "mysoc-testing-mysoc-ai",
+  "customer_id": "testing-mysoc-ai",
+  "updater_version": "1.16.1.33",
+  "installation": null,
+  "products": [
+    {
+      "name": "siemcore",
+      "status": "running",
+      "uptime": 57,
+      "channel": "normal-a-20260919",
+      "version": "3.3.152.47",
+      "last_restart": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "last_update_target_version": "3.3.152.47",
+  "last_update_success": true,
+  "last_update_error": ""
+}
