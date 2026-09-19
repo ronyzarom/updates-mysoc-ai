@@ -168,3 +168,11 @@ Benchmark remains stable/alpha/auto=false. Subsequent live A/B rollout must be B
 first, with signed root prerequisite installation, exact final-config authorization,
 preflight, native cascade, and at least five minutes' verified health before A.
 No POD adoption or authority activation is included.
+
+B automatically applied47→50 at20:31:42.885057016Z after signed root prerequisite,
+per-host authorization, download and non-mutating snapshot preflight. Live verifier
+passes all six container health checks, exact ingress endpoints, unchanged protected
+bootstrap/config receipts, Normal identity, applied recovery journal, and installed
+updater1.16.1.33/self-update stable. The root prerequisite did not apply the app;
+the running cascade daemon performed delivery/application. B is under observation
+before A eligibility changes. See ingress50-B-live.json.
