@@ -1,5 +1,14 @@
 # Scoped Node A production-signature preparation
 
+Update at 2026-09-19 06:36:45 UTC: after SiemCore confirmed the user's isolated
+Node A security acceptance and authorized scoped publication, exact `.47` was
+published on `normal-a-20260919`, with explicit target groups `['alpha']`.
+Read-back signature and digest passed. All existing fleet controls and other
+release metadata were unchanged. See `product47-publication.json`. Host
+installation remains SiemCore-owned; publication alone does not prove install.
+
+The following records the earlier preparation and checks:
+
 Prepared at SiemCore's user-authorized request to finish fresh Normal Node A.
 No host enrollment, release catalog mutation, publication or fleet change made.
 

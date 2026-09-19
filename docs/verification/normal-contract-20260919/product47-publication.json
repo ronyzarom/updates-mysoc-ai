@@ -1,0 +1,48 @@
+{
+  "publication": {
+    "existing": false,
+    "product": "siemcore",
+    "version": "3.3.152.47",
+    "channel": "normal-a-20260919",
+    "target_groups": [
+      "alpha"
+    ],
+    "sha256": "7cf8b7b0011344ca8f568bb023d6bd69e0f01fc9dbd3e14271727da0b8172812",
+    "signature_verified": true,
+    "catalog": {
+      "artifact_path": "/home/bitnami/updates-mysoc-ai/data/releases/siemcore/3.3.152.47/siemcore-universal-3.3.152.47.tar.gz",
+      "artifact_size": 65415525,
+      "channel": "normal-a-20260919",
+      "checksum": "7cf8b7b0011344ca8f568bb023d6bd69e0f01fc9dbd3e14271727da0b8172812",
+      "created_at": "2026-09-19T06:36:45.359632Z",
+      "id": "587c8a64-0ea8-44c5-a4f9-6f7011dd84c7",
+      "manifest": {
+        "artifacts": [
+          {
+            "arch": "",
+            "checksum": "7cf8b7b0011344ca8f568bb023d6bd69e0f01fc9dbd3e14271727da0b8172812",
+            "name": "siemcore-universal-3.3.152.47.tar.gz",
+            "size": 65415525
+          }
+        ],
+        "channel": "normal-a-20260919",
+        "product": "siemcore",
+        "version": "3.3.152.47"
+      },
+      "product": "siemcore",
+      "product_name": "siemcore",
+      "release_notes": "Scoped fresh Normal Node A bootstrap only. Exact native-qualified source c2fcb246c3aec96088d815531b85581587dff8b4; normal-prerequisites-v1. Only updater siemcore-normal-db91d16e-97a5-452d-ae54-6db5c6d8f3bf may subscribe to normal-a-20260919. Preserve other fleet assignments/holds and stable product targeting.",
+      "released_at": "2026-09-19T06:36:45.359632Z",
+      "signature": "IbyqmVD+Gkv3LxsbC/tLTw9vfPXMdjLjcKPlBPJSaldMMh9slp01mMsRh4x+nNp4QQj4Yz6I9QZuVWpjrthJDQ==",
+      "size": 65415525,
+      "target_groups": [
+        "alpha"
+      ],
+      "version": "3.3.152.47"
+    }
+  },
+  "exclusive_channel_subscribers_before": [],
+  "fleet_controls_unchanged": true,
+  "other_release_metadata_unchanged": true,
+  "benchmark_hold_preserved": true
+}
