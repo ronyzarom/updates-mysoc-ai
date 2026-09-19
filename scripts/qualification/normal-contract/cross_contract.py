@@ -11,8 +11,8 @@ import sys
 import tempfile
 from unittest.mock import Mock, patch
 
-UPDATES = '84bf79b'
-PRODUCT = '26c576f9f4ce72ffb6e2b6bf98d3993cac6471ee'
+UPDATES = 'fdb1902'
+PRODUCT = 'cd5f94f72bdbcb8d1248fb19b1d4485bae46475e'
 
 
 def load(name, path):
@@ -49,7 +49,7 @@ def main():
                    updater_instance_id='fixture-updater', database_name='siemcore', machine_id='a'*32,
                    frontend_url='https://normal.example', mysoc_url='https://mysoc.example',
                    admin_email='test@example.com', mysoc_api_key='synthetic-only',
-                   normal_prerequisites=dict(schema=1, path='/root/normal.json', sha256='a'*64))
+                   normal_prerequisites=dict(schema=1, path='/etc/siemcore/provisioning/normal.json', sha256='a'*64))
         release = dict(version='3.3.152.99', channel='stable', sha256='b'*64, public_key='c'*64,
                        signature=base64.b64encode(b'x'*64).decode(), required_capabilities=['normal-prerequisites-v1'])
         original = copy.deepcopy(app)

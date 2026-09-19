@@ -1,0 +1,16 @@
+{
+  "package_revision": "1.16.1.33-r3",
+  "archive_sha256": "337e14b9c15b4c2d8d27af4992b9e47cdb71278f20203b21fcbddd8c7026b9f3",
+  "fixture_repository_public_key": "b62cf10d831648b9f56c48997a956bd6d4e05c15e7749340c61f3f1c111e8848",
+  "updater_signature_verified": true,
+  "inner_checksums_verified": true,
+  "marker": {
+    "hook_sha256": "1c925859674e1f47253e8cbdb1a559724baa7863c13148031956ddccbd4e5ec3",
+    "protocol": "normal-prerequisites-v1",
+    "provisioning_commit": "cd5f94f72bdbcb8d1248fb19b1d4485bae46475e",
+    "schema": 1
+  },
+  "native_install_tested": false,
+  "published": false,
+  "repository_signature_verified": true
+}
