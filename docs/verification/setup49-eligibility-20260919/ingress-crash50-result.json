@@ -1,0 +1,33 @@
+{
+  "native_architecture": "x86_64",
+  "from_version": "3.3.152.47",
+  "target_version": "3.3.152.50",
+  "artifact_sha256": {
+    "3.3.152.47": "7cf8b7b0011344ca8f568bb023d6bd69e0f01fc9dbd3e14271727da0b8172812",
+    "3.3.152.50": "9167378baaf99483a0a72b4f896c9d969e70bfab978052f5f6b482f6b01203bc"
+  },
+  "preflight_read_only": true,
+  "pinned_crash_recovery": true,
+  "direct_normalization_apply": false,
+  "port_collision_rollback": true,
+  "exact_endpoints_preserved": true,
+  "apply_retry": true,
+  "rollback_retry": true,
+  "final_health": {
+    "build_date": "2026-09-19T20:06:05Z",
+    "checks": {
+      "postgres": {
+        "ok": true
+      },
+      "redis": {
+        "ok": true
+      }
+    },
+    "git_commit": "7832d56a0b41bbca0bdeaf82d7137bca5a4b2b58",
+    "instance_id": "app-a",
+    "status": "healthy",
+    "version": "3.3.152.50"
+  },
+  "synthetic_fixture_only": true,
+  "no_database_copy": true
+}
