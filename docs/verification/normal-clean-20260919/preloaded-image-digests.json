@@ -1,0 +1,38 @@
+{
+  "etcd": {
+    "reference": "quay.io/coreos/etcd:v3.5.12",
+    "runtime_image_id": "sha256:162fe639721588329bfea28d8b5e1286423cebd2b48c789ce7facfe7e0db0e1d",
+    "descriptor_digest": "sha256:162fe639721588329bfea28d8b5e1286423cebd2b48c789ce7facfe7e0db0e1d",
+    "platform_manifest_digest": "sha256:162fe639721588329bfea28d8b5e1286423cebd2b48c789ce7facfe7e0db0e1d",
+    "config_digest": "sha256:3a5389f209cef93c0229a4916964d90d002d44cdf07f6bf4c35f64420c2a0077",
+    "content_hashes_verified": true,
+    "architecture": "linux/amd64"
+  },
+  "redis": {
+    "reference": "redis:7.2-alpine",
+    "runtime_image_id": "sha256:84bab713067f5494d94c24e99ae3fa3ae2388c037152edcbcf301f7cfaeb3048",
+    "descriptor_digest": "sha256:84bab713067f5494d94c24e99ae3fa3ae2388c037152edcbcf301f7cfaeb3048",
+    "platform_manifest_digest": "sha256:84bab713067f5494d94c24e99ae3fa3ae2388c037152edcbcf301f7cfaeb3048",
+    "config_digest": "sha256:dba89ec3fc9542f476086f4468763aeb23a45ef61ffcf6108ec5d2be5a82f182",
+    "content_hashes_verified": true,
+    "architecture": "linux/amd64"
+  },
+  "nginx": {
+    "reference": "nginx:1.27-alpine",
+    "runtime_image_id": "sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8",
+    "descriptor_digest": "sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8",
+    "platform_manifest_digest": "sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8",
+    "config_digest": "sha256:6769dc3a703c719c1d2756bda113659be28ae16cf0da58dd5fd823d6b9a050ea",
+    "content_hashes_verified": true,
+    "architecture": "linux/amd64"
+  },
+  "patroni": {
+    "reference": "siemcore/patroni-pg16:normal-prereq-20260919",
+    "runtime_image_id": "sha256:c42e2559c08c0c84877c6459739c8884ea32282a415a1829caa3beb6168d26a8",
+    "descriptor_digest": "sha256:c42e2559c08c0c84877c6459739c8884ea32282a415a1829caa3beb6168d26a8",
+    "platform_manifest_digest": "sha256:c42e2559c08c0c84877c6459739c8884ea32282a415a1829caa3beb6168d26a8",
+    "config_digest": "sha256:2e57f5959c32b114d7635d2aab483c82962bc06faf79e7c84c3f3098bdafedae",
+    "content_hashes_verified": true,
+    "architecture": "linux/amd64"
+  }
+}

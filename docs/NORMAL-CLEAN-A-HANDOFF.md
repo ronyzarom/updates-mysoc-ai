@@ -109,3 +109,19 @@ Fixture was synthetic, no host mounts/socket/published ports or customer calls.
 The actual new A VM is `1028971160940844512`, disk `4748909320316392928`;
 new updater identity is `siemcore-normal-db91d16e-97a5-452d-ae54-6db5c6d8f3bf`
 (not enrolled yet). Full product/UI/GCS acceptance remains pending.
+
+## Host prerequisite review
+
+SiemCore's `normal-prerequisite-enrolled.json` reports the Normal host gate passes
+with no blockers and Tailscale online at `100.92.19.2`. Full bootstrap qualification
+remains false; host readiness does not authorize or imply application installation.
+
+Independent read-only Docker/containerd checks confirmed all four expected amd64
+images, zero product containers/volumes, and distinct manifest/config digests.
+`preloaded-image-digests.json` records content-hash-verified identities. In particular,
+Patroni's `c42e2559…` is an OCI manifest digest; its actual config digest is
+`2e57f5959c32b114d7635d2aab483c82962bc06faf79e7c84c3f3098bdafedae`.
+Do not reinterpret Docker `.Id` as a portable config digest on containerd-backed
+hosts. The next product-owned contract must explicitly bind digest kinds and
+consume the protected preloaded-image/TLS inputs. No schema change or application
+publication is implied by this evidence.
