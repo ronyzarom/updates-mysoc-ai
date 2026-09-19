@@ -20,9 +20,15 @@ Six local cross-contract checks also pass against exact product source `c2fcb24`
 recovery files are unchanged from r3's pinned provisioning source `cd5f94f`.
 No new kit revision is required solely for the product source change.
 
-The report reviewed here does not yet contain the runner's subsequently added
-`verified_runtime_dependency_images` field. Do not attribute that additional
-runtime assertion to the saved report without separate evidence.
+The original report does not contain the runner's subsequently added
+`verified_runtime_dependency_images` field. Separate `runtime47.json`, committed
+by SiemCore in `d5aa901` under
+`docs/operations/evidence/normal-bound-native-2026-09-19/`, was subsequently
+reviewed: all four runtime prerequisite IDs match the reviewed dependency set;
+etcd, Patroni, Redis, nginx, application and archiver are healthy with zero
+restarts, and login HTML is available. This is subsequent runtime evidence,
+not an assertion executed by the original installer runner. It does not prove
+authenticated login or archive retrieval.
 
 Updates installer/capability implementation has no identified blocker for the
 qualified fixture path. This does not make r3 a production-trusted download:
