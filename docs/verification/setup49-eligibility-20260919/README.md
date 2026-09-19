@@ -74,3 +74,19 @@ A root hook is still original. Product-owned ingress preservation/correction
 must be qualified before either application update. The attached operational
 scripts are exact-candidate records, not general installers; reruns must honor
 current state, expected baselines, and these unresolved preconditions.
+
+Independent testing runtime probes subsequently confirmed .49/healthy with
+PostgreSQL and Redis ready, and archiver status ok. SiemCore's browser acceptance
+confirmed .49 footer, Observer connection/enrollment form, blocked role switching,
+archive health/zero upload failures and SSL.com443 validation. No registration
+or settings mutation was performed. Central snapshots are in current-rollup.jsonl.
+
+A/B ingress correction contract agreed with SiemCore: separate scoped signed root
+runtime/authorization prerequisite may be installed without touching application
+containers. Only later updater-owned .47 -> .49 execution can pin the exact
+measured existing published ports, with original and normalized predecessor
+configuration durably recorded first. Update and rollback must preserve effective
+ingress. No general dynamic-app exception or manual Compose execution. Product
+implementation and native qualification remain pending. Runtime baselines copied
+read-only for review: fresh Normal recovery SHA89107cacaa08daad28b30e4e62ddd6214dd1e1d312d7f7b16cf49c60c1c0622e;
+legacy testing recovery SHA95b5c64cb8ccf32a449bca2bf7851118abb1d55742bd4513846487010d0eccea.

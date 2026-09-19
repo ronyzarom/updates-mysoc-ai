@@ -1,0 +1,45 @@
+{
+  "health": {
+    "authority_enabled": false,
+    "binary_sha256": "7a164df75128b16ea7fa1b435fea926f403686494d177f01eb7d175a8cad9151",
+    "installation_id": "observer-8079452056575878166-v1",
+    "installation_state": "installed-unlinked",
+    "management_ready": true,
+    "pod_ready": false,
+    "processing_enabled": false,
+    "status": "healthy",
+    "updater_id": "bezeq-pod-test-observer-8079452056575878166",
+    "version": "3.3.152.49"
+  },
+  "local_login": true,
+  "configuration_ui": true,
+  "setup": {
+    "sso_enabled": false,
+    "sso_key_configured": false,
+    "protocol": "observer-setup-v1",
+    "installation_id": "observer-8079452056575878166-v1",
+    "observer_url": "https://bezeq-pod-test-observer.siemcore.ai",
+    "revision": 0,
+    "settings": null,
+    "settings_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "registrations": {},
+    "events": null,
+    "activation_ready": false,
+    "blocked_reasons": [
+      "Save the pod settings first.",
+      "Signed Normal-to-POD adoption is not yet qualified by Updates. Processing roles and routing remain unchanged.",
+      "Node 1 needs registration and approval.",
+      "Node 2 needs registration and approval."
+    ],
+    "locked": false
+  },
+  "setup_mutations": false,
+  "service": {
+    "protect_system": "strict",
+    "read_write_paths": [
+      "/etc/siemcore-pod-observer/setup"
+    ],
+    "setup_owner": "root",
+    "setup_mode": "0700"
+  }
+}
