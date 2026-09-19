@@ -31,14 +31,24 @@ matching leaf on 443, 6514 and 18443, then attached reserved public IP
 `https://bezeq-pod-test.siemcore.ai`. SSO redirect uses the correct logical
 application and callback; authenticated completion still requires user login.
 
-Outstanding product functionality: SiemCore's final inspection found GCS input
+Archive correction: SiemCore's final inspection found GCS input
 and credential mounting did not set database `archiver_defaults`; runtime still
-used LOCAL storage. Successful bootstrap/healthy containers do not establish GCS
-archival. SiemCore owns correcting configuration and verifying actual archive
-operation. Updater `.33` has no ad-hoc per-service restart/force-reapply API:
+used LOCAL storage. SiemCore corrected settings through the supported platform
+admin API, then performed orderly GCP stop/start as reboot/persistence acceptance.
+It confirmed runtime provider GCP, STANDARD class and the intended project/bucket
+after reboot; full archive upload/retrieval remains untested. Successful
+bootstrap/healthy containers alone do not establish that end-to-end operation.
+Updater `.33` has no ad-hoc per-service restart/force-reapply API:
 use a product-owned supported reload if available, or a qualified signed
 successor/implemented maintenance operation. Do not clear transaction state or
 use direct SSH Compose to bypass signed execution.
+
+Postboot acceptance: fresh central heartbeat at 2026-09-19 06:49:52 UTC confirms
+same identity, `.47` running, updater `.33`, alpha/automatic, same parent and
+empty update error. See `node-a-postboot-rollup.json`. SiemCore confirmed Normal
+identity, unchanged private/public IP, public health 200, actual SSL.com on all
+three ports and successful MySoc customer synchronization. No artifact reapply,
+transaction clearing or broad rollout was used for the archive configuration.
 
 Reporting limitation: local config/state correctly identify Normal, but the
 origin heartbeat snapshot's `installation` field is null. Do not claim central
