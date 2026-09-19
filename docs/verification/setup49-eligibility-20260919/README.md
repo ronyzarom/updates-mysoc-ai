@@ -109,6 +109,33 @@ containers are stopped and preserved; real B application remains .47.
 
 Dedicated native .47 qualification VM identity recorded separately:
 bezeq-normal-qualify47-20260919, VM7541999129262795054,
-disk4918847062956812590, me-west1-a, private10.89.0.14. GCP CLI credentials
-require reauthentication; SiemCore requested Cloud browser reauthentication from
-the user. Native qualification and A/B migration remain pending that access.
+disk4918847062956812590, me-west1-a, private10.89.0.14. GCP CLI access was restored with user reauthentication. Native testing now runs
+through IAP; A/B migration remains gated on the qualification results below.
+
+
+### Native direct case: failed safely
+
+The dedicated synthetic VM passed signed preflight without installed mutation.
+Direct `.47 -> .49` then failed in the immutable product `updater/apply` step.
+Recovery restored healthy `.47` (PostgreSQL and Redis ready), with exact original
+published ingress endpoints preserved. Original transaction:
+`/etc/normal-qualification/ingress-retention/c5ca1e130dfc46a4b0b9d6495a6a8656`.
+Original output: `/root/port49-direct.log` on the qualification guest.
+
+The runtime discards failed child stdout/stderr, so a separate fixture-only
+harness captured failed `updater/apply` output to a root-only file without
+modifying the protected runtime. Diagnostic transaction:
+`/etc/normal-qualification/ingress-retention-diagnostic/8a4865d225124227a86c34f5c1a4b2f0`.
+That retry also failed and restored healthy `.47` with all endpoints preserved.
+The fixture is now pinned; diagnostic retries cannot count as fresh direct
+normalization acceptance. Fresh direct and interrupted-pin fixtures are required.
+No real A/B application change or new release publication was performed.
+
+The restricted diagnostic confirms Gate A's product comparison bug: expected
+`0.0.0.0:32774/tcp`, `0.0.0.0:32778/udp`, `0.0.0.0:32779/udp`, while Docker
+actual projection returns those same ports without host addresses. No port drift
+exception was used. SiemCore helper fix `51f1ebe` has eight passing regression
+tests. Corrected `.50` candidate is reserved but not published; immutable `.49`
+is unchanged. New baseline-only fixtures are being prepared:
+`bezeq-ingress-direct-20260919` (VM4385378830207112216) and
+`bezeq-ingress-crash-20260919` (VM5426915765356025313), both private me-west1-a.
