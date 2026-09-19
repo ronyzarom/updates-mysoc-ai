@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Package an already-published amd64 updater; never rebuild or enroll hosts."""
 import argparse, hashlib, json, pathlib, shutil, subprocess, tarfile, html, re
+from normal_prerequisite_capability import marker_for_hook
 p=argparse.ArgumentParser()
 p.add_argument('--binary',required=True);p.add_argument('--receipt',required=True)
 p.add_argument('--provisioning-source',required=True,help='Committed clean SiemCore source with the matching bootstrap hook')
@@ -32,6 +33,9 @@ for tier,name in [('mysoc','mysoc-updater'),('siemcore','siemcore-cascade-update
   for item in modules:
    dst=kit/item;dst.parent.mkdir(exist_ok=True);dst.write_bytes((provisioning/'deploy/cascade'/item).read_bytes())
   (kit/'PROVISIONING_COMMIT').write_text(provisioning_commit+'\n')
+  normal_marker=marker_for_hook(kit/'greenfield-hook.py',provisioning_commit)
+  if normal_marker is not None:
+   (kit/'NORMAL-PREREQUISITES.json').write_text(json.dumps(normal_marker,sort_keys=True,indent=2)+'\n')
  (kit/'docs').mkdir()
  for doc in ['SIEMCORE-INSTALLATION-ROLES.md','SIEMCORE-CLEAN-INSTALL-PARAMETERS.md','UPDATE-ENTRYPOINT-CONTRACT.md','RELAY-DEPLOYMENT.md','UPDATER-GUIDELINES.md']:
   shutil.copyfile(root/'docs'/doc,kit/'docs'/doc)

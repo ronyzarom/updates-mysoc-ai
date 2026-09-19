@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 NAME = 'siemcore-cascade-updater'
+NORMAL_PREREQUISITES = 'normal-prerequisites-v1'
 FILESYSTEM_BLOCK = '''  executor: filesystem
   filesystem:
     install_root: /opt/siemcore-cascade
@@ -45,6 +46,7 @@ def validate(data):
     if not re.fullmatch(r'[a-z][a-z0-9-]{0,19}', release.get('channel', '')):
         raise ValueError('explicit release channel required')
     app = data['application']
+    validate_normal_prerequisites(app, release)
     shape = (app.get('schema'), app.get('topology'))
     if type(app.get('schema')) is int and shape == (5, 'node-unlinked'):
         validate_node(app)
@@ -57,7 +59,7 @@ def validate(data):
     role = app.get('pod_role') if app['topology'] == 'pod' else None
     if app['topology'] == 'pod' and role not in ('a', 'b', 'witness'):
         raise ValueError('pod bootstrap role required')
-    features = {'archive', 'allocation_observer'} & set(app)
+    features = {'archive', 'allocation_observer', 'normal_prerequisites'} & set(app)
     if (app['schema'] == 3) != bool(features):
         raise ValueError('new bootstrap settings require explicit schema 3')
     if 'archive' in features and role == 'witness':
@@ -73,6 +75,52 @@ def validate(data):
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,100}', app.get(name, '')):
             raise ValueError('invalid application identity')
     updater_identity(app)
+
+
+def validate_normal_prerequisites(app, release):
+    if 'normal_prerequisites' not in app:
+        if isinstance(release.get('required_capabilities'), list) and NORMAL_PREREQUISITES in release['required_capabilities']:
+            raise ValueError('normal prerequisite capability requires explicit application inputs')
+        return
+    if type(app.get('schema')) is not int or app['schema'] != 3 or app.get('topology') != 'single':
+        raise ValueError('normal prerequisites require schema 3 single installation')
+    value = app['normal_prerequisites']
+    if (not isinstance(value, dict) or set(value) != {'schema', 'path', 'sha256'}
+            or type(value['schema']) is not int or value['schema'] != 1):
+        raise ValueError('exact normal prerequisite reference required')
+    name = value['path']
+    if (not isinstance(name, str) or '\x00' in name or not Path(name).is_absolute()
+            or '..' in Path(name).parts or str(Path(name)) != name or name.startswith('//')):
+        raise ValueError('canonical absolute normal prerequisite path required')
+    if not isinstance(value['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', value['sha256']):
+        raise ValueError('raw normal prerequisite manifest checksum required')
+    if release.get('required_capabilities') != [NORMAL_PREREQUISITES]:
+        raise ValueError('explicit normal prerequisite release capability required')
+
+
+def validate_local_normal(app):
+    if 'normal_prerequisites' not in app:
+        return
+    value = app['normal_prerequisites']
+    path = Path(value['path'])
+    for parent in path.parents:
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('normal prerequisite parents must be protected root directories')
+    info = path.lstat()
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0
+            or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 65536):
+        raise ValueError('normal prerequisite manifest must be bounded root-owned 0600 JSON')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        current = os.fstat(stream.fileno())
+        if (current.st_dev, current.st_ino, current.st_mode, current.st_uid) != (info.st_dev, info.st_ino, info.st_mode, info.st_uid):
+            raise ValueError('normal prerequisite manifest changed during validation')
+        raw = stream.read(65537)
+    if len(raw) > 65536 or hashlib.sha256(raw).hexdigest() != value['sha256']:
+        raise ValueError('normal prerequisite manifest checksum mismatch')
+    if not isinstance(json.loads(raw, object_pairs_hook=unique_object), dict):
+        raise ValueError('normal prerequisite manifest must be a JSON object')
 
 
 def validate_observer(app):
@@ -177,10 +225,13 @@ def read_input(source):
     validate(data)
     validate_local_observer(data['application'])
     validate_local_node(data['application'])
+    validate_local_normal(data['application'])
     return data
 
 
 def require_delivery(data, kit=None):
+    if 'normal_prerequisites' in data['application']:
+        require_normal_delivery(kit)
     if data['application'].get('topology') != 'node-unlinked':
         return
     kit = Path(kit) if kit is not None else Path(__file__).resolve().parent
@@ -202,10 +253,43 @@ def require_delivery(data, kit=None):
         raise ValueError('independent node kit provisioning binding mismatch')
 
 
+def require_normal_delivery(kit=None):
+    kit = Path(kit) if kit is not None else Path(__file__).resolve().parent
+    marker = kit / 'NORMAL-PREREQUISITES.json'
+    if not marker.is_file() or marker.is_symlink():
+        raise ValueError('normal prerequisites require a matching capability-aware kit')
+    record = json.loads(marker.read_text(), object_pairs_hook=unique_object)
+    if (not isinstance(record, dict)
+            or set(record) != {'schema', 'protocol', 'provisioning_commit', 'hook_sha256'}
+            or type(record['schema']) is not int or record['schema'] != 1
+            or record['protocol'] != NORMAL_PREREQUISITES
+            or not isinstance(record['provisioning_commit'], str)
+            or not re.fullmatch(r'[0-9a-f]{40}', record['provisioning_commit'])
+            or not isinstance(record['hook_sha256'], str)
+            or not re.fullmatch(r'[0-9a-f]{64}', record['hook_sha256'])):
+        raise ValueError('invalid normal prerequisite kit capability')
+    commit, hook = kit / 'PROVISIONING_COMMIT', kit / 'greenfield-hook.py'
+    if (commit.is_symlink() or hook.is_symlink()
+            or commit.read_text().strip() != record['provisioning_commit']
+            or hashlib.sha256(hook.read_bytes()).hexdigest() != record['hook_sha256']):
+        raise ValueError('normal prerequisite kit provisioning binding mismatch')
+
+
 def filesystem_block(application):
     if application.get('topology') == 'node-unlinked':
         return FILESYSTEM_BLOCK.replace('  filesystem:\n', '  filesystem:\n    independent_node_bootstrap: true\n')
     return FILESYSTEM_BLOCK
+
+
+def execution_receipt(fingerprint, application):
+    record = {'input_sha256': fingerprint}
+    if 'normal_prerequisites' in application:
+        canonical = json.dumps(application, sort_keys=True, separators=(',', ':'),
+                               ensure_ascii=False, allow_nan=False).encode('utf-8')
+        record.update(schema=1, protocol=NORMAL_PREREQUISITES,
+                      application_canonical_sha256=hashlib.sha256(canonical).hexdigest(),
+                      prerequisite_manifest_sha256=application['normal_prerequisites']['sha256'])
+    return record
 
 
 def main():
@@ -222,9 +306,18 @@ def main():
     require_delivery(data, kit)
     receipt = Path('/etc/siemcore/updater-bootstrap.json')
     fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()
+    if 'normal_prerequisites' in data['application']:
+        data['application']['machine_id'] = Path('/etc/machine-id').read_text().strip()
+    expected_receipt = execution_receipt(fingerprint, data['application'])
     if receipt.exists():
         if receipt.is_symlink() or json.loads(receipt.read_text()).get('input_sha256') != fingerprint:
             raise ValueError('bootstrap retry input differs')
+        if 'normal_prerequisites' in data['application']:
+            stored = Path('/etc/siemcore/greenfield.json')
+            if (json.loads(receipt.read_text(), object_pairs_hook=unique_object) != expected_receipt
+                    or stored.is_symlink()
+                    or execution_receipt(fingerprint, json.loads(stored.read_text(), object_pairs_hook=unique_object)) != expected_receipt):
+                raise ValueError('normal prerequisite retry execution binding differs')
         subprocess.run(['systemctl', 'start', NAME], check=True)
         return
     for path in Path('/opt').glob('siemcore-*'):
@@ -287,7 +380,7 @@ def main():
     (dropin / 'executor.conf').write_text('[Service]\nNoNewPrivileges=false\nProtectSystem=no\nReadWritePaths=/opt/siemcore-cascade\n')
     config.write_text(text)
     subprocess.run(['systemctl', 'daemon-reload'], check=True)
-    write_private(receipt, {'input_sha256': fingerprint})
+    write_private(receipt, expected_receipt)
     subprocess.run(['systemctl', 'start', NAME], check=True)
     print('Updater started; signed first installation will run through the cascade.')
 
