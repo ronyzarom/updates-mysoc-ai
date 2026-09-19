@@ -44,3 +44,33 @@ relabeling or wider target groups. Same artifact/version has one catalog channel
 duplicate versions/artifact kinds are not a channel workaround. POD adoption and
 activation remain disabled. Follow-up must verify actual versions, restart,
 health, TLS, archive/runtime settings, cascade reports and preserved receipts.
+
+## Execution progress
+
+`.49` published 14:50:49 UTC, ID d2ec0089-0c91-48a2-bbdc-f53e688fd8f5,
+exact alpha / obs-test-20260918. Observer automatically applied at 14:51:17;
+product confirmed authenticated setup GET/UI, unchanged identity, healthy .49,
+strict service protection with only setup directory writable, activation false.
+
+Testing passed installed recovery preflight; additive revision 9 policy SHA
+abcfd4db04599a5d202a69b981bf8b2854cafcac922d17717aa528d84a112bb3
+preserves prior fields, trust, mounts and transitions. Only testing product
+channel moved to obs-test-20260918. Actual daemon signed cascade .39 -> .49
+succeeded at 14:53:42 UTC; fresh 14:55:54 heartbeat/up-to-date logged.
+
+B preflight blocked on dynamic published ports without invoking apply. Product
+committed c6ee8f762ae45e7a139b2202dabb0abdce72cd94: exact policy-generator flag
+for the existing narrow archiver8444/tcp allowance, with 28 tests passing.
+Updates verified the exact diff and signed a root component repair restricted
+to A/B identities and old/new hook hashes. B installed hook SHA
+329e855866399e59e62219fcbd7d8b59087b472f60253c6ae95fe43e8ccedea8;
+original bootstrap/config inputs unchanged. Root repair receipt included here.
+No application was applied through SSH.
+
+B repeat preflight then correctly refused dynamically mapped application ingress
+12201/udp,1514/tcp,1514/udp. A read-only inspection finds the same condition.
+No generic port guard was loosened. Both remain .47 on normal-a-20260919;
+A root hook is still original. Product-owned ingress preservation/correction
+must be qualified before either application update. The attached operational
+scripts are exact-candidate records, not general installers; reruns must honor
+current state, expected baselines, and these unresolved preconditions.

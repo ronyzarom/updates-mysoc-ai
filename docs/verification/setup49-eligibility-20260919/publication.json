@@ -1,0 +1,52 @@
+{
+  "publication": {
+    "existing": false,
+    "product": "siemcore",
+    "version": "3.3.152.49",
+    "channel": "obs-test-20260918",
+    "target_groups": [
+      "alpha"
+    ],
+    "sha256": "88d4bbde2b5e9ccdbb572285f03b5f1daac1283880c575186f9be321cbdf8b70",
+    "signature_verified": true,
+    "catalog": {
+      "artifact_path": "/home/bitnami/updates-mysoc-ai/data/releases/siemcore/3.3.152.49/siemcore-universal-3.3.152.49.tar.gz",
+      "artifact_size": 65534139,
+      "channel": "obs-test-20260918",
+      "checksum": "88d4bbde2b5e9ccdbb572285f03b5f1daac1283880c575186f9be321cbdf8b70",
+      "created_at": "2026-09-19T14:50:49.114279Z",
+      "id": "d2ec0089-0c91-48a2-bbdc-f53e688fd8f5",
+      "manifest": {
+        "artifacts": [
+          {
+            "arch": "",
+            "checksum": "88d4bbde2b5e9ccdbb572285f03b5f1daac1283880c575186f9be321cbdf8b70",
+            "name": "siemcore-universal-3.3.152.49.tar.gz",
+            "size": 65534139
+          }
+        ],
+        "channel": "obs-test-20260918",
+        "product": "siemcore",
+        "version": "3.3.152.49"
+      },
+      "product": "siemcore",
+      "product_name": "siemcore",
+      "release_notes": "Observer setup and Normal enrollment UI; adoption and activation disabled; scoped obs-test-20260918 alpha only. Source7ac88b39ab076d375707c97ce7fa51fe685048a4. Preserve strict origin checks and independent Observer state.",
+      "released_at": "2026-09-19T14:50:49.114279Z",
+      "signature": "teCHt4K0ICjifjs7qhhcueR1bB+LEzopjQn/UOqwTp/xiyq8qYQLbwcOFQ9+ow2XhM8VlHnG3Ip0/laWOkRwBQ==",
+      "size": 65534139,
+      "target_groups": [
+        "alpha"
+      ],
+      "version": "3.3.152.49"
+    }
+  },
+  "exclusive_channel_subscribers_before": [
+    {
+      "instance_id": "bezeq-pod-test-observer-8079452056575878166"
+    }
+  ],
+  "fleet_controls_unchanged": true,
+  "other_release_metadata_unchanged": true,
+  "benchmark_hold_preserved": true
+}
