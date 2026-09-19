@@ -1,5 +1,21 @@
 # Node B baseline preparation — no installation authorization
 
+Subsequent authorization: SiemCore relayed the user's go for B preparation and
+installation, conditional on B's own security gate. Shared use of the existing
+`.47` product channel by A+B is explicitly accepted; no release metadata change
+or broader ring targeting is needed. Tailscale address: `100.81.8.61`.
+
+Allocated updater identity (not enrolled):
+`siemcore-normal-b-90881d89-d9b0-4e41-8643-3cf758903cc1`.
+Planned logical application `siemcore-bezeq-normal-b`, cluster `bezeq-normal-b`,
+frontend `https://bezeq-pod-test-b.siemcore.ai`, server type Normal, parent
+`mysoc-testing-mysoc-ai`, updater self-update stable and planned central alpha.
+B customer mapping must be explicitly supplied. Existing production-signed r3
+kit and `.47` receipt signatures/checksum were reverified locally. No B
+enrollment or live mutation has occurred in this task.
+
+Original baseline record:
+
 SiemCore reported creation of the dedicated B VM:
 
 | Field | Value |
