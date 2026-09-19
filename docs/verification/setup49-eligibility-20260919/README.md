@@ -90,3 +90,25 @@ ingress. No general dynamic-app exception or manual Compose execution. Product
 implementation and native qualification remain pending. Runtime baselines copied
 read-only for review: fresh Normal recovery SHA89107cacaa08daad28b30e4e62ddd6214dd1e1d312d7f7b16cf49c60c1c0622e;
 legacy testing recovery SHA95b5c64cb8ccf32a449bca2bf7851118abb1d55742bd4513846487010d0eccea.
+
+## Native corrective qualification pending
+
+Product runtime 1.0.0.5 committed as 0eb2669; independent 41-test suite passed,
+including signed authorization/tamper, runtime/identity binding, drift before
+mutation without rollback, and pinned predecessor recovery. Product drill
+53ff822 requires separate direct-normalization and interrupted-pin cases before
+live A/B eligibility. No qualification pass has been claimed.
+
+Updates built isolated native Docker-in-Docker test infrastructure on B: no host
+socket/mounts, no published ports, network none, image-only dependency copies and
+synthetic installation inputs. First fixture stopped at missing sysctl tooling;
+Dockerfile now includes procps. Second fixture stopped before bootstrap because
+its network namespace hides net.core.netdev_max_backlog required by the signed
+product prerequisite checker. No checker was weakened or mocked. Both task
+containers are stopped and preserved; real B application remains .47.
+
+Dedicated native .47 qualification VM identity recorded separately:
+bezeq-normal-qualify47-20260919, VM7541999129262795054,
+disk4918847062956812590, me-west1-a, private10.89.0.14. GCP CLI credentials
+require reauthentication; SiemCore requested Cloud browser reauthentication from
+the user. Native qualification and A/B migration remain pending that access.
