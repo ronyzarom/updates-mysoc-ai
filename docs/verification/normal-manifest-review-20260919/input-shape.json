@@ -1,0 +1,76 @@
+{
+  "manifest": {
+    "sha256": "e1c6a4e64771e1e9d155c8443dfbe7e8345f6837a36dcc1529920005f9e3b0df",
+    "root_owned": true,
+    "mode": "0o600",
+    "top_level_keys": [
+      "images",
+      "management_tls",
+      "provenance",
+      "security_qualification"
+    ]
+  },
+  "application": {
+    "sha256": "86cb07ef3780694451e7d66fb00583d559acfe86596cebc7bf8560078951bf12",
+    "root_owned": true,
+    "mode": "0o600",
+    "top_level_keys": [
+      "admin_email",
+      "archive",
+      "cluster_id",
+      "database_name",
+      "frontend_url",
+      "instance_id",
+      "mysoc_api_key",
+      "mysoc_url",
+      "schema",
+      "topology",
+      "updater_instance_id"
+    ],
+    "application_keys": [
+      "admin_email",
+      "archive",
+      "cluster_id",
+      "database_name",
+      "frontend_url",
+      "instance_id",
+      "mysoc_api_key",
+      "mysoc_url",
+      "schema",
+      "topology",
+      "updater_instance_id"
+    ],
+    "public_settings": {
+      "schema": 3,
+      "topology": "single",
+      "cluster_id": "bezeq-normal-a",
+      "instance_id": "siemcore-bezeq-pod-test",
+      "updater_instance_id": "siemcore-normal-db91d16e-97a5-452d-ae54-6db5c6d8f3bf",
+      "database_name": "siemcore",
+      "frontend_url": "https://bezeq-pod-test.siemcore.ai",
+      "mysoc_url": "https://testing.mysoc.ai"
+    },
+    "mysoc_api_key_present": true,
+    "archive_keys": [
+      "authentication",
+      "auto_provision",
+      "backend",
+      "bucket",
+      "location",
+      "project_id",
+      "retention_days",
+      "storage_class"
+    ],
+    "archive_public_settings": {
+      "backend": "gcs",
+      "project_id": "siemcore-cluster-cyfox",
+      "bucket": "siemcore-archive-bezeq-pod-test",
+      "location": "me-west1",
+      "storage_class": "STANDARD",
+      "retention_days": 730,
+      "auto_provision": false
+    },
+    "release_keys": [],
+    "extra_secret_values_not_read_back": true
+  }
+}
