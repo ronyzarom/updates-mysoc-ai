@@ -176,3 +176,14 @@ bootstrap/config receipts, Normal identity, applied recovery journal, and instal
 updater1.16.1.33/self-update stable. The root prerequisite did not apply the app;
 the running cascade daemon performed delivery/application. B is under observation
 before A eligibility changes. See ingress50-B-live.json.
+
+B's apparent stale UI was a cached browser shell. Fresh server HTML and ordinary
+browser reload served the correct `index-8wB7i4ln.js`; authenticated Observer
+enrollment form and archive health passed without server changes. B exceeded
+300 seconds of continuous healthy50 before any A eligibility change.
+
+A automatically applied47→50 at20:38:31.883067716Z after the same signed prerequisite,
+per-host authorization and preflight sequence. Live verification passes exact Normal
+identity, all six healthy containers, original ingress map, unchanged protected
+receipts, applied recovery journal, and installed updater1.16.1.33 on stable.
+Final A soak and fleet heartbeat reconciliation are pending at this checkpoint.
