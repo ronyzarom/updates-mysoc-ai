@@ -241,24 +241,27 @@ func (e *FilesystemExecutor) Rollback(ctx context.Context, update Update) error 
 	link := e.currentLink(update.Product)
 
 	if prevTarget == "" {
-		// Fresh install: there was nothing before. Remove the symlink so the
-		// machine returns to its pre-install state.
+		// Fresh install has no predecessor. Remove only the activation link;
+		// the product hook owns any partial installation and retained journal.
 		if err := os.Remove(link); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove current symlink: %w", err)
 		}
-		e.logger.Info("filesystem install rolled back (fresh install removed)", "product", update.Product)
+		e.logger.Info("fresh-install activation link removed; no predecessor available", "product", update.Product)
 		return e.runCommand(ctx, "restart", "rollback", e.RestartCommand, update)
 	}
 
 	if err := e.swapCurrent(update.Product, prevTarget); err != nil {
 		return fmt.Errorf("restore previous target: %w", err)
 	}
+	if err := e.runCommand(ctx, "restart", "rollback", e.RestartCommand, update); err != nil {
+		return err
+	}
 	e.logger.Info(
 		"filesystem install rolled back",
 		"product", update.Product,
 		"restored_target", prevTarget,
 	)
-	return e.runCommand(ctx, "restart", "rollback", e.RestartCommand, update)
+	return nil
 }
 
 // swapCurrent atomically points <product>/current at target using a temp symlink

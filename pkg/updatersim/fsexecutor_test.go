@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -134,6 +136,33 @@ func TestFilesystemExecutorFreshInstallRollbackRemovesSymlink(t *testing.T) {
 	}
 	if _, err := os.Lstat(e.currentLink("siemcore")); !os.IsNotExist(err) {
 		t.Fatalf("expected current symlink removed after fresh-install rollback, err=%v", err)
+	}
+}
+
+func TestFilesystemExecutorFreshFailurePreservesEvidenceWithoutRollbackSuccess(t *testing.T) {
+	e := newFSExecutor(t, t.TempDir())
+	artifact := filepath.Join(t.TempDir(), "candidate.tar.gz")
+	makeTarGz(t, artifact, map[string]string{"VERSION": "1.0.0"})
+	update := Update{Product: "siemcore", ToVersion: "1.0.0", ArtifactPath: artifact}
+	if err := e.Apply(context.Background(), update); err != nil {
+		t.Fatal(err)
+	}
+	release := resolveCurrent(t, e, update.Product)
+	var logs bytes.Buffer
+	e.logger = slog.New(slog.NewTextHandler(&logs, nil))
+	e.RestartCommand = []string{"sh", "-c", "echo 'first installation incomplete; retained for retry' >&2; exit 1"}
+	err := e.Rollback(context.Background(), update)
+	if err == nil || !strings.Contains(err.Error(), "retained for retry") {
+		t.Fatalf("product rollback refusal lost: %v", err)
+	}
+	if strings.Contains(logs.String(), "rolled back") {
+		t.Fatalf("incorrect successful rollback log: %s", logs.String())
+	}
+	if _, err := os.Lstat(e.currentLink(update.Product)); !os.IsNotExist(err) {
+		t.Fatalf("activation link remains: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(release, "VERSION")); err != nil {
+		t.Fatalf("candidate evidence removed: %v", err)
 	}
 }
 
