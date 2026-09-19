@@ -1,0 +1,58 @@
+{
+  "at": "2026-09-19T20:43:41.742077+00:00",
+  "hosts": {
+    "testing.siemcore.ai": {
+      "ok": true,
+      "version": "3.3.152.50",
+      "status": "healthy",
+      "checks": {
+        "postgres": {
+          "ok": true
+        },
+        "redis": {
+          "ok": true
+        }
+      },
+      "source": "7832d56a0b41bbca0bdeaf82d7137bca5a4b2b58",
+      "continuous_target_seconds": 1089.2
+    },
+    "bezeq-pod-test-observer.siemcore.ai": {
+      "ok": true,
+      "version": "3.3.152.50",
+      "status": "healthy",
+      "checks": null,
+      "source": null,
+      "continuous_target_seconds": 1104.5
+    },
+    "bezeq-pod-test-b.siemcore.ai": {
+      "ok": true,
+      "version": "3.3.152.50",
+      "status": "healthy",
+      "checks": {
+        "postgres": {
+          "ok": true
+        },
+        "redis": {
+          "ok": true
+        }
+      },
+      "source": "7832d56a0b41bbca0bdeaf82d7137bca5a4b2b58",
+      "continuous_target_seconds": 721.1
+    },
+    "bezeq-pod-test.siemcore.ai": {
+      "ok": true,
+      "version": "3.3.152.50",
+      "status": "healthy",
+      "checks": {
+        "postgres": {
+          "ok": true
+        },
+        "redis": {
+          "ok": true
+        }
+      },
+      "source": "7832d56a0b41bbca0bdeaf82d7137bca5a4b2b58",
+      "continuous_target_seconds": 307.0
+    }
+  }
+}

@@ -187,3 +187,8 @@ per-host authorization and preflight sequence. Live verification passes exact No
 identity, all six healthy containers, original ingress map, unchanged protected
 receipts, applied recovery journal, and installed updater1.16.1.33 on stable.
 Final A soak and fleet heartbeat reconciliation are pending at this checkpoint.
+
+Final acceptance: all four hosts exceeded300 seconds of healthy50 by20:43:41 UTC.
+All central reports/heartbeats reconcile50/success/alpha/automatic; benchmarkhold
+remainsfalse for auto-update. Standalone/unlinked identities preserved. Final
+summary and bounded fleet/soak evidence: ../normal-alpha-20260919/README.md.
