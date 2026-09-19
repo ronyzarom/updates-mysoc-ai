@@ -1,0 +1,11 @@
+{
+  "from_version": "3.3.152.49",
+  "target_version": "3.3.152.50",
+  "timestamp": "2026-09-19T20:25:23.731761018Z",
+  "artifact_sha256": "9167378baaf99483a0a72b4f896c9d969e70bfab978052f5f6b482f6b01203bc",
+  "automatic_cascade_success": true,
+  "health": "healthy",
+  "postgres": true,
+  "redis": true,
+  "policy_revision": 10
+}

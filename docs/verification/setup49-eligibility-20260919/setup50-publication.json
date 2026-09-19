@@ -1,0 +1,38 @@
+{
+  "signature_verified": true,
+  "channel": "obs-test-20260918",
+  "target_groups": [
+    "alpha"
+  ],
+  "catalog": {
+    "artifact_path": "/home/bitnami/updates-mysoc-ai/data/releases/siemcore/3.3.152.50/siemcore-universal-3.3.152.50.tar.gz",
+    "artifact_size": 65534396,
+    "channel": "obs-test-20260918",
+    "checksum": "9167378baaf99483a0a72b4f896c9d969e70bfab978052f5f6b482f6b01203bc",
+    "created_at": "2026-09-19T20:24:35.221435Z",
+    "id": "9db7cf87-1b65-453e-a097-18669ee522db",
+    "manifest": {
+      "artifacts": [
+        {
+          "arch": "",
+          "checksum": "9167378baaf99483a0a72b4f896c9d969e70bfab978052f5f6b482f6b01203bc",
+          "name": "siemcore-universal-3.3.152.50.tar.gz",
+          "size": 65534396
+        }
+      ],
+      "channel": "obs-test-20260918",
+      "product": "siemcore",
+      "version": "3.3.152.50"
+    },
+    "product": "siemcore",
+    "product_name": "siemcore",
+    "release_notes": "Correct Gate A comparison for address-qualified ingestion bindings. Retains exact host addresses and existing ports through separately signed Normal recovery prerequisite. Includes Observer setup and Normal enrollment UI. Pod adoption/activation remain disabled. Scoped obs-test-20260918 alpha only; preserve unrelated holds and updater self-update channel.",
+    "released_at": "2026-09-19T20:24:35.221435Z",
+    "signature": "2gNuVj7xEmMA4hIOW6ZoPPVch4F7Q1RnkT8V7Llt4B6f3D3omOj94AKjnM//HKSdMTpXcRHheHaN6X1tqIJjCg==",
+    "size": 65534396,
+    "target_groups": [
+      "alpha"
+    ],
+    "version": "3.3.152.50"
+  }
+}
