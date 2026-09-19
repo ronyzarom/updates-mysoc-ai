@@ -1,0 +1,22 @@
+{
+  "updates_commit": "84bf79b830723da30d49010191d437f764478100",
+  "product_commit": "26c576f9f4ce72ffb6e2b6bf98d3993cac6471ee",
+  "marker": {
+    "schema": 1,
+    "protocol": "normal-prerequisites-v1",
+    "provisioning_commit": "26c576f9f4ce72ffb6e2b6bf98d3993cac6471ee",
+    "hook_sha256": "1c925859674e1f47253e8cbdb1a559724baa7863c13148031956ddccbd4e5ec3"
+  },
+  "checks": [
+    "both validators accept unchanged schema3 Normal without archive",
+    "actual committed product hook passes exact marker/commit binding",
+    "actual outer hook rejects missing capability/executor and accepts matching product payload",
+    "legacy Normal bypasses optional capability gate in both implementations",
+    "execution receipt uses agreed canonical application and raw manifest hashes",
+    "product refuses unapproved prerequisite before Docker or execution"
+  ],
+  "result": "passed",
+  "live_install": false,
+  "signature_verification_tested": false,
+  "limitation": "Synthetic contract checks; not artifact signing, native installation or security qualification."
+}
