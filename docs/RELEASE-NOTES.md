@@ -5,6 +5,47 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ---
 
+## 1.16.2 — Issuer sealing (verify and badge, never reject)
+
+**Build:** 1.16.2.x on `version/1.16.2` · **Status:** candidate, local validation only — not deployed
+
+Each issuer can now seal its own releases. The server checks the seal on
+upload and shows the result; nothing is rejected in this phase and customer
+updaters are unchanged, because every issuer seals with today's release key.
+
+### New
+
+- **Issuer seal on upload** — optional `issuer_signature` and
+  `issuer_key_id` on `POST /api/v1/releases`, over the existing
+  `mysoc-release-v1` message. Recorded as `seal_status`: `sealed`,
+  `unsealed`, `invalid` (logged as `ALERT issuer-seal`) or `unknown_key`.
+  A verified seal becomes the release signature; every other upload is still
+  signed by the server.
+- **Trusted issuer keys** — `trusted_keys` registry with admin API and a
+  Settings card. The server registers its release key on first start; up to
+  two active keys per issuer scope for rotation.
+- **Dashboard** — Issuer seal badge (Sealed with issuer and key id,
+  Unsealed, Invalid, Unknown key) and seal filter on Releases; per-issuer
+  "% sealed, last 30 days" on the home page.
+- **`/health` reports `commit`** next to `version`; Settings shows it.
+
+### Changed
+
+- **Published releases are immutable** — re-uploading an existing
+  product+version returns `409`, as does overwriting a file through
+  `PUT /releases/{product}/{version}/{filename}`. Concurrent uploads of one
+  version publish exactly one artifact.
+- Build stamp `GitCommit` is the short commit hash (plus `-dirty` for an
+  uncommitted tree) instead of `git describe`.
+
+### Upgrade and rollback
+
+Additive migration `018_issuer_sealing` (new table, four defaulted columns).
+Rolling back to 1.16.1.19 needs no schema change: it ignores the new columns
+and its inserts read as `unsealed`.
+
+---
+
 ## 1.16.0 — Delivery destination telemetry (SWF)
 
 **Build:** 1.16.0.1 · **Status:** candidate, local validation only — not deployed

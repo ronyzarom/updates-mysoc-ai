@@ -17,6 +17,7 @@ implemented, that is called out explicitly in
 | 1.8.0   | 2026-08-19 | Cascade distribution: mandatory `X-License-Key` on agent endpoints, ed25519 release signing + `GET /api/v1/signing-key`, operator admin API, heartbeat children rollup, relay protocol. See Section 9. |
 | 1.15.0  | 2026-09-05 | Additive `products[].telemetry` (SWF delivery counters) on heartbeat / children rollup; stored in `last_heartbeat_data`, no migration. Decoded/re-encoded at each relay hop, so relays + server need 1.15.0+ to preserve it. See §7.3 and [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md). |
 | 1.16.0  | 2026-09-08 | Additive delivery-destination fields inside `products[].telemetry`: `target_endpoint`, `target_resolved_ip`, `target_tls`, `target_sni`, `last_connect_ok_utc` (read-only diagnostics, no control surface). Telemetry timestamps are now omitted (not zero-valued) when absent after re-encode. No migration; relays + server need 1.16.0+ to preserve the new fields. See §7.3 and [Relay 1.16.0 Contract Addendum](RELAY-1.16.0-CONTRACT-ADDENDUM.md). |
+| 1.16.2  | 2026-09-26 | Issuer sealing: optional `issuer_signature` / `issuer_key_id` on `POST /releases`, checked and recorded as `seal_status` (never rejected); re-upload of an existing product+version and overwrite through `PUT /releases/{product}/{version}/{filename}` return `409`; trusted issuer key admin API; `GET /health` adds `commit`. Additive migration 018. See §9.6. |
 
 ---
 
@@ -185,8 +186,11 @@ curl https://updates.mysoc.ai/health
 ```
 
 ```json
-{ "status": "ok", "version": "1.3.0.1" }
+{ "status": "ok", "version": "1.16.2.1", "commit": "0123456789ab" }
 ```
+
+`commit` is the short git commit the binary was built from; a `-dirty` suffix
+marks a diagnostic build from an uncommitted tree.
 
 ---
 
@@ -304,6 +308,8 @@ Failure returns `400` with `{ "success": false, "error": "…" }`.
 | `channel`       | no       | Defaults to `stable`                                      |
 | `release_notes` | no       | Free text                                                 |
 | `target_groups` | no       | Comma-separated **or** `target_groups[]` repeated. Valid: `alpha`, `beta`, `stable`, `production` |
+| `issuer_signature` | no    | Issuer seal: base64 ed25519 over `mysoc-release-v1\n{product}\n{version}\n{sha256}` (1.16.2+, §9.6) |
+| `issuer_key_id` | no       | Key id of the sealing key (1.16.2+, §9.6)                 |
 
 ```bash
 curl -X POST https://updates.mysoc.ai/api/v1/releases \
@@ -314,6 +320,10 @@ curl -X POST https://updates.mysoc.ai/api/v1/releases \
 ```
 
 Returns `201` with the created `Release` ([Section 7.1](#71-release)).
+Returns `409` when the product+version (per artifact kind) is already
+published; published releases are immutable (1.16.2+). `PUT
+/releases/{product}/{version}/{filename}` likewise returns `409` instead of
+replacing an existing file.
 
 ---
 
@@ -801,6 +811,8 @@ operator's mysoc updater uses against `updates.mysoc.ai`.
 - Updaters configured with `signing.public_key` MUST verify the signature
   (and the SHA-256 checksum) before applying an update, at **every** hop.
 
+- 1.16.2+: the response also carries `key_id` (see §9.6).
+
 ### 9.4 Heartbeat rollup (`children`)
 
 A relay's own heartbeat MAY include a `children` array of `ChildReport`
@@ -846,6 +858,31 @@ Children authenticate to a relay with their credential in `X-License-Key`
 issued `X-Relay-Token`.
 
 ---
+
+### 9.6 Issuer sealing (added in 1.16.2)
+
+Issuers (`mysoc`, `siemcore`, `swf`, and `updates` for the updater and relay
+kits) may seal their own uploads. The server checks the seal and records the
+result; in this phase it never rejects an upload because of it.
+
+- **Seal:** base64 ed25519 over the release signing message of §9.3, sent as
+  `issuer_signature` with `issuer_key_id` on `POST /releases`. The key id is
+  the first 16 hex characters of SHA-256 over the raw 32-byte public key.
+- **`seal_status`** on every `Release`: `sealed` (verified against an active
+  trusted key for that issuer), `unsealed` (no seal), `invalid` (seal did not
+  verify; logged as an alert), `unknown_key` (key id not an active trusted
+  key). Releases published before 1.16.2 read as `unsealed`. `issuer` is
+  derived from the product; `issuer_key_id` is set when a seal was sent.
+- **Delivery:** a `sealed` release's seal is its `signature`. Every other
+  upload is signed by the server as before, so the fleet sees no change.
+  Sealed legacy releases add `seal_status`, `issuer`, `issuer_key_id` and
+  `issuer_signature` to the update-check response and `X-Issuer-Signature` /
+  `X-Issuer-Key-Id` headers to the download. Clients may ignore them.
+- **Trusted keys** (`adminAuth`): `GET /api/v1/admin/trusted-keys`,
+  `POST /api/v1/admin/trusted-keys` `{ "public_key": "<hex>", "issuer": "", "label": "" }`
+  (empty issuer = all issuers; at most 2 active keys per issuer scope, else
+  `409`), `POST /api/v1/admin/trusted-keys/{id}/retire`. The server registers
+  its own release key on first start.
 
 ## 10. Related Documents
 
