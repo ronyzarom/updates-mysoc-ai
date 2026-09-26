@@ -167,10 +167,8 @@ Server and fleet:
 - [SiemCore Cluster Update Server Spec](docs/SIEMCORE-CLUSTER-UPDATE-SERVER-SPEC.md) — cluster registry and rollout policy (draft)
 - [Release Notes](docs/RELEASE-NOTES.md) — what shipped in each version
 
-The MySoc Admin Guide, SiemCore Deployment Guide and the client section of
-`DEPLOYMENT.md` predate the cascade in places and still show siemcore nodes
-contacting `updates.mysoc.ai` directly; where they disagree with the documents
-above, the cascade documents are correct.
+The SiemCore Cluster Update Server Spec is a draft and predates the cascade;
+its `bundle_url` and check-in endpoint are not the live protocol.
 
 ## Project Structure
 

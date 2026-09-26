@@ -14,6 +14,7 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-02-03 | MySoc Team | Initial release - complete admin guide |
+| 1.1.0 | 2026-09-26 | Updates Team | Cascade architecture (only mysoc nodes reach the server), dashboard port 3001, JWT for instance reads, operators and trusted-keys endpoints, owner pre-apply for migrations |
 
 ---
 
@@ -37,7 +38,7 @@ This guide is for MySoc administrators managing the Updates Server at `updates.m
 
 ## Overview
 
-The Updates Server (`updates.mysoc.ai`) provides centralized management for all MySoc and SiemCore deployments:
+The Updates Server (`updates.mysoc.ai`) provides centralized management for all MySoc, SiemCore and SWF deployments. Only each SOC operator's mysoc node connects to it directly; SiemCore and SWF nodes are reached through relays in the cascade (see [Relay Deployment Guide](RELAY-DEPLOYMENT.md)):
 
 | Feature | Description |
 |---------|-------------|
@@ -70,13 +71,24 @@ The Updates Server (`updates.mysoc.ai`) provides centralized management for all 
 │                      │  (Next.js)   │                           │
 │                      └──────────────┘                           │
 └─────────────────────────────────────────────────────────────────┘
-          ▲                    ▲
-          │                    │
-    ┌─────┴─────┐        ┌─────┴─────┐
-    │ SiemCore  │        │  MySoc    │
-    │ Instances │        │ Instances │
-    └───────────┘        └───────────┘
+                               ▲
+                               │  heartbeat + rollup, update checks
+                               │  (operator platform key)
+                  ┌────────────┴────────────┐
+                  │  mysoc node per operator │  mysoc-updater, relay :18443
+                  └────────────┬────────────┘
+                               ▲
+                  ┌────────────┴────────────┐
+                  │  SiemCore servers        │  siemcore-cascade-updater, relay :18443
+                  └────────────┬────────────┘
+                               ▲
+                  ┌────────────┴────────────┐
+                  │  SWF forwarders          │  leaf updater
+                  └─────────────────────────┘
 ```
+
+SiemCore and SWF nodes never contact `updates.mysoc.ai`; they appear on the
+dashboard through their relay's rollup (`via <relay>`).
 
 ### Components
 
@@ -84,7 +96,7 @@ The Updates Server (`updates.mysoc.ai`) provides centralized management for all 
 |-----------|------|-------------|
 | **Nginx** | 443 | HTTPS termination, static files, reverse proxy |
 | **Update Server** | 8080 | Go API server handling all backend logic |
-| **Dashboard** | 3000 | Next.js frontend for admin UI |
+| **Dashboard** | 3001 | Next.js frontend for admin UI (bound to 127.0.0.1) |
 | **PostgreSQL** | 5432 | Database for instances, releases, licenses, users |
 
 ### Services (systemd)
@@ -184,11 +196,11 @@ To remove stale or duplicate instances:
 ### Instance API
 
 ```bash
-# List all instances
-curl https://updates.mysoc.ai/api/v1/instances
+# List all instances (dashboard JWT; the admin API key is not accepted for reads)
+curl https://updates.mysoc.ai/api/v1/instances -H "Authorization: Bearer $ACCESS_TOKEN"
 
 # Get instance details
-curl https://updates.mysoc.ai/api/v1/instances/{id}
+curl https://updates.mysoc.ai/api/v1/instances/{id} -H "Authorization: Bearer $ACCESS_TOKEN"
 
 # Update instance (requires admin auth)
 curl -X PUT https://updates.mysoc.ai/api/v1/instances/{id} \
@@ -414,11 +426,21 @@ chmod 600 keys/ADMIN-API-KEY.txt
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/health` | GET | Server health check |
+| `/health` | GET | Server health check (`status`, `version`, `commit`) |
 | `/api/v1/releases` | GET | List all releases |
-| `/api/v1/instances` | GET | List all instances |
+| `/api/v1/signing-key` | GET | Release signing public key and key id |
+
+### Dashboard Endpoints (JWT Auth)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/instances` | GET | List all instances (also `/paged`, `/tree`, `/stats`) |
 
 ### Instance Endpoints (License Key Auth)
+
+In the cascade only mysoc-tier updaters call these on `updates.mysoc.ai`, with
+the operator's platform key. SiemCore and SWF updaters call the same paths on
+their parent relay.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -436,13 +458,22 @@ chmod 600 keys/ADMIN-API-KEY.txt
 | `/api/v1/instances/{id}` | PUT | Update instance |
 | `/api/v1/instances/{id}` | DELETE | Delete instance |
 | `/api/v1/admin/licenses` | GET/POST | Manage licenses |
+| `/api/v1/admin/operators` | GET/POST | Manage SOC operators and platform keys |
+| `/api/v1/admin/trusted-keys` | GET/POST | Trusted issuer keys for release seals (1.16.2+) |
+
+Published releases are immutable: re-uploading an existing product and
+version returns `409` (1.16.2+).
 
 ### Example: Check for Updates
 
+A siemcore node sends this to its mysoc relay, which forwards it to
+`updates.mysoc.ai` with the operator's platform key:
+
 ```bash
-curl -X POST https://updates.mysoc.ai/api/v1/updates/siemcore/check \
+curl -X POST https://<mysoc-relay>:18443/api/v1/updates/siemcore/check \
+  --cacert mysoc-relay-ca.pem \
   -H "Content-Type: application/json" \
-  -H "X-License-Key: SIEM-XXXX-XXXX-XXXX-XXXX" \
+  -H "X-License-Key: <node credential>" -H "X-Relay-Token: <relay token>" \
   -d '{
     "instance_id": "siemcore-production",
     "current_version": "2.0.16",
@@ -555,10 +586,29 @@ SELECT * FROM users;
 
 ### Running Migrations
 
+Migrations are embedded in the server binary and applied automatically at
+startup (`schema_migrations` ledger, checksum-verified). A server refuses to
+start if an applied migration's checksum differs from its embedded file.
+
+The server connects as `mysoc_admin`, but most production tables (including
+`releases`) are owned by `postgres`. A migration that alters such a table must
+be applied by the owner **before** the new binary starts, and recorded in the
+ledger with the file's exact checksum, otherwise startup fails with
+`must be owner of table`:
+
 ```bash
-ssh -i KEY.pem bitnami@updates.mysoc.ai
-sudo -u postgres psql -d mysoc_updates -f /path/to/migration.sql
+sudo -u postgres psql -d mysoc_updates -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+\i /tmp/019_issuer_sealing.up.sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON trusted_keys TO mysoc_admin;  -- new tables only
+INSERT INTO schema_migrations (version, name, checksum)
+VALUES ('019', 'issuer_sealing', '<sha256 of the .up.sql file>');
+COMMIT;
+SQL
 ```
+
+Rehearse against a clone of the production schema and ledger first
+(`pg_dump --schema-only` plus `schema_migrations` data).
 
 ---
 
@@ -671,8 +721,8 @@ grep ADMIN_API_KEY /home/bitnami/updates-mysoc-ai/config/.env
 # List releases
 curl https://updates.mysoc.ai/api/v1/releases | jq .
 
-# List instances
-curl https://updates.mysoc.ai/api/v1/instances | jq .
+# List instances (dashboard JWT)
+curl https://updates.mysoc.ai/api/v1/instances -H "Authorization: Bearer $ACCESS_TOKEN" | jq .
 
 # Upload release
 ./scripts/upload-release.sh --product siemcore --version X.Y.Z --file ./binary --api-key KEY --groups alpha,beta,stable,production

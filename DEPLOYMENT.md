@@ -157,34 +157,25 @@ server {
 
 ## Updater Deployment
 
-### Client Installation
+Updaters are installed from the per-tier kits built by `scripts/build-kits.sh`
+(see [Updater Kit Release Process](docs/UPDATER-RELEASE.md)). Each node talks
+to exactly one upstream: only the mysoc tier reaches `updates.mysoc.ai`.
 
-On each MySoc/SIEMCore server:
+| Tier | Kit / unit | Upstream |
+| ---- | ---------- | -------- |
+| mysoc | `mysoc-updater` | `https://updates.mysoc.ai`, operator platform key |
+| siemcore | `siemcore-cascade-updater` | the operator's mysoc relay (`https://<mysoc-host>:18443`) |
+| swf | Windows service ([guide](docs/SWF-WINDOWS-UPDATER-GUIDE.md)) | the customer's siemcore relay |
 
-```bash
-# One-liner installation
-curl -sSL https://updates.mysoc.ai/install.sh | sudo bash
-
-# Initialize with license
-sudo mysoc-updater init --license YOUR-LICENSE-KEY
-
-# Check status
-mysoc-updater status
-```
-
-### Manual Installation
+From an unpacked kit:
 
 ```bash
-# Download binary
-wget https://updates.mysoc.ai/releases/mysoc-updater/latest/mysoc-updater-linux-amd64
-
-# Install
-sudo mv mysoc-updater-linux-amd64 /usr/local/bin/mysoc-updater
-sudo chmod +x /usr/local/bin/mysoc-updater
-
-# Initialize
-sudo mysoc-updater init --license YOUR-LICENSE-KEY
+sudo ./install.sh --update --license-key <credential> --instance-id <id> ...
+sudo systemctl start mysoc-updater        # or siemcore-cascade-updater
 ```
+
+Relay setup at each tier: [Relay Deployment Guide](docs/RELAY-DEPLOYMENT.md).
+Customer-installed siemcore nodes: [Self-Service Installation](docs/SELF-SERVICE-INSTALL.md).
 
 ---
 
@@ -220,7 +211,8 @@ curl -X POST https://updates.mysoc.ai/api/v1/releases \
 journalctl -u update-server -f
 
 # Updater logs (on instances)
-journalctl -u mysoc-updater -f
+journalctl -u mysoc-updater -f              # mysoc tier
+journalctl -u siemcore-cascade-updater -f   # siemcore tier
 ```
 
 ### Health Check
@@ -232,9 +224,9 @@ curl https://updates.mysoc.ai/health
 ### API Status
 
 ```bash
-# List instances
+# List instances (dashboard JWT from POST /api/v1/auth/login; the admin API key is not accepted here)
 curl https://updates.mysoc.ai/api/v1/instances \
-  -H "X-API-Key: YOUR-ADMIN-KEY"
+  -H "Authorization: Bearer $ACCESS_TOKEN"
 
 # List releases
 curl https://updates.mysoc.ai/api/v1/releases
@@ -274,14 +266,18 @@ journalctl -u update-server -n 100
 
 ### Updater can't connect
 
-1. Check server is reachable:
+1. Check the node's **parent** is reachable (`server.url` in the updater
+   config): `updates.mysoc.ai` only for mysoc nodes, the mysoc relay for
+   siemcore nodes.
 ```bash
-curl https://updates.mysoc.ai/health
+grep -A3 '^server:' /etc/siemcore-cascade-updater/config.yaml   # or /etc/mysoc-updater/config.yaml
+curl --cacert <server.ca_file> https://<parent-host>:18443/health
 ```
 
-2. Check API key:
+2. Check the updater log for the rejection reason (for example
+   `relay_token_mismatch` or `certificate signed by unknown authority`):
 ```bash
-cat /opt/siemcore/updater/.instance
+journalctl -u siemcore-cascade-updater -n 100
 ```
 
 ### License activation fails

@@ -41,12 +41,13 @@ implemented, that is called out explicitly in
 
 ## 2. Authentication Model
 
-The server recognizes four access levels. Each endpoint in
+The server recognizes five access levels. Each endpoint in
 [Section 5](#5-endpoint-reference) lists which one applies.
 
 | Level              | Credential                                              | Header                                    |
 | ------------------ | ------------------------------------------------------- | ----------------------------------------- |
 | **Public**         | none                                                    | —                                         |
+| **License**        | valid, active, unexpired license key (agent data plane) | `X-License-Key: <key>`                    |
 | **Admin**          | admin API key **or** an admin dashboard JWT             | `X-API-Key: <key>` or `Authorization: Bearer <jwt>` |
 | **User (JWT)**     | any active dashboard user's access token                | `Authorization: Bearer <jwt>`             |
 | **Admin (JWT)**    | dashboard user with `role = admin`                      | `Authorization: Bearer <jwt>`             |
@@ -82,14 +83,15 @@ It **fails closed** (`internal/server/api/middleware.go`):
 - Access tokens are short-lived; refresh with `POST /api/v1/auth/refresh` using
   the refresh token. `expires_in` (seconds) is returned with the token.
 
-### 2.3 License key (soft association header)
+### 2.3 License key (agent data plane)
 
-- `POST /api/v1/heartbeat` and `POST /api/v1/updates/{product}/check` accept an
-  optional `X-License-Key` header.
-- When present and valid, the server associates the reporting instance with that
-  license. It is **not** currently required and does **not** reject the request
-  when absent or invalid — see
-  [Implemented vs Target](#8-implemented-vs-target-behavior).
+- Since 1.8.0 the agent data plane — heartbeat, update check, update report and
+  artifact downloads — **requires** a valid, active, unexpired `X-License-Key`;
+  missing or invalid keys get `401` (see [Section 9.1](#91-agent-authentication-breaking-change)).
+- In the cascade only mysoc-tier updaters present a license to this server
+  (the operator's platform key). siemcore and swf updaters present their
+  credential to their parent relay, which checks upstream with its own key
+  ([Section 9.5](#95-relay-child-protocol)).
 
 ### 2.4 IP allowlist (channel firewall)
 
@@ -141,9 +143,11 @@ authenticate uploads without receiving the master `ADMIN_API_KEY`.
 ## 4. The Updater Lifecycle (primary integration path)
 
 This is the contract a product updater (SiemCore forwarder, SWF Windows service,
-the reference simulator) implements. All four endpoints are **public** at the
-transport level; identity is carried by `instance_id` and the optional
-`X-License-Key` header.
+the reference simulator) implements. Identity is carried by `instance_id` and
+the required `X-License-Key` header (Section 2.3). In production the "server"
+below is the updater's parent: `updates.mysoc.ai` for mysoc-tier updaters, and
+a relay serving the same endpoints for siemcore and swf
+([Section 9](#9-cascade-distribution-added-in-180)).
 
 ```mermaid
 sequenceDiagram
@@ -168,8 +172,8 @@ sequenceDiagram
 
 **Integrity:** the artifact's SHA-256 is provided both in the check response
 (`sha256`) and as the `X-Checksum-SHA256` response header on download. Updaters
-MUST verify the checksum before applying. (Cryptographic signature verification
-is **target**, not yet enforced — see Section 8.)
+MUST verify the checksum before applying, and updaters configured with
+`signing.public_key` MUST also verify the ed25519 signature (Section 9.3).
 
 Worked, real examples for each step are in [Section 5](#5-endpoint-reference).
 
@@ -279,7 +283,7 @@ Failure returns `400` with `{ "success": false, "error": "…" }`.
 | `GET  /releases/{product}`                            | Public | List a product's releases           |
 | `GET  /releases/{product}/latest`                     | Public | Latest release (legacy check)       |
 | `GET  /releases/{product}/{version}`                  | Public | Release metadata                    |
-| `GET  /releases/{product}/{version}/download`         | Public | Download artifact bytes             |
+| `GET  /releases/{product}/{version}/download`         | License | Download artifact bytes (`X-License-Key`, §2.3) |
 | `POST /releases`                                      | Admin  | Upload a new release (multipart)    |
 | `PUT  /releases/{product}/{version}/{filename}`       | Admin  | Upload an extra arch binary         |
 | `PUT  /releases/{product}/{version}/target-groups`    | Admin  | Set rollout target groups           |
@@ -327,7 +331,7 @@ replacing an existing file.
 
 ---
 
-### 5.5 Direct Download (root) — Public
+### 5.5 Direct Download (root) — License (`X-License-Key`)
 
 #### `GET /{product}/{version}/{filename}`
 
@@ -338,11 +342,13 @@ matching release checksum is on record. `404` when the file is not in storage.
 
 ---
 
-### 5.6 Heartbeat — Public
+### 5.6 Heartbeat — License (`X-License-Key`)
 
 #### `POST /api/v1/heartbeat`
 
-Optional header: `X-License-Key: SIEM-…` (associates the instance to a license).
+Required header: `X-License-Key` (§2.3). Against `updates.mysoc.ai` this is the
+operator's platform key; the siemcore example body below is what a relay
+receives from its child.
 Body is a `Heartbeat` ([Section 7.3](#73-heartbeat)); at minimum `instance_id`
 and `products[]` are meaningful.
 
@@ -388,10 +394,10 @@ every product that has a newer release:
 
 | Method & Path                          | Auth   | Purpose                                  |
 | -------------------------------------- | ------ | ---------------------------------------- |
-| `POST /updates/{product}/check`        | Public | Group-aware update decision              |
-| `POST /updates/{product}/report`       | Public | Report install success/failure/rollback  |
+| `POST /updates/{product}/check`        | License | Group-aware update decision              |
+| `POST /updates/{product}/report`       | License | Report install success/failure/rollback  |
 
-**`POST /updates/{product}/check`** — optional `X-License-Key` header. Body
+**`POST /updates/{product}/check`** — required `X-License-Key` header (§2.3). Body
 (`UpdateCheckRequest`):
 
 ```json
@@ -744,7 +750,7 @@ the SWF team's request.
 | --------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------- |
 | Enrollment (`license/activate`)         | Implemented   | Returns instance id + api_key + install manifest.                                              |
 | Heartbeat + update offers               | Implemented   | `heartbeat` (channel-latest hints) and `updates/{product}/check` (group-aware decision).       |
-| Artifact download                       | Implemented   | Public; `X-Checksum-SHA256` header + `sha256` in check response.                               |
+| Artifact download                       | Implemented   | Requires `X-License-Key` (1.8.0); `X-Checksum-SHA256` header + `sha256` in check response.     |
 | SHA-256 integrity                       | Implemented   | Checksum published and verifiable; updaters MUST verify before applying.                       |
 | Success/failure/rollback reporting      | Partial       | `updates/{product}/report` **acknowledges** but does not yet persist reports for analytics.    |
 | Device auth on heartbeat/check          | Implemented (1.8.0) | `X-License-Key` is **required** and validated (active + unexpired) on heartbeat, update check/report, and downloads. Product-scoped keys also constrain the claimed tier. |

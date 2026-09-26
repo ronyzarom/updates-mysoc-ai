@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Document Version** | 1.5.0 |
-| **Last Updated** | February 3, 2026 |
+| **Document Version** | 2.0.0 |
+| **Last Updated** | September 26, 2026 |
 | **Status** | Production |
 | **Maintained By** | SiemCore Platform Team |
 
@@ -13,6 +13,7 @@
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 2.0.0 | 2026-09-26 | Updates Team | Cascade: SiemCore servers run `siemcore-cascade-updater` and talk only to the operator's mysoc relay; replaced the retired v2 `siemcore-updater` install, commands and paths; credentials, troubleshooting and API reference for the relay path |
 | 1.5.0 | 2026-02-03 | SiemCore Team | Added API key requirement, target groups fix (include "stable"), dashboard features (edit/delete), semantic versioning |
 | 1.4.0 | 2026-01-31 | SiemCore Team | Added complete update workflow, upload-release.sh script, step-by-step commands |
 | 1.3.0 | 2026-01-31 | SiemCore Team | Added deployment policy, removed sensitive keys, clarified channels vs groups |
@@ -23,6 +24,11 @@
 ---
 
 This guide explains how to deploy and manage SiemCore instances using the MySoc Updates Server at `updates.mysoc.ai`.
+
+> **Cascade.** SiemCore servers never connect to `updates.mysoc.ai`. Their
+> updater talks only to the SOC operator's mysoc relay, which reaches the
+> updates server on their behalf. Releases, update groups and auto-update are
+> still managed centrally on the dashboard.
 
 ## Table of Contents
 
@@ -91,17 +97,10 @@ SiemCore operates three server environments:
 - **Auto-Update:** Enabled
 - **Instance ID:** `siemcore-testing`
 
-```yaml
-# /opt/siemcore/updater/config.yaml
-instance:
-  id: "siemcore-testing"
-  type: "siemcore"
-  license_key: "SIEM-XXXX-XXXX-XXXX-XXXX"  # Get from dashboard
-
-update:
-  channel: stable
-  auto_update: true
-```
+Update group and auto-update are set on the instance in the dashboard
+(**Instances → Update Settings**), not in the updater config. The updater
+config (`/etc/siemcore-cascade-updater/config.yaml`) points only at the
+operator's mysoc relay ([Installing the Updater](#installing-the-updater)).
 
 #### Staging (`cloud.siemcore.ai`)
 
@@ -111,17 +110,7 @@ update:
 - **Auto-Update:** Enabled
 - **Instance ID:** `siemcore-staging`
 
-```yaml
-# /opt/siemcore/updater/config.yaml
-instance:
-  id: "siemcore-staging"
-  type: "siemcore"
-  license_key: "SIEM-XXXX-XXXX-XXXX-XXXX"  # Get from dashboard
-
-update:
-  channel: stable
-  auto_update: true
-```
+Set on the dashboard: update group `beta`, auto-update on.
 
 #### Production (`cyfox-il.siemcore.ai`)
 
@@ -131,21 +120,10 @@ update:
 - **Auto-Update:** Disabled (manual approval required)
 - **Instance ID:** `siemcore-production`
 
-```yaml
-# /opt/siemcore/updater/config.yaml
-instance:
-  id: "siemcore-production"
-  type: "siemcore"
-  license_key: "SIEM-XXXX-XXXX-XXXX-XXXX"  # Get from dashboard
-
-update:
-  channel: stable
-  auto_update: false  # MUST be false for production
-  maintenance_window:
-    start: "02:00"
-    end: "05:00"
-    timezone: "Asia/Jerusalem"
-```
+Set on the dashboard: update group `production`, auto-update **off**. While
+auto-update is off the server withholds product offers from this instance
+(updater self-updates still flow). There are no maintenance-window fields;
+schedule the consented update by turning auto-update on at the agreed time.
 
 ### Recommended Rollout Flow
 
@@ -199,25 +177,35 @@ curl -X PUT https://updates.mysoc.ai/api/v1/instances/{instance-id}/update-group
 ## Architecture
 
 ```
-┌─────────────────────┐         ┌─────────────────────┐
-│   SiemCore Server   │         │   Updates Server    │
-│                     │         │  updates.mysoc.ai   │
-│  ┌───────────────┐  │  HTTPS  │                     │
-│  │siemcore-updater├──────────►│  /api/v1/updates/*  │
-│  └───────────────┘  │         │  /api/v1/heartbeat  │
-│                     │         │                     │
-│  siemcore-api       │         │  ┌───────────────┐  │
-│  siemcore-collector │         │  │   Dashboard   │  │
-│  siemcore-frontend  │         │  └───────────────┘  │
-└─────────────────────┘         └─────────────────────┘
+updates.mysoc.ai                 update server + dashboard
+      ▲  heartbeat + rollup, update checks (operator platform key)
+      │
+mysoc node (SOC operator)        mysoc-updater, relay :18443
+      ▲  heartbeat, check, download (node credential + relay token)
+      │
+SiemCore server                  siemcore-cascade-updater, relay :18443
+      ▲  heartbeat, check, download
+      │
+SWF forwarders                   leaf updater (Windows)
 ```
 
-The `siemcore-updater` runs as a systemd service on each SiemCore instance. It:
+The `siemcore-cascade-updater` systemd service on each SiemCore server:
 
-1. Sends heartbeats every 60 seconds with system metrics
-2. Checks for available updates
-3. Downloads and applies updates when available (if auto-update is enabled)
-4. Reports update success/failure back to the server
+1. Sends a heartbeat with system metrics to its mysoc relay every 60 seconds;
+   the relay rolls it up to `updates.mysoc.ai`.
+2. Checks for updates through the relay, which forwards the check with the
+   operator's platform key.
+3. Downloads artifacts from the relay's verified cache, re-verifies SHA-256
+   and the ed25519 signature itself, and applies them through the product's
+   `updater/apply` entrypoint ([Update Entrypoint Contract](UPDATE-ENTRYPOINT-CONTRACT.md))
+   when auto-update is enabled for the instance.
+4. Reports success or failure; results reach the dashboard in the rollup.
+5. Serves the relay port to the customer's SWF forwarders, and keeps itself
+   updated (product `updater-linux-<arch>`).
+
+> The retired v2 `siemcore-updater` daemon (`/opt/siemcore/bin/siemcore-updater`,
+> `/opt/siemcore/updater/config.yaml`) is no longer used and is flagged by v3
+> posture audits. Do not install it.
 
 ### What the Updater Reports
 
@@ -236,310 +224,88 @@ This data appears in the dashboard under each instance's detail page.
 
 ## Installing the Updater
 
+Install from the siemcore updater kit (`siemcore-updater-kit-<VERSION>.zip`,
+built by `scripts/build-kits.sh`; see [Updater Kit Release Process](UPDATER-RELEASE.md)).
+The customer-facing walkthrough is [Self-Service Installation](SELF-SERVICE-INSTALL.md);
+the kit's own `README.md` covers every option.
+
 ### Prerequisites
 
-- SiemCore instance running on Linux (Ubuntu 20.04+ or Debian 11+)
-- License key for the instance
-- Root/sudo access
+- Linux server (amd64 or arm64) with systemd, root access.
+- Outbound HTTPS to the operator's mysoc relay (`https://<mysoc-host>:18443`).
+  No internet access and no route to `updates.mysoc.ai` are needed.
+- From the operator: the relay address, the relay certificate
+  (`mysoc-relay-ca.pem`, unless the relay has a public certificate), the
+  enrollment credential, and the release-signing public key.
 
-### Quick Install (Recommended)
-
-**Recommended:** Download and verify before execution:
-
-```bash
-# Download the install script
-curl -fsSLO https://updates.mysoc.ai/siemcore-updater/latest/install-siemcore-updater.sh
-
-# Review the script (recommended)
-less install-siemcore-updater.sh
-
-# Execute with your instance ID and license key
-sudo bash install-siemcore-updater.sh <instance-id> <license-key>
-```
-
-**Quick install (convenience method):**
+### Install
 
 ```bash
-curl -fsSL https://updates.mysoc.ai/siemcore-updater/latest/install-siemcore-updater.sh | sudo bash -s -- <instance-id> <license-key>
+unzip siemcore-updater-kit-*.zip && cd siemcore-updater-kit-*
+sudo ./install.sh --update \
+  --license-key <credential> --parent-url https://<mysoc-host>:18443 \
+  --instance-id siemcore-<customer>-01 --parent-id <operator's mysoc instance id> \
+  --customer-id <customer> --customer-name "<Customer Name>" \
+  --signing-key <hex> --current-version <installed siemcore version> \
+  --ca-file ./mysoc-relay-ca.pem     # omit if the relay has a public certificate
+sudo systemctl start siemcore-cascade-updater
+journalctl -u siemcore-cascade-updater -f
 ```
 
-**For each SiemCore server:**
+Use `--clean` instead of `--update` on a host where SiemCore is not installed
+yet. Missing flags are prompted for.
 
-| Server | Instance ID | License Key |
-|--------|-------------|-------------|
-| `testing.siemcore.ai` | `siemcore-testing` | Get from dashboard |
-| `cloud.siemcore.ai` | `siemcore-staging` | Get from dashboard |
-| `cyfox-il.siemcore.ai` | `siemcore-production` | Get from dashboard |
+### Configuration
 
-> **Note:** Retrieve license keys from https://updates.mysoc.ai/licenses. Never hardcode keys in scripts or documentation.
+The installer renders `/etc/siemcore-cascade-updater/config.yaml`. The values
+that matter:
 
-The script will:
-- Download the updater binary
-- Create the configuration file
-- Set up the systemd service
-- Start the updater daemon
+| Field | Value |
+|-------|-------|
+| `server.url` | The operator's mysoc relay, `https://<mysoc-host>:18443`. Never `updates.mysoc.ai`. |
+| `server.ca_file` | The relay's certificate, unless it serves a public certificate. |
+| `server.license_key` | The enrollment credential agreed with the operator. |
+| `instance.id` / `instance.parent_id` | This server's id / the operator's mysoc instance id. |
+| `instance.customer_id` / `customer_name` | The end customer this server serves (groups the dashboard view). |
+| `signing.public_key` | The fleet's release key: `curl -s https://updates.mysoc.ai/api/v1/signing-key` at provisioning time. |
+| `products[0].current_version` | The SiemCore version currently installed. |
+| `relay.*` | The child-facing port (`:18443`) for this customer's SWF forwarders. |
 
-### Download Links
+### After Installation
 
-| File | URL |
-|------|-----|
-| **Updater Binary** | https://updates.mysoc.ai/siemcore-updater/latest/siemcore-updater-linux-amd64 |
-| **Install Script** | https://updates.mysoc.ai/siemcore-updater/latest/install-siemcore-updater.sh |
-
-### Manual Installation
-
-If you prefer manual installation:
-
-1. **Download the updater binary:**
-
-```bash
-sudo mkdir -p /opt/siemcore/bin
-curl -fsSL https://updates.mysoc.ai/siemcore-updater/latest/siemcore-updater-linux-amd64 \
-  -o /opt/siemcore/bin/siemcore-updater
-chmod +x /opt/siemcore/bin/siemcore-updater
-```
-
-2. **Create the configuration file:**
-
-```bash
-sudo mkdir -p /opt/siemcore/updater/{versions,backups,temp}
-sudo cat > /opt/siemcore/updater/config.yaml << 'EOF'
-# SiemCore Updater Configuration
-
-# Update Server Connection
-server:
-  url: https://updates.mysoc.ai
-  api_key: ""  # Optional, for authenticated endpoints
-
-# Instance Identification
-instance:
-  id: "siemcore-CUSTOMER_NAME"      # Unique instance identifier
-  type: "siemcore"                   # Instance type: siemcore or mysoc
-  license_key: "SIEM-XXXX-XXXX-XXXX-XXXX"  # Your license key
-
-# Heartbeat Configuration
-heartbeat:
-  interval: 60s      # How often to send heartbeats
-  timeout: 10s       # HTTP request timeout
-
-# Update Configuration
-update:
-  check_interval: 5m   # How often to check for updates
-  channel: stable      # Release channel: stable, beta, nightly
-  auto_update: true    # Automatically apply updates
-  # Optional: Restrict updates to specific time window
-  # maintenance_window:
-  #   start: "02:00"
-  #   end: "05:00"
-  #   timezone: "UTC"
-
-# Products to Manage
-products:
-  - name: siemcore-api
-    service: siemcore-api           # systemd service name
-    binary: /opt/siemcore/bin/siemcore-api
-    config: /opt/siemcore/config/api.yaml
-    health_endpoint: http://localhost:8080/health
-    hot_reload: false
-
-  - name: siemcore-collector
-    service: siemcore-collector
-    binary: /opt/siemcore/bin/siemcore-collector
-    config: /opt/siemcore/config/collector.yaml
-    health_endpoint: http://localhost:8081/health
-    hot_reload: false
-
-  - name: siemcore-frontend
-    service: siemcore-frontend
-    binary: /opt/siemcore/frontend
-    type: data                      # Static files, not a binary
-    hot_reload: true
-
-# Security Hardening (optional)
-security:
-  enabled: true
-  scan_interval: 1h
-  firewall:
-    enabled: true
-    default_policy: deny
-  ssh:
-    enabled: true
-    enforce:
-      PermitRootLogin: "no"
-      PasswordAuthentication: "no"
-  os_updates:
-    enabled: true
-    security_only: true
-
-# Logging
-logging:
-  level: info
-  file: /var/log/siemcore-updater/updater.log
-  max_size: 100MB
-  max_backups: 5
-EOF
-```
-
-**Important Configuration Values:**
-
-| Field | Description | Example |
-|-------|-------------|---------|
-| `instance.id` | Unique identifier for this instance | `siemcore-acme-prod-01` |
-| `instance.type` | Product type | `siemcore` or `mysoc` |
-| `instance.license_key` | License key from dashboard | `SIEM-XXXX-XXXX-XXXX-XXXX` |
-| `update.channel` | Release channel | `stable`, `beta`, `nightly` |
-| `update.auto_update` | Auto-apply updates | `true` or `false` |
-
-3. **Create the systemd service:**
-
-```bash
-sudo cat > /etc/systemd/system/siemcore-updater.service << 'EOF'
-[Unit]
-Description=SiemCore Updater Service
-After=network.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=/opt/siemcore/bin/siemcore-updater daemon
-Restart=always
-RestartSec=10
-StandardOutput=append:/var/log/siemcore-updater/updater.log
-StandardError=append:/var/log/siemcore-updater/updater.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-4. **Create log directory and enable service:**
-
-```bash
-sudo mkdir -p /var/log/siemcore-updater
-sudo systemctl daemon-reload
-sudo systemctl enable siemcore-updater
-sudo systemctl start siemcore-updater
-```
-
-5. **Verify the updater is running:**
-
-```bash
-sudo systemctl status siemcore-updater
-sudo journalctl -u siemcore-updater -f
-```
-
-The instance should appear in the dashboard within 60 seconds.
+- Within a minute the log shows `heartbeat accepted`, and the instance appears
+  on the dashboard as `via <mysoc relay>`.
+- New nodes enroll with **auto-update off** in the `stable` group; set the
+  group and auto-update on the dashboard.
+- The default executor only downloads, verifies and reports. Real installs
+  need the executor block enabled (kit README, "Enabling real installs",
+  coordinated with the SiemCore team).
 
 ---
 
 ## License Key
 
-### What is a License Key?
+Two different credentials are involved, at different hops:
 
-The license key (`SIEM-XXXX-XXXX-XXXX-XXXX`) identifies your entitlement to use SiemCore products. It is:
+| Credential | Held by | Checked by |
+|------------|---------|------------|
+| Operator platform key (`MYSOC-…`, license type `mysoc-cloud`) | The operator's mysoc updater | `updates.mysoc.ai`, on every heartbeat, update check, report and download. Invalid, deactivated or expired → `401`. |
+| Node enrollment credential (`server.license_key` on the SiemCore server) | The siemcore updater | The mysoc relay. It must be present; the node is then bound to the `relay_token` the relay issues on first contact, sent as `X-Relay-Token` from then on. |
 
-- **Unique per customer** - Each customer receives their own license key
-- **Product-scoped** - Defines which products you're licensed to use
-- **Time-limited** - Has an expiration date
+A SiemCore server's credential never reaches `updates.mysoc.ai`: the relay
+forwards checks and downloads with the operator's platform key. Customer
+licenses (types `siemcore` and `siemcore-lite`, keys `SIEM-…`) can also be
+created on the dashboard to group a customer's nodes; see the
+[License Ownership Guide](LICENSE-OWNERSHIP-GUIDE.md).
 
-### Obtaining a License Key
+### Troubleshooting Credentials
 
-1. **From the Dashboard:**
-   - Log in to https://updates.mysoc.ai
-   - Navigate to **Licenses**
-   - Find your organization's license
-   - Copy the license key (format: `SIEM-XXXX-XXXX-XXXX-XXXX`)
-
-2. **From your Account Manager:**
-   - Contact support@mysoc.ai
-   - Provide your organization name
-   - Receive license key via secure channel
-
-### License Key Usage
-
-The license key is used in two places:
-
-1. **Updater Configuration:**
-   ```yaml
-   instance:
-     license_key: "SIEM-XXXX-XXXX-XXXX-XXXX"
-   ```
-
-2. **HTTP Header (for API calls):**
-   ```
-   X-License-Key: SIEM-XXXX-XXXX-XXXX-XXXX
-   ```
-
-### How License Validation Works
-
-```
-┌─────────────────────┐         ┌─────────────────────┐
-│   SiemCore Instance │         │   Updates Server    │
-│                     │         │                     │
-│  1. Send heartbeat  │────────►│  2. Extract license │
-│     with license    │         │     from header     │
-│                     │         │                     │
-│                     │         │  3. Validate:       │
-│                     │         │     - Key exists?   │
-│                     │         │     - Not expired?  │
-│                     │         │     - Products OK?  │
-│                     │         │                     │
-│  5. Continue/stop   │◄────────│  4. Return status   │
-│     based on result │         │                     │
-└─────────────────────┘         └─────────────────────┘
-```
-
-**On each heartbeat:**
-1. Updater sends license key in `X-License-Key` header
-2. Server looks up the license in database
-3. Server validates:
-   - License exists and is active
-   - License hasn't expired
-   - Instance's products are covered by license
-4. Server creates/updates instance record
-5. Instance continues operating (updates available based on license)
-
-### License Types
-
-| Type | Description | Typical Use |
-|------|-------------|-------------|
-| `siemcore` | Standard SiemCore license | Production deployments |
-| `enterprise` | Enterprise features enabled | Large organizations |
-| `trial` | Time-limited evaluation | New customers |
-
-### License Expiration
-
-- **30 days before expiry** - Warning shown in dashboard
-- **On expiry** - Instance continues to run but updates stop
-- **Grace period** - 7 days after expiry before instance marked inactive
-
-### Troubleshooting License Issues
-
-**"License not found" error:**
-```bash
-# Check the license key in config
-grep license_key /opt/siemcore/updater/config.yaml
-
-# Verify it matches dashboard exactly (case-sensitive)
-```
-
-**"License expired" error:**
-```bash
-# Check expiration in dashboard: Licenses → Your License → Expires
-# Contact support for renewal
-```
-
-**Instance not appearing in dashboard:**
-```bash
-# Verify heartbeat is being sent
-sudo journalctl -u siemcore-updater | grep -i heartbeat
-
-# Check network connectivity
-curl -v https://updates.mysoc.ai/health
-
-# Verify license key format (should be SIEM-XXXX-XXXX-XXXX-XXXX)
-```
+| Symptom | Cause / fix |
+|---------|-------------|
+| `401` with `relay_token_absent` or `relay_token_mismatch` | The node lost its state file, or another host reuses its instance id. The operator clears the stale enrollment on the relay, then restart the updater. |
+| `certificate signed by unknown authority` | `server.ca_file` is missing or wrong; re-copy the relay's `cert.pem`. |
+| The whole operator subtree stops updating | The operator's platform key was deactivated, rotated or expired; update `server.license_key` on the mysoc updater. |
+| Instance missing from the dashboard | Check `journalctl -u siemcore-cascade-updater`, the relay's reachability (`curl --cacert <ca_file> https://<mysoc-host>:18443/health`), and that the mysoc relay itself is online on the dashboard. |
 
 ---
 
@@ -683,7 +449,7 @@ An instance receives an update only if:
 | Rule | Description |
 |------|-------------|
 | **Immutability** | Releases are immutable once published. Never replace an artifact for the same version. |
-| **Rollback** | Rollback restores the previous artifact. Use `siemcore-updater rollback` if needed. |
+| **Rollback** | A failed apply runs the product's rollback phase inside `updater/apply` ([Update Entrypoint Contract](UPDATE-ENTRYPOINT-CONTRACT.md)). To stop a bad release spreading, remove its target groups. Re-uploading an existing version returns `409`. |
 | **Schema changes** | Database/schema changes must be backward-compatible (expand/contract pattern). |
 | **Version format** | Use semantic versioning: `MAJOR.MINOR.PATCH` (e.g., `2.0.17`) |
 | **Version comparison** | Server always returns the **highest** semantic version. Uploading older versions won't cause downgrades. |
@@ -791,24 +557,24 @@ curl -X DELETE https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
 ### How Updates Flow
 
 ```
-  Developer                 Updates Server              SiemCore Instances
-  ─────────                 ──────────────              ──────────────────
-      │                           │                            │
-      │  1. Upload release        │                            │
-      │  ───────────────────────► │                            │
-      │  (target: alpha)          │                            │
-      │                           │                            │
-      │                           │  2. Heartbeat + check      │
-      │                           │ ◄───────────────────────── │ (every 60s)
-      │                           │                            │
-      │                           │  3. "New version available"│
-      │                           │ ─────────────────────────► │ (if in alpha)
-      │                           │                            │
-      │                           │  4. Download + apply       │
-      │                           │ ◄───────────────────────── │ (if auto_update)
-      │                           │                            │
-      │                           │  5. Report success/fail    │
-      │                           │ ◄───────────────────────── │
+  Developer          Updates Server          mysoc relay            SiemCore server
+  ─────────          ──────────────          ───────────            ───────────────
+      │  1. Upload        │                       │                        │
+      │  (target: alpha)  │                       │                        │
+      │ ────────────────► │                       │                        │
+      │                   │                       │  2. Heartbeat + check  │
+      │                   │  forwarded check      │ ◄───────────────────── │ (every 60s)
+      │                   │ ◄──────────────────── │                        │
+      │                   │  3. Offer (if in      │                        │
+      │                   │  group, auto-update)  │                        │
+      │                   │ ────────────────────► │  URL rewritten to relay│
+      │                   │                       │ ─────────────────────► │
+      │                   │  artifact (once,      │  4. Download from      │
+      │                   │  verified, cached)    │  relay cache, verify,  │
+      │                   │ ────────────────────► │  apply                 │
+      │                   │                       │ ◄───────────────────── │
+      │                   │  5. Result in rollup  │  report                │
+      │                   │ ◄──────────────────── │ ◄───────────────────── │
 ```
 
 ### Step-by-Step Workflow
@@ -818,12 +584,12 @@ curl -X DELETE https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
 | 1 | Build binary | Developer | `make build` |
 | 2 | Upload to alpha | Developer | `./scripts/upload-release.sh --groups alpha` |
 | 3 | Testing auto-updates | Automatic | (heartbeat detects update) |
-| 4 | Verify on testing | Developer | SSH check |
+| 4 | Verify on testing | Developer | Dashboard version + `journalctl -u siemcore-cascade-updater` |
 | 5 | Expand to beta | Developer | API call to add beta group |
 | 6 | Cloud auto-updates | Automatic | (heartbeat detects update) |
-| 7 | Verify on cloud | Developer | SSH check |
+| 7 | Verify on cloud | Developer | Dashboard version + updater log |
 | 8 | Expand to production | Developer | API call to add production |
-| 9 | **Manual trigger** | Developer | SSH to cyfox-il (consent required) |
+| 9 | **Manual trigger** | Developer | Turn auto-update on for the cyfox-il instance in the dashboard (consent required) |
 
 ### Step 1: Upload Release
 
@@ -842,12 +608,11 @@ curl -X DELETE https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
 
 ### Step 2: Verify on Testing
 
-```bash
-# Check if testing server sees the update
-ssh user@testing.siemcore.ai "sudo /opt/siemcore/bin/siemcore-updater update --check"
+The testing instance's version and last update result appear on its dashboard
+page within a heartbeat or two. To watch the updater on the host:
 
-# View update logs
-ssh user@testing.siemcore.ai "sudo journalctl -u siemcore-updater -f"
+```bash
+ssh user@testing.siemcore.ai "sudo journalctl -u siemcore-cascade-updater -f"
 ```
 
 ### Step 3: Expand to Beta (Cloud)
@@ -872,12 +637,11 @@ curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1/target-group
 
 ### Step 5: Trigger Production Update (Manual)
 
-Since `cyfox-il.siemcore.ai` has `auto_update: false`, manually trigger:
-
-```bash
-# SSH to production and trigger update
-ssh user@cyfox-il.siemcore.ai "sudo /opt/siemcore/bin/siemcore-updater update --force"
-```
+`cyfox-il.siemcore.ai` has auto-update off, so the server withholds the offer.
+With explicit consent, turn auto-update on for that instance in the dashboard
+(**Instances → cyfox-il → Update Settings**). The next update check receives
+the offer and applies it. Turn auto-update off again afterwards if production
+should stay gated.
 
 ### Quick Reference Commands
 
@@ -890,17 +654,13 @@ ssh user@cyfox-il.siemcore.ai "sudo /opt/siemcore/bin/siemcore-updater update --
   --groups alpha,beta,stable,production \
   --api-key "$(cat keys/UPDATES-API-KEY.txt)"
 
-# Check if server sees update
-ssh user@server "sudo /opt/siemcore/bin/siemcore-updater update --check"
+# View update logs on a SiemCore server
+ssh user@server "sudo journalctl -u siemcore-cascade-updater -f"
 
-# Force update on any server
-ssh user@server "sudo /opt/siemcore/bin/siemcore-updater update --force"
-
-# View update logs
-ssh user@server "sudo journalctl -u siemcore-updater -f"
-
-# Rollback if needed
-ssh user@server "sudo /opt/siemcore/bin/siemcore-updater rollback"
+# Stop a bad release from spreading: remove its target groups
+curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1/target-groups \
+  -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/json" \
+  -d '{"target_groups": []}'
 
 # Edit release via API (e.g., add missing groups)
 curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
@@ -917,37 +677,43 @@ curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
 
 1. **Check updater service:**
    ```bash
-   sudo systemctl status siemcore-updater
+   sudo systemctl status siemcore-cascade-updater
    ```
 
 2. **Check logs:**
    ```bash
-   sudo journalctl -u siemcore-updater -f
+   sudo journalctl -u siemcore-cascade-updater -f
    ```
 
-3. **Verify network connectivity:**
+3. **Verify the mysoc relay is reachable** (not `updates.mysoc.ai`):
    ```bash
-   curl -v https://updates.mysoc.ai/health
+   curl --cacert <server.ca_file> https://<mysoc-host>:18443/health
    ```
 
-4. **Verify license key in config:**
+4. **Check the updater config:**
    ```bash
-   cat /etc/siemcore/updater.yaml
+   sudo grep -A4 '^server:' /etc/siemcore-cascade-updater/config.yaml
    ```
+
+5. **Check the mysoc relay itself is online** on the dashboard. A whole
+   subtree going stale usually means the relay lost its upstream, not the
+   SiemCore servers.
 
 ### Instance Shows "Offline"
 
-An instance is marked offline if no heartbeat is received for 5 minutes.
+Rollup-reported nodes go offline when their relay stops seeing heartbeats
+(`relay.child_offline_after`, default 5 minutes) or the relay stops reporting.
 
 1. Check if the updater service is running
-2. Check for network issues between instance and updates server
-3. Check system resources (CPU/memory exhaustion can prevent heartbeats)
+2. Check the network path between the SiemCore server and its mysoc relay
+3. Check the mysoc relay's own status on the dashboard
+4. Check system resources (CPU/memory exhaustion can prevent heartbeats)
 
 ### Updates Not Being Applied
 
 1. **Check auto-update is enabled:**
-   - In dashboard: Instance → Update Settings → Auto Update toggle
-   - Or check config: `auto_update: true` in `/etc/siemcore/updater.yaml`
+   - In dashboard: Instance → Update Settings → Auto Update toggle (this is
+     the only switch; the server withholds offers while it is off)
 
 2. **Check update group matches:**
    - Instance's `update_group` must be in the release's `target_groups`
@@ -956,34 +722,24 @@ An instance is marked offline if no heartbeat is received for 5 minutes.
 
 3. **Check version comparison:**
    - Update only shows if release version is **higher** than installed version
-   - Check installed version: `ssh server "cat /opt/siemcore/updater/versions/siemcore.version"`
+   - Check the installed version the node reports on its dashboard page
 
-4. **Check updater logs:**
+4. **Check the executor is enabled:** the kit's default executor downloads,
+   verifies and reports without changing the host (kit README, "Enabling
+   real installs").
+
+5. **Check updater logs:**
    ```bash
-   sudo journalctl -u siemcore-updater --since "1 hour ago"
+   sudo journalctl -u siemcore-cascade-updater --since "1 hour ago"
    ```
-
-### Manual Update Check
-
-Force an immediate update check:
-
-```bash
-sudo siemcore-updater update --check
-```
-
-Force an update (bypass auto-update setting):
-
-```bash
-sudo siemcore-updater update --force
-```
 
 ### Rollback
 
-If an update causes issues, rollback to the previous version:
-
-```bash
-sudo siemcore-updater rollback
-```
+A failed apply runs the product's rollback phase inside `updater/apply`
+([Update Entrypoint Contract](UPDATE-ENTRYPOINT-CONTRACT.md)) and the failure
+is reported up the cascade. To stop a bad release reaching more servers,
+remove its target groups (`PUT /api/v1/releases/{product}/{version}/target-groups`
+with `[]`).
 
 ---
 
@@ -991,12 +747,16 @@ sudo siemcore-updater rollback
 
 ### Endpoints Used by Updater
 
-| Endpoint | Method | Auth | Description |
+A SiemCore updater calls these on its **mysoc relay** (`https://<mysoc-host>:18443`),
+which serves the same paths; the relay calls them on `updates.mysoc.ai` with
+the operator's platform key.
+
+| Endpoint | Method | Auth (at the relay) | Description |
 |----------|--------|------|-------------|
-| `/api/v1/heartbeat` | POST | `X-License-Key` | Send instance heartbeat with metrics |
-| `/api/v1/updates/{product}/check` | POST | `X-License-Key` | Check for available updates (returns download URL) |
-| `/api/v1/releases/{product}/{version}/download` | GET | `X-License-Key` | Download release artifact |
-| `/api/v1/updates/report` | POST | `X-License-Key` | Report update success/failure |
+| `/api/v1/heartbeat` | POST | `X-License-Key` + `X-Relay-Token` | Send instance heartbeat with metrics; first contact returns the `relay_token` |
+| `/api/v1/updates/{product}/check` | POST | `X-License-Key` + `X-Relay-Token` | Check for updates; forwarded upstream |
+| `/api/v1/releases/{product}/{version}/download` | GET | `X-License-Key` + `X-Relay-Token` | Download from the relay's verified cache |
+| `/api/v1/updates/{product}/report` | POST | `X-License-Key` + `X-Relay-Token` | Report update success/failure; carried up in the rollup |
 
 ### Admin-Only Endpoints
 
@@ -1014,10 +774,12 @@ sudo siemcore-updater rollback
 
 | Header | Used By | Description |
 |--------|---------|-------------|
-| `X-License-Key` | **Instances** | License key for instance identification. Instances use this for ALL operations. |
-| `X-API-Key` | **Admin/CI only** | API key for admin operations (release uploads, license management). |
+| `X-License-Key` | **Updaters** | SiemCore: the node's enrollment credential, checked by the relay. mysoc: the operator's platform key, checked by `updates.mysoc.ai`. |
+| `X-Relay-Token` | **Updaters below mysoc** | Issued by the relay on first contact; required on every later request. |
+| `X-API-Key` | **Admin/CI only** | Admin or `releases`-scoped API key for release uploads and administration. |
 
-> **Security:** Instances never store or use admin API keys. All instance operations use `X-License-Key` only.
+> **Security:** Instances never store or use admin API keys. Every artifact is
+> re-verified on the node (SHA-256 and ed25519 signature against the pinned key).
 
 ### Heartbeat Payload
 
@@ -1025,11 +787,15 @@ sudo siemcore-updater rollback
 {
   "instance_id": "siemcore-production",
   "instance_type": "siemcore",
+  "product_tier": "siemcore",
+  "parent_instance_id": "mysoc-operator-01",
+  "customer_id": "acme",
+  "customer_name": "Acme Corp",
   "hostname": "siemcore-prod-01.example.com",
   "updater_version": "1.0.0",
   "config_hash": "abc123",
   "license": {
-    "key": "SIEM-XXXX-XXXX-XXXX-XXXX",
+    "key": "<node credential, masked>",
     "valid": true,
     "last_check": "2026-01-28T10:00:00Z"
   },
@@ -1093,8 +859,8 @@ sudo siemcore-updater rollback
   "update_available": true,
   "current_version": "2.0.16",
   "latest_version": "2.0.17",
-  "download_url": "https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.17/download",
-  "update_url": "https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.17/download",
+  "download_url": "/api/v1/releases/siemcore/2.0.17/download",
+  "update_url": "/api/v1/releases/siemcore/2.0.17/download",
   "sha256": "d6ee561126c8ba6821bb4036332c621a66e41a7b23536b2fa8be42d83dd25d1a",
   "release_notes": "Bug fixes and improvements",
   "channel": "stable",
@@ -1102,32 +868,24 @@ sudo siemcore-updater rollback
 }
 ```
 
-> **Note:** `download_url` and `update_url` are absolute URLs (include `https://updates.mysoc.ai`).
+> **Note:** The relay rewrites `download_url` and `update_url` to paths on
+> itself, so a SiemCore server downloads from its mysoc relay, never from
+> `updates.mysoc.ai`. The response also carries the release `signature`
+> unchanged.
 
-### File Structure on Instance
+### Updater Files on a SiemCore Server
 
 ```
-/opt/siemcore/
-├── bin/
-│   ├── siemcore-api           # Product binaries
-│   ├── siemcore-collector
-│   └── siemcore-updater       # The updater itself
-├── config/
-│   ├── api.yaml               # Product configs
-│   └── collector.yaml
-├── updater/
-│   ├── config.yaml            # Updater configuration
-│   ├── versions/
-│   │   ├── siemcore-api.version      # Current version files
-│   │   └── siemcore-collector.version
-│   ├── backups/
-│   │   └── siemcore-api.1.4.2.bak    # Rollback backups
-│   └── temp/                  # Download staging
-├── frontend/                  # Static frontend files
-└── data/                      # Application data
-
-/var/log/siemcore-updater/
-└── updater.log                # Updater logs
+/etc/siemcore-cascade-updater/config.yaml     # Updater configuration
+/usr/local/bin/siemcore-cascade-updater       # Symlink to the current binary
+/var/lib/siemcore-cascade-updater/
+├── state.json                                # Installed versions, relay token
+├── artifacts/                                # Downloaded, verified artifacts
+├── self-update/                              # Versioned binaries, current symlink
+├── relay-cache/                              # Verified artifacts served to SWF children
+└── relay-tls/                                # Self-provisioned relay certificate (give cert.pem to SWF)
+/etc/systemd/system/siemcore-cascade-updater.service
+journalctl -u siemcore-cascade-updater       # Logs
 ```
 
 ---

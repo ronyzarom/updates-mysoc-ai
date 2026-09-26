@@ -56,7 +56,11 @@ go run ./cmd/updater-simulator version
 
 The tier examples:
 
-- Use `https://updates.mysoc.ai`
+- Use `https://updates.mysoc.ai` directly for protocol testing. This is a lab
+  shortcut: in production only the mysoc tier talks to the updates server,
+  and siemcore and swf updaters point `server.url` at their parent relay
+  (`https://<parent-host>:18443`); see the kits and
+  [Relay Deployment Guide](RELAY-DEPLOYMENT.md)
 - Use synthetic simulator identities
 - Disable group-unaware legacy fallback
 - Run in observe-only mode
