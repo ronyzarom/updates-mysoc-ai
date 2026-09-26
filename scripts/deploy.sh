@@ -70,7 +70,10 @@ build_binaries() {
     # this the build is unstamped and traceability is lost.
     local version commit build_time ldflags
     version="$(tr -d '[:space:]' < VERSION)"
-    commit="$(git describe --always --dirty 2>/dev/null || echo unknown)"
+    commit="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+    if [[ "$commit" != unknown ]] && [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+        commit="${commit}-dirty"
+    fi
     build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     ldflags="-s -w -X main.Version=${version} -X main.GitCommit=${commit} -X main.BuildTime=${build_time}"
 

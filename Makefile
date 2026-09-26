@@ -11,7 +11,7 @@ GOFLAGS=-ldflags="-s -w"
 
 # Version info
 VERSION?=$(shell tr -d '[:space:]' < VERSION)
-GIT_COMMIT=$(shell git describe --always --dirty 2>/dev/null || echo "dev")
+GIT_COMMIT=$(shell c=$$(git rev-parse --short=12 HEAD 2>/dev/null) || c=dev; [ -z "$$(git status --porcelain 2>/dev/null)" ] || c=$$c-dirty; echo $$c)
 BUILD_TIME=$(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS=-ldflags="-s -w -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.BuildTime=$(BUILD_TIME)"
 
