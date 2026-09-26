@@ -3,8 +3,8 @@
 # Usage: ./upload-release.sh --product <name> --version <ver> --file <path> [options]
 #
 # Examples:
-#   ./upload-release.sh --product siemcore --version 2.0.1 --file ./bin/siemcore-linux-amd64
-#   ./upload-release.sh --product siemcore-api --version 1.5.0 --file ./dist/api.tar.gz --groups alpha,beta
+#   ./upload-release.sh --product siemcore --version 3.3.152.57 --file ./dist/siemcore-universal-3.3.152.57.tar.gz --groups alpha
+#   ./upload-release.sh --product mysoc --version 1.5.0.3 --file ./mysoc-1.5.0.3.tar.gz --groups alpha
 
 set -e
 
@@ -18,7 +18,8 @@ NC='\033[0m'
 # Default values
 UPDATE_SERVER="${UPDATE_SERVER:-https://updates.mysoc.ai}"
 CHANNEL="stable"
-GROUPS=""
+# Not GROUPS: that is a Bash builtin array whose assignments are ignored.
+TARGET_GROUPS=""
 NOTES=""
 
 # Parse arguments
@@ -41,7 +42,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --groups|-g)
-            GROUPS="$2"
+            TARGET_GROUPS="$2"
             shift 2
             ;;
         --notes|-n)
@@ -62,23 +63,24 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 --product <name> --version <ver> --file <path> [options]"
             echo ""
             echo "Required:"
-            echo "  --product, -p    Product name (e.g., siemcore, siemcore-api)"
-            echo "  --version, -v    Semantic version (e.g., 1.5.0, 2.0.1)"
+            echo "  --product, -p    Product name (e.g., siemcore, mysoc, swf)"
+            echo "  --version, -v    Version, MAJOR.MINOR.PATCH.BUILD (e.g., 3.3.152.57)"
             echo "  --file, -f       Path to the release artifact"
+            echo "  --groups, -g     Target groups, comma-separated: alpha, beta, stable, production"
+            echo "                   (start with alpha; the server treats no groups as all four)"
             echo ""
             echo "Optional:"
             echo "  --channel, -c    Release channel: stable, beta, nightly (default: stable)"
-            echo "  --groups, -g     Target groups: alpha,beta,production (default: all)"
             echo "  --notes, -n      Release notes"
             echo "  --server, -s     Updates server URL (default: https://updates.mysoc.ai)"
-            echo "  --api-key, -k    Admin API key (or set UPDATES_API_KEY env var)"
+            echo "  --api-key, -k    Releases-scoped API key (or set UPDATES_API_KEY env var)"
             echo ""
             echo "Examples:"
-            echo "  # Upload to alpha group only"
-            echo "  $0 --product siemcore --version 2.0.1 --file ./bin/siemcore-linux-amd64 --groups alpha"
+            echo "  # First upload: alpha only"
+            echo "  $0 --product siemcore --version 3.3.152.57 --file ./dist/siemcore-universal-3.3.152.57.tar.gz --groups alpha"
             echo ""
-            echo "  # Upload with release notes"
-            echo "  $0 --product siemcore --version 2.0.1 --file ./bin/siemcore --notes \"Bug fixes\""
+            echo "  # With release notes"
+            echo "  $0 --product mysoc --version 1.5.0.3 --file ./mysoc-1.5.0.3.tar.gz --groups alpha --notes \"Bug fixes\""
             exit 0
             ;;
         *)
@@ -114,6 +116,22 @@ if [ ! -f "$FILE" ]; then
     exit 1
 fi
 
+if [ -z "$TARGET_GROUPS" ]; then
+    echo -e "${RED}Error: --groups is required (start with alpha); an upload without target groups reaches every ring, including production${NC}"
+    exit 1
+fi
+
+IFS=',' read -r -a GROUP_LIST <<< "$TARGET_GROUPS"
+for g in "${GROUP_LIST[@]}"; do
+    case "$g" in
+        alpha|beta|stable|production) ;;
+        *)
+            echo -e "${RED}Error: invalid target group '${g}' (must be alpha, beta, stable, or production)${NC}"
+            exit 1
+            ;;
+    esac
+done
+
 # Display upload info
 echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║        Upload Release to Updates Server     ║${NC}"
@@ -122,7 +140,7 @@ echo ""
 echo -e "  ${GREEN}Product:${NC}  $PRODUCT"
 echo -e "  ${GREEN}Version:${NC}  $VERSION"
 echo -e "  ${GREEN}Channel:${NC}  $CHANNEL"
-echo -e "  ${GREEN}Groups:${NC}   ${GROUPS:-all}"
+echo -e "  ${GREEN}Groups:${NC}   ${TARGET_GROUPS}"
 echo -e "  ${GREEN}File:${NC}     $FILE ($(du -h "$FILE" | cut -f1))"
 echo -e "  ${GREEN}Server:${NC}   $UPDATE_SERVER"
 if [ -n "$NOTES" ]; then
@@ -138,11 +156,8 @@ CURL_ARGS=(
     -F "version=${VERSION}"
     -F "channel=${CHANNEL}"
     -F "artifact=@${FILE}"
+    -F "target_groups=${TARGET_GROUPS}"
 )
-
-if [ -n "$GROUPS" ]; then
-    CURL_ARGS+=(-F "target_groups=${GROUPS}")
-fi
 
 if [ -n "$NOTES" ]; then
     CURL_ARGS+=(-F "release_notes=${NOTES}")
@@ -180,17 +195,15 @@ if [ "$HTTP_CODE" -eq 201 ] || [ "$HTTP_CODE" -eq 200 ]; then
     RELEASE_ID=$(echo "$BODY" | python3 -c "import sys, json; print(json.load(sys.stdin).get('id', ''))" 2>/dev/null || echo "")
     
     if [ -n "$RELEASE_ID" ]; then
-        echo -e "${CYAN}Next steps:${NC}"
+        echo -e "${CYAN}Next steps (each promotion needs approval and a soak):${NC}"
         echo ""
-        echo "  # Expand to beta group:"
+        echo "  # Promote to beta:"
         echo "  curl -X PUT ${UPDATE_SERVER}/api/v1/releases/${PRODUCT}/${VERSION}/target-groups \\"
-        echo "    -H 'Content-Type: application/json' \\"
+        echo "    -H \"X-API-Key: \$UPDATES_API_KEY\" -H 'Content-Type: application/json' \\"
         echo "    -d '{\"target_groups\": [\"alpha\", \"beta\"]}'"
         echo ""
-        echo "  # Expand to production:"
-        echo "  curl -X PUT ${UPDATE_SERVER}/api/v1/releases/${PRODUCT}/${VERSION}/target-groups \\"
-        echo "    -H 'Content-Type: application/json' \\"
-        echo "    -d '{\"target_groups\": [\"alpha\", \"beta\", \"production\"]}'"
+        echo "  # Then stable, then production (explicit consent): add each group in turn."
+        echo "  # Withdraw: -d '{\"target_groups\": []}'"
     fi
 else
     echo ""
