@@ -69,7 +69,8 @@ The Updates Server provides centralized management for all SiemCore deployments:
 |------|-------------|
 | **All upgrades through the cascade** | Every SiemCore host, testing included, is upgraded by publishing to the Updates Server. `deploy-all.sh` is not used; `deploy.sh` is greenfield bring-up only. |
 | **Promotion needs approval** | Widening a release beyond `alpha` (to `beta`, `stable`, `production`) requires approval and a soak at each step. Production requires **explicit consent**. |
-| **Preserve holds** | Instances held with auto-update off (for example the bench host and pod nodes under qualification) stay held until Rony removes the hold. |
+| **Preserve holds** | Instances held with auto-update off (for example the bench host) stay held until Rony removes the hold. |
+| **Pods are regular updates** | Pod nodes (A, B, witness, observer) receive releases through the normal cascade like any other host, by ring and auto-update. Pod-specific handling must never change how a normal (standalone) server updates. |
 | **SSH is break-glass only** | SSH to customer hosts is for verification and emergency troubleshooting only. Host-local `update.sh --version` is break-glass for when the cascade cannot deliver. |
 
 ---
@@ -83,7 +84,7 @@ snapshot below is from 2026-09-26 and only shows the shape:
 
 | Ring | Hosts (instance id) | Notes |
 |------|---------------------|-------|
-| `alpha` | `siemcore-testing-01`, `siemcore-bench-20260912-01`, Bezeq pod test nodes, other qualification nodes | Not testing alone: bench is in alpha. Bench is held (auto-update off). |
+| `alpha` | `siemcore-testing-01`, `siemcore-bench-20260912-01`, Bezeq pod test nodes, other qualification nodes | Not testing alone: bench is in alpha. Bench is held (auto-update off). Pod nodes update like any other alpha host. |
 | `beta` | `siemcore-cloud-01` (cloud.siemcore.ai) | Check its live auto-update policy. |
 | `stable` | `siemcore-seetech`, `siemcore-danshar` | Two **customer** hosts. |
 | `production` | `siemcore-cyfox-il` (cyfox-il.siemcore.ai) | Live customer environment; explicit consent. Check its live auto-update policy. |
