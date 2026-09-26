@@ -45,7 +45,7 @@ func TestDualPublicationDatabase(t *testing.T) {
 	}
 	defer pool.Close()
 	_, err = pool.Exec(ctx, `CREATE TABLE releases(id uuid PRIMARY KEY, product_name text, version text, channel text, manifest jsonb, artifact_path text, artifact_size bigint, checksum text, signature text, release_notes text, min_updater_version text, target_groups text[], released_at timestamptz, created_at timestamptz, UNIQUE(product_name,version))`)
-	for _, file := range []string{"016_independent_artifacts.up.sql", "018_issuer_sealing.up.sql"} {
+	for _, file := range []string{"016_independent_artifacts.up.sql", "018_release_channel_length.up.sql", "019_issuer_sealing.up.sql"} {
 		if err != nil {
 			break
 		}

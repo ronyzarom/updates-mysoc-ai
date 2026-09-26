@@ -27,3 +27,21 @@ func TestLoadMigrationsOrderedAndComplete(t *testing.T) {
 		}
 	}
 }
+
+// 018 was hand-applied to production on 2026-09-18; the runner refuses to
+// start if the embedded file's checksum ever differs from that ledger row.
+func TestReleaseChannelLengthMatchesProductionLedger(t *testing.T) {
+	set, err := loadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range set {
+		if m.Version == "018" {
+			if m.Name != "release_channel_length" || m.Sum != "43ea8681ad9a8717a5000f8384869d112de31cf116a51d2651238d552400b9bc" {
+				t.Fatalf("018 must stay byte-identical to production: got %s_%s %s", m.Version, m.Name, m.Sum)
+			}
+			return
+		}
+	}
+	t.Fatal("migration 018_release_channel_length missing")
+}
