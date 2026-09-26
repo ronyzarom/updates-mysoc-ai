@@ -13,10 +13,12 @@ import {
   MonitorSmartphone,
   ChevronRight,
   Key,
+  BadgeCheck,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { ErrorState } from "@/components/ui";
+import { sealCoverage } from "@/lib/derive";
 
 // The dashboard mirrors the licensing hierarchy: operators (one platform
 // key each) at the top, their cascaded fleet (mysoc > siemcore > swf) below.
@@ -54,6 +56,7 @@ export default function DashboardPage() {
   const tierCount = (tier: string) => stats?.by_tier?.[tier] || 0;
 
   const activeOperators = operators?.filter((o) => o.is_active).length || 0;
+  const coverage = sealCoverage(releases);
 
   const sortedOperators = [...(operators || [])].sort((a, b) => {
     const ta = a.last_heartbeat ? new Date(a.last_heartbeat).getTime() : 0;
@@ -222,6 +225,41 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Issuer seals */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <BadgeCheck className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-lg font-semibold text-white">Issuer Seals</h2>
+            <span className="text-sm text-slate-400">last 30 days</span>
+          </div>
+          <Link href="/releases" className="text-sm text-cyan-400 hover:underline">
+            View releases
+          </Link>
+        </div>
+        {coverage.length === 0 ? (
+          <p className="text-sm text-slate-400">No releases published in the last 30 days.</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {coverage.map((row) => (
+              <div key={row.issuer} className="p-4 rounded-lg bg-slate-800/50" data-issuer={row.issuer}>
+                <p className="text-xs text-slate-500 mb-1">{row.issuer}</p>
+                <p className="text-2xl font-bold text-white">{row.percentSealed}%</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {row.sealed} of {row.total} sealed
+                </p>
+                {row.invalid > 0 && (
+                  <p className="text-xs text-red-400 mt-1">{row.invalid} invalid</p>
+                )}
+                <div className="mt-2 h-1.5 rounded bg-slate-700 overflow-hidden">
+                  <div className="h-full bg-emerald-500" style={{ width: `${row.percentSealed}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Releases */}

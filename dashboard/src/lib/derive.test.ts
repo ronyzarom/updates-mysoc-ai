@@ -9,6 +9,8 @@ import {
   compareVersions,
   supersededCurrentVersion,
   THIRTY_DAYS_MS,
+  sealStatusOf,
+  sealCoverage,
 } from "./derive";
 import type { Instance, HeartbeatData } from "./api";
 
@@ -203,5 +205,38 @@ describe("supersededCurrentVersion", () => {
       })
     ).toBeNull();
     expect(supersededCurrentVersion(failedTo("2.2.0.31", undefined))).toBeNull();
+  });
+});
+
+describe("sealStatusOf", () => {
+  it("reads a missing status (pre-1.16.2 server) as unsealed", () => {
+    expect(sealStatusOf({})).toBe("unsealed");
+    expect(sealStatusOf({ seal_status: "invalid" })).toBe("invalid");
+  });
+});
+
+describe("sealCoverage", () => {
+  it("computes per-issuer sealed share over the last 30 days only", () => {
+    const rows = sealCoverage(
+      [
+        { issuer: "swf", seal_status: "sealed", released_at: inDays(-1) },
+        { issuer: "swf", seal_status: "unsealed", released_at: inDays(-2) },
+        { issuer: "swf", seal_status: "invalid", released_at: inDays(-3) },
+        { issuer: "mysoc", seal_status: "sealed", released_at: inDays(-5) },
+        { issuer: "mysoc", seal_status: "unsealed", released_at: inDays(-45) },
+        { issuer: "", released_at: inDays(-1) },
+        { issuer: "siemcore", seal_status: "sealed", released_at: "not a date" },
+      ],
+      NOW
+    );
+    expect(rows).toEqual([
+      { issuer: "mysoc", total: 1, sealed: 1, invalid: 0, percentSealed: 100 },
+      { issuer: "swf", total: 3, sealed: 1, invalid: 1, percentSealed: 33 },
+      { issuer: "other", total: 1, sealed: 0, invalid: 0, percentSealed: 0 },
+    ]);
+  });
+
+  it("is empty with no releases", () => {
+    expect(sealCoverage(undefined, NOW)).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import type { Instance, License } from "./api";
+import type { Instance, License, Release, SealStatus } from "./api";
 
 // Treat the Go zero-value timestamp ("0001-01-01...") as "no expiry".
 export function hasExpiry(expiresAt?: string): boolean {
@@ -112,4 +112,47 @@ export function sortInstancesByHeartbeat(instances: Instance[] | undefined): Ins
       new Date(b.last_heartbeat || 0).getTime() -
       new Date(a.last_heartbeat || 0).getTime()
   );
+}
+
+// Releases from servers before 1.16.2 carry no seal_status; they were never
+// issuer-sealed.
+export function sealStatusOf(release: Pick<Release, "seal_status">): SealStatus {
+  return release.seal_status ?? "unsealed";
+}
+
+export const ISSUER_ORDER = ["mysoc", "siemcore", "swf", "updates", "other"] as const;
+
+export interface IssuerSealCoverage {
+  issuer: string;
+  total: number;
+  sealed: number;
+  invalid: number;
+  percentSealed: number;
+}
+
+// Per-issuer share of releases published in the last 30 days that carried a
+// verified issuer seal. Issuers with no recent releases are omitted.
+export function sealCoverage(
+  releases: Pick<Release, "issuer" | "seal_status" | "released_at">[] | undefined,
+  now = Date.now()
+): IssuerSealCoverage[] {
+  const byIssuer = new Map<string, IssuerSealCoverage>();
+  for (const r of releases || []) {
+    const at = new Date(r.released_at).getTime();
+    if (Number.isNaN(at) || at < now - THIRTY_DAYS_MS || at > now) continue;
+    const issuer = r.issuer || "other";
+    const row = byIssuer.get(issuer) ?? { issuer, total: 0, sealed: 0, invalid: 0, percentSealed: 0 };
+    row.total++;
+    const status = sealStatusOf(r);
+    if (status === "sealed") row.sealed++;
+    if (status === "invalid") row.invalid++;
+    byIssuer.set(issuer, row);
+  }
+  const rank = (i: string) => {
+    const idx = (ISSUER_ORDER as readonly string[]).indexOf(i);
+    return idx === -1 ? ISSUER_ORDER.length : idx;
+  };
+  return [...byIssuer.values()]
+    .map((row) => ({ ...row, percentSealed: Math.round((row.sealed / row.total) * 100) }))
+    .sort((a, b) => rank(a.issuer) - rank(b.issuer) || a.issuer.localeCompare(b.issuer));
 }

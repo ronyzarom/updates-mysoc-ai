@@ -394,6 +394,24 @@ export interface Release {
   release_notes?: string;
   target_groups?: string[];
   released_at: string;
+  // Issuer seal as checked at upload (1.16.2+); absent on older servers.
+  seal_status?: SealStatus;
+  issuer?: string;
+  issuer_key_id?: string;
+}
+
+export type SealStatus = "sealed" | "unsealed" | "invalid" | "unknown_key";
+
+export interface TrustedKey {
+  id: string;
+  key_id: string;
+  public_key: string;
+  issuer: string; // "" = trusted for every issuer
+  label: string;
+  status: "active" | "retired";
+  created_by: string;
+  created_at: string;
+  retired_at?: string;
 }
 
 // Auth types
@@ -1050,6 +1068,28 @@ class ApiClient {
     await this.fetch(`/api/v1/admin/api-keys/${id}`, { method: "DELETE" }, true);
   }
 
+  // Admin - trusted issuer keys
+  async getTrustedKeys(): Promise<{ keys: TrustedKey[]; max_active_keys_per_scope: number }> {
+    const res = await this.fetch<{ keys: TrustedKey[]; max_active_keys_per_scope: number }>(
+      "/api/v1/admin/trusted-keys",
+      {},
+      true
+    );
+    return { keys: res.keys ?? [], max_active_keys_per_scope: res.max_active_keys_per_scope };
+  }
+
+  async addTrustedKey(data: { public_key: string; issuer?: string; label?: string }): Promise<TrustedKey> {
+    return this.fetch<TrustedKey>(
+      "/api/v1/admin/trusted-keys",
+      { method: "POST", body: JSON.stringify(data) },
+      true
+    );
+  }
+
+  async retireTrustedKey(id: string): Promise<TrustedKey> {
+    return this.fetch<TrustedKey>(`/api/v1/admin/trusted-keys/${id}/retire`, { method: "POST" }, true);
+  }
+
   // Admin - Users
   async getUsers(): Promise<User[]> {
     return this.fetch<User[]>("/api/v1/admin/users", {}, true);
@@ -1090,7 +1130,7 @@ class ApiClient {
   }
 
   // Health
-  async getHealth(): Promise<{ status: string; version: string }> {
+  async getHealth(): Promise<{ status: string; version: string; commit?: string }> {
     return this.fetch("/health", {}, false);
   }
 }

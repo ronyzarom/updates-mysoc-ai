@@ -2,10 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { Server, Key, Bell, Shield, Database } from "lucide-react";
+import { Server, Key, Bell, Shield, Database, BadgeCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { Switch } from "@/components/ui";
 import { ApiKeysManager } from "@/components/ApiKeysManager";
+import { TrustedKeysManager } from "@/components/TrustedKeysManager";
 
 const DASHBOARD_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || "same origin";
@@ -83,6 +84,18 @@ export default function SettingsPage() {
           </div>
 
           <ApiKeysManager />
+        </div>
+
+        {/* Trusted issuer keys */}
+        <div className="card lg:col-span-2">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-emerald-500/20">
+              <BadgeCheck className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Trusted Issuer Keys</h2>
+          </div>
+
+          <TrustedKeysManager />
         </div>
 
         {/* Notifications */}
@@ -172,6 +185,11 @@ export default function SettingsPage() {
               <p className="text-white font-medium">
                 {health?.version || "Unavailable"}
               </p>
+              {health?.commit && (
+                <p className="text-xs text-slate-500 mt-1">
+                  commit <code>{health.commit}</code>
+                </p>
+              )}
             </div>
             <div className="p-4 rounded-lg bg-slate-800/50">
               <p className="text-xs text-slate-500 mb-1">Dashboard Version</p>

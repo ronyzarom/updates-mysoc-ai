@@ -1,12 +1,14 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Release } from "@/lib/api";
+import { api, type Release, type SealStatus } from "@/lib/api";
 import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle, Search, ShieldCheck, ShieldAlert } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useRef, useEffect } from "react";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui";
 import { RequireRole } from "@/lib/auth-context";
+import { SealBadge, SEAL_LABELS } from "@/components/SealBadge";
+import { sealStatusOf } from "@/lib/derive";
 
 interface UploadFormData {
   product: string;
@@ -41,6 +43,7 @@ export default function ReleasesPage() {
   });
 
   const [filter, setFilter] = useState("");
+  const [sealFilter, setSealFilter] = useState<SealStatus | "all">("all");
   const [showUploadModal, setShowUploadModal] = useState(false);
   useEffect(() => {
     if (!showUploadModal) return;
@@ -213,8 +216,9 @@ export default function ReleasesPage() {
 
   const filteredReleases = releases?.filter(
     (release) =>
-      release.product_name.toLowerCase().includes(filter.toLowerCase()) ||
-      release.version.toLowerCase().includes(filter.toLowerCase())
+      (release.product_name.toLowerCase().includes(filter.toLowerCase()) ||
+        release.version.toLowerCase().includes(filter.toLowerCase())) &&
+      (sealFilter === "all" || sealStatusOf(release) === sealFilter)
   );
 
   // Group by product
@@ -255,7 +259,7 @@ export default function ReleasesPage() {
       </div>
 
       {/* Filter */}
-      <div>
+      <div className="flex flex-wrap gap-3">
         <input
           type="text"
           placeholder="Search releases..."
@@ -263,6 +267,19 @@ export default function ReleasesPage() {
           onChange={(e) => setFilter(e.target.value)}
           className="w-full max-w-md px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
         />
+        <select
+          aria-label="Filter by issuer seal"
+          value={sealFilter}
+          onChange={(e) => setSealFilter(e.target.value as SealStatus | "all")}
+          className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+        >
+          <option value="all">All seal states</option>
+          {(Object.keys(SEAL_LABELS) as SealStatus[]).map((status) => (
+            <option key={status} value={status}>
+              {SEAL_LABELS[status]}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Releases */}
@@ -314,6 +331,7 @@ export default function ReleasesPage() {
                         <th>Channel</th>
                         <th>Target Groups</th>
                         <th>Integrity</th>
+                        <th>Issuer seal</th>
                         <th>Size</th>
                         <th>Released</th>
                         <th>Notes</th>
@@ -386,6 +404,9 @@ export default function ReleasesPage() {
                                 unsigned
                               </span>
                             )}
+                          </td>
+                          <td>
+                            <SealBadge release={release} />
                           </td>
                           <td className="text-slate-300">
                             {formatBytes(artifact?.size ?? release.artifact_size)}
@@ -465,13 +486,20 @@ export default function ReleasesPage() {
                 <EmptyState
                   icon={<Search className="w-12 h-12" />}
                   title="No matching releases"
-                  description={`No releases match "${filter}". Try a different search.`}
+                  description={
+                    sealFilter === "all"
+                      ? `No releases match "${filter}". Try a different search.`
+                      : `No ${SEAL_LABELS[sealFilter].toLowerCase()} releases match the current search.`
+                  }
                   action={
                     <button
-                      onClick={() => setFilter("")}
+                      onClick={() => {
+                        setFilter("");
+                        setSealFilter("all");
+                      }}
                       className="btn btn-secondary"
                     >
-                      Clear search
+                      Clear filters
                     </button>
                   }
                 />
