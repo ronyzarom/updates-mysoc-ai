@@ -17,7 +17,7 @@ implemented, that is called out explicitly in
 | 1.8.0   | 2026-08-19 | Cascade distribution: mandatory `X-License-Key` on agent endpoints, ed25519 release signing + `GET /api/v1/signing-key`, operator admin API, heartbeat children rollup, relay protocol. See Section 9. |
 | 1.15.0  | 2026-09-05 | Additive `products[].telemetry` (SWF delivery counters) on heartbeat / children rollup; stored in `last_heartbeat_data`, no migration. Decoded/re-encoded at each relay hop, so relays + server need 1.15.0+ to preserve it. See §7.3 and [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md). |
 | 1.16.0  | 2026-09-08 | Additive delivery-destination fields inside `products[].telemetry`: `target_endpoint`, `target_resolved_ip`, `target_tls`, `target_sni`, `last_connect_ok_utc` (read-only diagnostics, no control surface). Telemetry timestamps are now omitted (not zero-valued) when absent after re-encode. No migration; relays + server need 1.16.0+ to preserve the new fields. See §7.3 and [Relay 1.16.0 Contract Addendum](RELAY-1.16.0-CONTRACT-ADDENDUM.md). |
-| 1.16.2  | 2026-09-26 | Issuer sealing: optional `issuer_signature` / `issuer_key_id` on `POST /releases`, checked and recorded as `seal_status` (never rejected); re-upload of an existing product+version and overwrite through `PUT /releases/{product}/{version}/{filename}` return `409`; trusted issuer key admin API; `GET /health` adds `commit`. Additive migration 018. See §9.6. |
+| 1.16.2  | 2026-09-26 | Issuer sealing: optional `issuer_signature` / `issuer_key_id` on `POST /releases`, checked and recorded as `seal_status` (never rejected); re-upload of an existing product+version and overwrite through `PUT /releases/{product}/{version}/{filename}` return `409`; trusted issuer key admin API; `GET /health` adds `commit`. Migrations 018 (`releases.channel` to VARCHAR(64), already applied in production) and additive 019. See §9.6. |
 
 ---
 
@@ -186,7 +186,7 @@ curl https://updates.mysoc.ai/health
 ```
 
 ```json
-{ "status": "ok", "version": "1.16.2.2", "commit": "0123456789ab" }
+{ "status": "ok", "version": "1.16.2.3", "commit": "0123456789ab" }
 ```
 
 `commit` is the short git commit the binary was built from; a `-dirty` suffix

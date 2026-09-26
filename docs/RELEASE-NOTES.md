@@ -40,7 +40,7 @@ updaters are unchanged, because every issuer seals with today's release key.
 
 ### Upgrade and rollback
 
-Additive migration `018_issuer_sealing` (new table, four defaulted columns).
+Migration `018_release_channel_length` (already applied in production by hand on 2026-09-18; byte-identical, so it is skipped there) and additive migration `019_issuer_sealing` (new table, four defaulted columns).
 Rolling back to 1.16.1.19 needs no schema change: it ignores the new columns
 and its inserts read as `unsealed`.
 
