@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document Version** | 2.0.0 |
+| **Document Version** | 2.1.0 |
 | **Last Updated** | September 26, 2026 |
 | **Status** | Production |
 | **Maintained By** | SiemCore Platform Team |
@@ -13,6 +13,7 @@
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 2.1.0 | 2026-09-26 | Updates Team | SiemCore review: four live rings (alpha incl. bench, beta cloud, stable = customer hosts seetech/danshar, production cyfox-il) with live-registry check; promotion by widening target_groups with approval and soak; first upload alpha only (never "include stable"); releases-scoped upload key; universal bundle artifact and 4-part versions; forward-only rollback; withdrawing does not roll back applied hosts; no deploy-all |
 | 2.0.0 | 2026-09-26 | Updates Team | Cascade: SiemCore servers run `siemcore-cascade-updater` and talk only to the operator's mysoc relay; replaced the retired v2 `siemcore-updater` install, commands and paths; credentials, troubleshooting and API reference for the relay path |
 | 1.5.0 | 2026-02-03 | SiemCore Team | Added API key requirement, target groups fix (include "stable"), dashboard features (edit/delete), semantic versioning |
 | 1.4.0 | 2026-01-31 | SiemCore Team | Added complete update workflow, upload-release.sh script, step-by-step commands |
@@ -66,111 +67,62 @@ The Updates Server provides centralized management for all SiemCore deployments:
 
 | Rule | Description |
 |------|-------------|
-| **Testing only: direct deploy** | `deploy-all.sh` is allowed **only** on `testing.siemcore.ai` |
-| **Updates Server for all others** | `cloud.siemcore.ai` and `cyfox-il.siemcore.ai` receive releases **only** via the Updates Server |
-| **Production consent gate** | Any action that changes `cyfox-il.siemcore.ai` version requires **explicit consent** |
-| **SSH is break-glass only** | SSH access to `cloud`/`cyfox-il` is for verification and emergency troubleshooting only |
-
-> **Important:** Production instances (`cyfox-il.siemcore.ai`) must have `auto_update: false`. Rollout requires deliberate action in the dashboard.
+| **All upgrades through the cascade** | Every SiemCore host, testing included, is upgraded by publishing to the Updates Server. `deploy-all.sh` is not used; `deploy.sh` is greenfield bring-up only. |
+| **Promotion needs approval** | Widening a release beyond `alpha` (to `beta`, `stable`, `production`) requires approval and a soak at each step. Production requires **explicit consent**. |
+| **Preserve holds** | Instances held with auto-update off (for example the bench host and pod nodes under qualification) stay held until Rony removes the hold. |
+| **SSH is break-glass only** | SSH to customer hosts is for verification and emergency troubleshooting only. Host-local `update.sh --version` is break-glass for when the cascade cannot deliver. |
 
 ---
 
 ## SiemCore Environments
 
-SiemCore operates three server environments:
+SiemCore hosts are assigned to four rollout rings (update groups). Ring
+membership and auto-update policy change over time: **always check the live
+registry on the dashboard (Instances) before publishing or promoting.** The
+snapshot below is from 2026-09-26 and only shows the shape:
 
-| Environment | Server | Purpose | Update Group |
-|-------------|--------|---------|--------------|
-| **Testing** | `testing.siemcore.ai` | Internal testing and development | `alpha` |
-| **Staging** | `cloud.siemcore.ai` | Pre-production validation | `beta` |
-| **Production** | `cyfox-il.siemcore.ai` | Live customer deployments | `production` |
+| Ring | Hosts (instance id) | Notes |
+|------|---------------------|-------|
+| `alpha` | `siemcore-testing-01`, `siemcore-bench-20260912-01`, Bezeq pod test nodes, other qualification nodes | Not testing alone: bench is in alpha. Bench is held (auto-update off). |
+| `beta` | `siemcore-cloud-01` (cloud.siemcore.ai) | Check its live auto-update policy. |
+| `stable` | `siemcore-seetech`, `siemcore-danshar` | Two **customer** hosts. |
+| `production` | `siemcore-cyfox-il` (cyfox-il.siemcore.ai) | Live customer environment; explicit consent. Check its live auto-update policy. |
 
-### Environment Details
-
-> **Security Note:** Never commit real license keys to documentation or repositories. Retrieve keys from the dashboard at https://updates.mysoc.ai/licenses.
-
-#### Testing (`testing.siemcore.ai`)
-
-- **Purpose:** Internal development and QA testing
-- **Update Group:** `alpha`
-- **Deployment:** Direct deploy (`deploy-all.sh`) allowed, OR Updates Server
-- **Auto-Update:** Enabled
-- **Instance ID:** `siemcore-testing`
-
-Update group and auto-update are set on the instance in the dashboard
+Update group and auto-update are set per instance on the dashboard
 (**Instances → Update Settings**), not in the updater config. The updater
 config (`/etc/siemcore-cascade-updater/config.yaml`) points only at the
 operator's mysoc relay ([Installing the Updater](#installing-the-updater)).
 
-#### Staging (`cloud.siemcore.ai`)
+While an instance's auto-update is off, the server withholds product offers
+from it (updater self-updates still flow). There are no maintenance-window
+fields.
 
-- **Purpose:** Pre-production validation, customer demos
-- **Update Group:** `beta`
-- **Deployment:** Updates Server only (no deploy-all)
-- **Auto-Update:** Enabled
-- **Instance ID:** `siemcore-staging`
-
-Set on the dashboard: update group `beta`, auto-update on.
-
-#### Production (`cyfox-il.siemcore.ai`)
-
-- **Purpose:** Live customer environment
-- **Update Group:** `production`
-- **Deployment:** Updates Server only; requires explicit consent
-- **Auto-Update:** Disabled (manual approval required)
-- **Instance ID:** `siemcore-production`
-
-Set on the dashboard: update group `production`, auto-update **off**. While
-auto-update is off the server withholds product offers from this instance
-(updater self-updates still flow). There are no maintenance-window fields;
-schedule the consented update by turning auto-update on at the agreed time.
+> **Security Note:** Never commit keys to documentation or repositories.
 
 ### Recommended Rollout Flow
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│     Testing     │     │     Staging     │     │   Production    │
-│ testing.siemcore│     │ cloud.siemcore  │     │ cyfox-il.siemcore│
-│                 │     │                 │     │                 │
-│  Update Group:  │     │  Update Group:  │     │  Update Group:  │
-│     alpha       │     │      beta       │     │   production    │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-    Day 1: Deploy          Day 3: Deploy          Day 7+: Deploy
-    Auto-update: ON        Auto-update: ON        Auto-update: OFF
-                                                  (manual approval)
+ upload           approve + soak     approve + soak     explicit consent
+target_groups ──► add beta ────────► add stable ──────► add production
+  = [alpha]       (cloud)            (seetech, danshar) (cyfox-il)
 ```
+
+Widening `target_groups` **is** the promotion act. Instances in the added ring
+receive the offer on their next check if their auto-update is on. Turning
+auto-update on is an extra gate only for an instance whose live policy is off;
+it is not the standing trigger for production.
 
 ### Setting Update Groups
 
 In the dashboard (https://updates.mysoc.ai/instances):
 
 1. Click on an instance
-2. Under **Update Settings**, select the appropriate group:
-   - `testing.siemcore.ai` → **alpha**
-   - `cloud.siemcore.ai` → **beta**
-   - `cyfox-il.siemcore.ai` → **production**
+2. Under **Update Settings**, select the ring (see the table above)
 3. Click **Save**
 
-Or via API:
-
-```bash
-# Set testing to alpha
-curl -X PUT https://updates.mysoc.ai/api/v1/instances/{instance-id}/update-group \
-  -H "Content-Type: application/json" \
-  -d '{"group": "alpha"}'
-
-# Set staging to beta
-curl -X PUT https://updates.mysoc.ai/api/v1/instances/{instance-id}/update-group \
-  -H "Content-Type: application/json" \
-  -d '{"group": "beta"}'
-
-# Set production to production
-curl -X PUT https://updates.mysoc.ai/api/v1/instances/{instance-id}/update-group \
-  -H "Content-Type: application/json" \
-  -d '{"group": "production"}'
-```
+The equivalent API (`PUT /api/v1/instances/{id}/update-group` and
+`/auto-update`) requires admin authentication; ring assignment is an
+administrator action, not something the release-upload key can do.
 
 ---
 
@@ -371,12 +323,13 @@ Assign the instance to a rollout group:
 
 | Group | Description | Example |
 |-------|-------------|---------|
-| `alpha` | Internal testing, receives updates first | `testing.siemcore.ai` |
-| `beta` | Pre-production validation | `cloud.siemcore.ai` |
-| `stable` | Default group for most instances | Most instances |
-| `production` | Customer systems, requires explicit consent | `cyfox-il.siemcore.ai` |
+| `alpha` | Internal testing and qualification, receives releases first | `siemcore-testing-01`, bench |
+| `beta` | Pre-production validation | `siemcore-cloud-01` |
+| `stable` | Customer hosts | `siemcore-seetech`, `siemcore-danshar` |
+| `production` | Live customer environment, explicit consent | `siemcore-cyfox-il` |
 
-> **Note:** Production instances should always have `auto_update: false`. Updates require deliberate action in the dashboard.
+New nodes enroll in `stable` with auto-update off. `stable` holds customer
+hosts, so move a new node to its intended ring before turning auto-update on.
 
 #### Deleting Stale Instances
 
@@ -397,7 +350,7 @@ Two separate concepts control update delivery:
 | Concept | Purpose | Values |
 |---------|---------|--------|
 | **Channel** | Build quality/stability of the release | `stable`, `beta`, `nightly` |
-| **Update Group** | Which instances receive the release (rollout ring) | `alpha`, `beta`, `production` |
+| **Update Group** | Which instances receive the release (rollout ring) | `alpha`, `beta`, `stable`, `production` |
 
 - **Channel** = "What kind of build is this?" (stable releases vs experimental)
 - **Update Group** = "Who gets this release?" (internal → pre-prod → customers)
@@ -412,33 +365,30 @@ Staged rollouts let you control which instances receive updates by targeting spe
 
 ### How It Works
 
-1. Upload a new release with target groups (e.g., `alpha`)
-2. Only instances in the `alpha` group receive the update
-3. After testing, expand target groups to include `beta`
-4. After validation, expand to `production` (requires consent)
+1. Upload a new release with `target_groups=alpha` only
+2. Only instances in the `alpha` ring receive it
+3. After approval and a soak, add `beta`
+4. After approval and a soak, add `stable` (customer hosts)
+5. With explicit consent, add `production`
 
 ### Rollout Strategy Example
 
 ```
-Day 1:  Release v2.0.1 → target_groups: [alpha, stable]
-        ↳ testing.siemcore.ai receives update automatically
-        ↳ (include "stable" so default instances can see it)
-
-Day 3:  Update release → target_groups: [alpha, beta, stable]
-        ↳ cloud.siemcore.ai receives update automatically
-
-Day 7+: Update release → target_groups: [alpha, beta, stable, production]
-        ↳ cyfox-il.siemcore.ai sees update available
-        ↳ Requires manual approval (auto_update: false)
+Upload:     target_groups: [alpha]
+Promote 1:  target_groups: [alpha, beta]                     ← approval + soak
+Promote 2:  target_groups: [alpha, beta, stable]             ← approval + soak
+Promote 3:  target_groups: [alpha, beta, stable, production] ← explicit consent
 ```
 
-> **Important:** Always include `stable` in target groups! Most instances default to `update_group: stable`.
+> **Important:** Never add `stable` on the first upload: `stable` is the
+> customer ring (seetech, danshar). And never upload without `target_groups`:
+> an omitted or empty list on upload defaults to **all four rings**.
 
 ### Checking Update Availability
 
 An instance receives an update only if:
 
-1. ✅ `auto_update_enabled` is `true` for the instance (or manual trigger)
+1. ✅ `auto_update_enabled` is `true` for the instance
 2. ✅ Instance's `update_group` is in the release's `target_groups`
 3. ✅ Release version is newer than installed version
 
@@ -448,84 +398,67 @@ An instance receives an update only if:
 
 | Rule | Description |
 |------|-------------|
-| **Immutability** | Releases are immutable once published. Never replace an artifact for the same version. |
-| **Rollback** | A failed apply runs the product's rollback phase inside `updater/apply` ([Update Entrypoint Contract](UPDATE-ENTRYPOINT-CONTRACT.md)). To stop a bad release spreading, remove its target groups. Re-uploading an existing version returns `409`. |
-| **Schema changes** | Database/schema changes must be backward-compatible (expand/contract pattern). |
-| **Version format** | Use semantic versioning: `MAJOR.MINOR.PATCH` (e.g., `2.0.17`) |
-| **Version comparison** | Server always returns the **highest** semantic version. Uploading older versions won't cause downgrades. |
-
-### Semantic Version Comparison
-
-The Updates Server compares versions numerically:
-- `2.0.0` > `1.9.9` (major version wins)
-- `2.1.0` > `2.0.9` (minor version wins)
-- `2.0.17` > `2.0.2` (patch version compared as numbers, not strings)
-
-If an instance has `v2.0.17` and you upload `v2.0.2`, the instance will **not** receive a downgrade.
+| **Immutability** | Releases are immutable once published; re-uploading an existing version returns `409`. Every rebuilt candidate gets a new build number. |
+| **Rollback** | A failed apply runs the rollback phase of SiemCore's `updater/apply` ([Update Entrypoint Contract](UPDATE-ENTRYPOINT-CONTRACT.md)): the executor flips the `current` symlink back and re-runs the wrapper. It is **forward-only**: no down-migration and no database restore; the previous binary runs against the schema the failed release already migrated (rollback-compat is set on the rollback phase only). |
+| **Stopping a bad release** | Setting its target groups to `[]` stops new offers. It does **not** roll back hosts that already applied it successfully; they stay on it until a newer build is published. |
+| **Schema changes** | Database/schema changes must be backward-compatible (expand/contract pattern), because rollback never down-migrates. |
+| **Version format** | `MAJOR.MINOR.PATCH.BUILD` (e.g., `3.3.152.57`) |
+| **Version comparison** | The server compares every component numerically and offers the **highest** version; uploading an older version never causes a downgrade. |
 
 ---
 
 ## Uploading Releases
 
-### API Key Requirement
+### Upload Key
 
-All release uploads require the **Admin API Key**. Get it from the Updates Server administrator.
+Upload with the SiemCore **releases-scoped** key
+(`siemcore-team-release-upload`), kept in the SiemCore workspace at
+`keys/SIEMCORE-RELEASE-UPLOAD-KEY.txt`. Never upload with the server's master
+admin key. The releases scope is not limited to the `siemcore` product on the
+server, so only touch `siemcore` releases.
+
+### The Artifact
+
+The release artifact is the universal bundle
+`siemcore-universal-<MAJOR.MINOR.PATCH.BUILD>.tar.gz`, uploaded as
+`product=siemcore`, `channel=stable`. Not a raw Linux binary.
+
+### Using cURL
 
 ```bash
-# Store the API key securely
-echo "mysoc-admin-key-XXXXXXXX" > keys/UPDATES-API-KEY.txt
-chmod 600 keys/UPDATES-API-KEY.txt
+KEY=$(tr -d '[:space:]' < keys/SIEMCORE-RELEASE-UPLOAD-KEY.txt)
+curl -fsS -X POST https://updates.mysoc.ai/api/v1/releases \
+  -H "X-API-Key: $KEY" \
+  -F "product=siemcore" \
+  -F "version=3.3.152.57" \
+  -F "channel=stable" \
+  -F "target_groups=alpha" \
+  -F "release_notes=…" \
+  -F "artifact=@dist/siemcore-universal-3.3.152.57.tar.gz"
 ```
 
 ### Using the Upload Script
 
+`scripts/upload-release.sh` (in the updates-mysoc-ai repo) works too, but
+**always pass `--groups alpha`**: without `--groups` it sends no target
+groups, which the server treats as all four rings.
+
 ```bash
-./scripts/upload-release.sh \
-  --product siemcore \
-  --version 2.0.1 \
-  --channel stable \
-  --groups alpha,beta,stable,production \
-  --file ./bin/siemcore-linux-amd64 \
-  --api-key "$(cat keys/UPDATES-API-KEY.txt)" \
-  --notes "Bug fixes and performance improvements"
+./scripts/upload-release.sh --product siemcore --version 3.3.152.57 \
+  --file dist/siemcore-universal-3.3.152.57.tar.gz \
+  --groups alpha --api-key "$KEY" --notes "…"
 ```
 
-> **Important:** Always include `stable` in target groups! Most instances have `update_group: stable` by default. If you omit it, those instances won't see the update.
+### Promoting an Existing Release
 
-### Script Options
-
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--product` | Yes | Product name (e.g., `siemcore`) |
-| `--version` | Yes | Semantic version (e.g., `2.0.1`) |
-| `--channel` | No | Release channel (default: `stable`) |
-| `--groups` | Yes | Comma-separated target groups (include `stable`!) |
-| `--file` | Yes | Path to the release artifact |
-| `--api-key` | Yes | Admin API key for authentication |
-| `--notes` | No | Release notes (markdown supported) |
-
-### Using cURL Directly
+After approval and a soak, widen the target groups (see
+[Staged Rollouts](#staged-rollouts)):
 
 ```bash
-curl -X POST https://updates.mysoc.ai/api/v1/releases \
-  -H "X-API-Key: YOUR_ADMIN_API_KEY" \
-  -F "product=siemcore" \
-  -F "version=2.0.1" \
-  -F "channel=stable" \
-  -F "target_groups=alpha,beta,stable,production" \
-  -F "release_notes=Bug fixes and improvements" \
-  -F "artifact=@./bin/siemcore-linux-amd64"
-```
-
-### Updating Target Groups for Existing Release
-
-To expand rollout to more groups (or fix missing groups):
-
-```bash
-curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1/target-groups \
-  -H "X-API-Key: YOUR_ADMIN_API_KEY" \
+curl -fsS -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/3.3.152.57/target-groups \
+  -H "X-API-Key: $KEY" \
   -H "Content-Type: application/json" \
-  -d '{"target_groups": ["alpha", "beta", "stable", "production"]}'
+  -d '{"target_groups": ["alpha", "beta"]}'
 ```
 
 ### Editing Releases via Dashboard
@@ -538,17 +471,12 @@ You can also edit releases directly in the dashboard:
 
 ### Deleting Releases
 
-To delete a release (removes from database and stops availability):
+Prefer **withdrawing** a bad release (target groups `[]`) over deleting it:
+withdrawal keeps the record and the audit trail. Deleting removes the release
+from the database and is an administrator decision:
 
-1. Go to **Releases** → Click the **trash icon** on any release
+1. Go to **Releases** → Click the **trash icon** on the release
 2. Confirm deletion in the popup
-
-Or via API:
-
-```bash
-curl -X DELETE https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
-  -H "X-API-Key: YOUR_ADMIN_API_KEY"
-```
 
 ---
 
@@ -581,92 +509,47 @@ curl -X DELETE https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
 
 | Step | Action | Who | Command |
 |------|--------|-----|---------|
-| 1 | Build binary | Developer | `make build` |
-| 2 | Upload to alpha | Developer | `./scripts/upload-release.sh --groups alpha` |
-| 3 | Testing auto-updates | Automatic | (heartbeat detects update) |
-| 4 | Verify on testing | Developer | Dashboard version + `journalctl -u siemcore-cascade-updater` |
-| 5 | Expand to beta | Developer | API call to add beta group |
-| 6 | Cloud auto-updates | Automatic | (heartbeat detects update) |
-| 7 | Verify on cloud | Developer | Dashboard version + updater log |
-| 8 | Expand to production | Developer | API call to add production |
-| 9 | **Manual trigger** | Developer | Turn auto-update on for the cyfox-il instance in the dashboard (consent required) |
+| 1 | Build the universal bundle | SiemCore | `siemcore-universal-<version>.tar.gz` |
+| 2 | Upload to alpha only | SiemCore | `target_groups=alpha` with the releases-scoped key |
+| 3 | Alpha hosts with auto-update on apply it | Automatic | (next update check) |
+| 4 | Verify alpha, soak | SiemCore | Dashboard version and last result, updater log |
+| 5 | Promote to beta | Approval | Add `beta` to target groups |
+| 6 | Verify cloud, soak | SiemCore | Dashboard version and last result |
+| 7 | Promote to stable | Approval | Add `stable` (seetech, danshar) |
+| 8 | Verify customer hosts, soak | SiemCore | Dashboard |
+| 9 | Promote to production | **Explicit consent** | Add `production` (cyfox-il); if that instance's live auto-update is off, turning it on is the extra gate |
 
-### Step 1: Upload Release
+### Upload
 
-```bash
-# Upload to alpha group first (testing only)
-# Include "stable" so default instances can see it
-./scripts/upload-release.sh \
-  --product siemcore \
-  --version 2.0.1 \
-  --file ./bin/siemcore-linux-amd64 \
-  --channel stable \
-  --groups alpha,stable \
-  --api-key "$(cat keys/UPDATES-API-KEY.txt)" \
-  --notes "Bug fixes and performance improvements"
-```
+See [Uploading Releases](#uploading-releases): universal bundle, releases-scoped
+key, `target_groups=alpha` only.
 
-### Step 2: Verify on Testing
+### Verify
 
-The testing instance's version and last update result appear on its dashboard
-page within a heartbeat or two. To watch the updater on the host:
+Each host's version and last update result appear on its dashboard page within
+a heartbeat or two. To watch the updater on a host:
 
 ```bash
 ssh user@testing.siemcore.ai "sudo journalctl -u siemcore-cascade-updater -f"
 ```
 
-### Step 3: Expand to Beta (Cloud)
+### Promote
 
 ```bash
-# Add beta group (keep stable for default instances)
-curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1/target-groups \
-  -H "X-API-Key: $(cat keys/UPDATES-API-KEY.txt)" \
-  -H "Content-Type: application/json" \
-  -d '{"target_groups": ["alpha", "beta", "stable"]}'
+KEY=$(tr -d '[:space:]' < keys/SIEMCORE-RELEASE-UPLOAD-KEY.txt)
+# after approval + soak: add beta, later stable, finally production (consent)
+curl -fsS -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/3.3.152.57/target-groups \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"target_groups": ["alpha", "beta"]}'
 ```
 
-### Step 4: Expand to Production
+### Withdraw
 
 ```bash
-# Add production group (instances will see update available)
-curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1/target-groups \
-  -H "X-API-Key: $(cat keys/UPDATES-API-KEY.txt)" \
-  -H "Content-Type: application/json" \
-  -d '{"target_groups": ["alpha", "beta", "stable", "production"]}'
-```
-
-### Step 5: Trigger Production Update (Manual)
-
-`cyfox-il.siemcore.ai` has auto-update off, so the server withholds the offer.
-With explicit consent, turn auto-update on for that instance in the dashboard
-(**Instances → cyfox-il → Update Settings**). The next update check receives
-the offer and applies it. Turn auto-update off again afterwards if production
-should stay gated.
-
-### Quick Reference Commands
-
-```bash
-# Upload release (include stable so default instances see it)
-./scripts/upload-release.sh \
-  --product siemcore \
-  --version 2.0.1 \
-  --file ./bin/siemcore-linux-amd64 \
-  --groups alpha,beta,stable,production \
-  --api-key "$(cat keys/UPDATES-API-KEY.txt)"
-
-# View update logs on a SiemCore server
-ssh user@server "sudo journalctl -u siemcore-cascade-updater -f"
-
-# Stop a bad release from spreading: remove its target groups
-curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1/target-groups \
-  -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/json" \
+# stops new offers; hosts that already applied it stay on it until a newer build
+curl -fsS -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/3.3.152.57/target-groups \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
   -d '{"target_groups": []}'
-
-# Edit release via API (e.g., add missing groups)
-curl -X PUT https://updates.mysoc.ai/api/v1/releases/siemcore/2.0.1 \
-  -H "X-API-Key: YOUR_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"target_groups": ["alpha", "beta", "stable", "production"]}'
 ```
 
 ---
@@ -717,8 +600,9 @@ Rollup-reported nodes go offline when their relay stops seeing heartbeats
 
 2. **Check update group matches:**
    - Instance's `update_group` must be in the release's `target_groups`
-   - **Common issue:** Release has `["alpha", "beta", "production"]` but instance has `update_group: stable`
-   - **Fix:** Add `stable` to the release's target groups via dashboard or API
+   - **Common issue:** a new node still sits in `stable` (the enrollment
+     default). Move it to its intended ring on the dashboard; do not add
+     `stable` to a release to reach it, because `stable` is the customer ring.
 
 3. **Check version comparison:**
    - Update only shows if release version is **higher** than installed version
@@ -845,9 +729,9 @@ the operator's platform key.
 
 ```json
 {
-  "instance_id": "siemcore-production",
-  "product": "siemcore-api",
-  "current_version": "1.4.2",
+  "instance_id": "siemcore-cyfox-il",
+  "product": "siemcore",
+  "current_version": "3.3.152.56",
   "channel": "stable"
 }
 ```
@@ -857,14 +741,14 @@ the operator's platform key.
 ```json
 {
   "update_available": true,
-  "current_version": "2.0.16",
-  "latest_version": "2.0.17",
-  "download_url": "/api/v1/releases/siemcore/2.0.17/download",
-  "update_url": "/api/v1/releases/siemcore/2.0.17/download",
+  "current_version": "3.3.152.56",
+  "latest_version": "3.3.152.57",
+  "download_url": "/api/v1/releases/siemcore/3.3.152.57/download",
+  "update_url": "/api/v1/releases/siemcore/3.3.152.57/download",
   "sha256": "d6ee561126c8ba6821bb4036332c621a66e41a7b23536b2fa8be42d83dd25d1a",
-  "release_notes": "Bug fixes and improvements",
+  "release_notes": "…",
   "channel": "stable",
-  "update_group": "stable"
+  "update_group": "production"
 }
 ```
 
