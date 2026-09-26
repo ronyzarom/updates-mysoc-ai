@@ -202,5 +202,6 @@ func (s *Server) handleSigningKey(w http.ResponseWriter, r *http.Request) {
 		"signing_enabled": true,
 		"algorithm":       "ed25519",
 		"public_key":      pub,
+		"key_id":          svc.SigningKeyID(),
 	})
 }

@@ -5,11 +5,15 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/storage"
@@ -65,6 +69,7 @@ func isNewerVersion(currentVersion, newVersion string) bool {
 // Service handles release business logic
 type Service struct {
 	repo       *Repository
+	keys       *KeyRepository
 	storage    storage.Storage
 	signingKey ed25519.PrivateKey // nil disables signing
 }
@@ -73,6 +78,7 @@ type Service struct {
 func NewService(db *database.DB, store storage.Storage) *Service {
 	return &Service{
 		repo:    NewRepository(db),
+		keys:    NewKeyRepository(db),
 		storage: store,
 	}
 }
@@ -90,6 +96,14 @@ func (s *Service) SigningPublicKeyHex() string {
 	return signing.PublicKeyHex(s.signingKey)
 }
 
+// SigningKeyID returns the key id of the server's release key, or empty.
+func (s *Service) SigningKeyID() string {
+	if s.signingKey == nil {
+		return ""
+	}
+	return KeyID(s.signingKey.Public().(ed25519.PublicKey))
+}
+
 // CreateReleaseRequest is the request to create a release
 type CreateReleaseRequest struct {
 	ProductName       string
@@ -102,42 +116,74 @@ type CreateReleaseRequest struct {
 	FileSize          int64
 	File              io.Reader
 	ArtifactKind      string
+	// Optional issuer seal over the canonical release message.
+	IssuerSignature string
+	IssuerKeyID     string
 }
 
-// CreateRelease creates a new release
+// CreateRelease creates a new release. An existing product+version is never
+// overwritten (ErrReleaseExists). The issuer seal is checked and recorded but
+// never causes a rejection.
 func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (*types.Release, error) {
 	if req.ArtifactKind == "update" {
 		return nil, fmt.Errorf("update artifacts require artifact_metadata or paired artifact_variants")
 	}
-	// Calculate checksum while saving
-	hasher := sha256.New()
-	teeReader := io.TeeReader(req.File, hasher)
-
-	// Save artifact to storage
-	artifactPath, err := s.storage.Save(req.ProductName, req.Version, req.Filename, teeReader)
+	exists, err := s.repo.existsExact(ctx, req.ProductName, req.Version, req.ArtifactKind)
 	if err != nil {
+		return nil, fmt.Errorf("failed to check existing release: %w", err)
+	}
+	if exists {
+		return nil, ErrReleaseExists
+	}
+
+	// Stage under a unique name: only the upload that wins the database insert
+	// moves its bytes into place, so a losing concurrent upload cannot replace
+	// the published artifact.
+	hasher := sha256.New()
+	staged := ".staging-" + uuid.NewString()
+	if _, err := s.storage.Save(req.ProductName, req.Version, staged, io.TeeReader(req.File, hasher)); err != nil {
 		return nil, fmt.Errorf("failed to save artifact: %w", err)
 	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = s.storage.Delete(req.ProductName, req.Version, staged)
+		}
+	}()
 
 	checksum := hex.EncodeToString(hasher.Sum(nil))
 
+	activeKeys, err := s.keys.Active(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seal := EvaluateSeal(activeKeys, req.ProductName, req.Version, checksum, req.IssuerSignature, req.IssuerKeyID)
+	logSeal(req.ProductName, req.Version, seal)
+
+	// The fleet verifies release.Signature. A verified seal is that signature;
+	// otherwise the server keeps signing during the transition.
 	var signature string
-	if s.signingKey != nil {
+	if seal.Status == SealSealed {
+		signature = seal.Signature
+	} else if s.signingKey != nil {
 		signature = signing.Sign(s.signingKey, req.ProductName, req.Version, checksum)
 	}
 
-	// Create release record
 	release := &types.Release{
 		ProductName:       req.ProductName,
 		Version:           req.Version,
 		Channel:           req.Channel,
-		ArtifactPath:      artifactPath,
+		ArtifactPath:      s.storage.GetPath(req.ProductName, req.Version, req.Filename),
 		ArtifactSize:      req.FileSize,
 		Checksum:          checksum,
 		Signature:         signature,
 		ReleaseNotes:      req.ReleaseNotes,
 		MinUpdaterVersion: req.MinUpdaterVersion,
 		TargetGroups:      req.TargetGroups,
+		SealStatus:        seal.Status,
+		Issuer:            seal.Issuer,
+		IssuerKeyID:       seal.KeyID,
+		IssuerSignature:   seal.Signature,
 		Manifest: types.Manifest{
 			Product: req.ProductName,
 			Version: req.Version,
@@ -154,12 +200,52 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 	}
 
 	if err := s.repo.Create(ctx, release); err != nil {
-		// Try to clean up the artifact
-		s.storage.Delete(req.ProductName, req.Version, req.Filename)
+		if errors.Is(err, ErrReleaseExists) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to create release: %w", err)
 	}
+	if _, err := s.storage.Rename(req.ProductName, req.Version, staged, req.Filename); err != nil {
+		_ = s.repo.Delete(ctx, release.ID)
+		return nil, fmt.Errorf("failed to publish artifact: %w", err)
+	}
+	committed = true
 
 	return release, nil
+}
+
+func logSeal(product, version string, seal SealResult) {
+	switch seal.Status {
+	case SealInvalid:
+		log.Printf("ALERT issuer-seal: INVALID seal on %s %s (issuer=%s key_id=%q); accepted as unsealed and server-signed", product, version, seal.Issuer, seal.KeyID)
+	case SealUnknownKey:
+		log.Printf("WARNING issuer-seal: unknown key on %s %s (issuer=%s key_id=%q); accepted as unsealed and server-signed", product, version, seal.Issuer, seal.KeyID)
+	default:
+		log.Printf("issuer-seal: %s %s %s (issuer=%s key_id=%q)", product, version, seal.Status, seal.Issuer, seal.KeyID)
+	}
+}
+
+// ListTrustedKeys returns the trusted key registry.
+func (s *Service) ListTrustedKeys(ctx context.Context) ([]TrustedKey, error) {
+	return s.keys.List(ctx)
+}
+
+// AddTrustedKey registers a key issuers may seal with.
+func (s *Service) AddTrustedKey(ctx context.Context, publicKeyHex, issuer, label, createdBy string) (*TrustedKey, error) {
+	return s.keys.Add(ctx, publicKeyHex, issuer, label, createdBy)
+}
+
+// RetireTrustedKey stops accepting seals from a key.
+func (s *Service) RetireTrustedKey(ctx context.Context, id string) (*TrustedKey, error) {
+	return s.keys.Retire(ctx, id)
+}
+
+// EnsureSigningKeyTrusted seeds the registry with the server's release key.
+func (s *Service) EnsureSigningKeyTrusted(ctx context.Context) (bool, error) {
+	if s.signingKey == nil {
+		return false, nil
+	}
+	return s.keys.EnsureKey(ctx, s.signingKey.Public().(ed25519.PublicKey), "server release key")
 }
 
 // GetRelease retrieves a release by product and version

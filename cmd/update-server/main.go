@@ -23,8 +23,9 @@ var (
 )
 
 func main() {
-	// Surface the build version through the API (e.g. /health).
+	// Surface the build version and commit through the API (e.g. /health).
 	api.Version = Version
+	api.GitCommit = GitCommit
 
 	// Load configuration
 	cfg, err := config.Load()

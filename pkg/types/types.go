@@ -99,6 +99,11 @@ type Release struct {
 	TargetGroups      []string  `json:"target_groups"` // alpha, beta, stable, production
 	ReleasedAt        time.Time `json:"released_at"`
 	CreatedAt         time.Time `json:"created_at"`
+	// Issuer seal as checked at upload: sealed, unsealed, invalid, unknown_key.
+	SealStatus      string `json:"seal_status"`
+	Issuer          string `json:"issuer"`
+	IssuerKeyID     string `json:"issuer_key_id,omitempty"`
+	IssuerSignature string `json:"issuer_signature,omitempty"`
 }
 
 // Manifest contains release metadata

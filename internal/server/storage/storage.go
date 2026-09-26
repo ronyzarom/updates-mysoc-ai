@@ -1,18 +1,28 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/config"
 )
 
+// ErrExists is returned by SaveNew when the artifact is already stored.
+var ErrExists = errors.New("artifact already exists")
+
 // Storage interface for artifact storage
 type Storage interface {
 	// Save stores an artifact and returns the path
 	Save(product, version, filename string, reader io.Reader) (string, error)
+	// SaveNew stores an artifact only if none exists under that name
+	// (ErrExists otherwise); the check and the write are atomic.
+	SaveNew(product, version, filename string, reader io.Reader) (string, error)
+	// Rename atomically moves an artifact within one product/version.
+	Rename(product, version, from, to string) (string, error)
 	// Get returns a reader for an artifact
 	Get(product, version, filename string) (io.ReadCloser, error)
 	// Delete removes an artifact
@@ -62,6 +72,15 @@ func NewLocalStorage(basePath string) (*LocalStorage, error) {
 
 // Save stores an artifact
 func (s *LocalStorage) Save(product, version, filename string, reader io.Reader) (string, error) {
+	return s.save(product, version, filename, reader, false)
+}
+
+// SaveNew stores an artifact unless one already exists under that name.
+func (s *LocalStorage) SaveNew(product, version, filename string, reader io.Reader) (string, error) {
+	return s.save(product, version, filename, reader, true)
+}
+
+func (s *LocalStorage) save(product, version, filename string, reader io.Reader, exclusive bool) (string, error) {
 	product, version, filename = sanitizeSegment(product), sanitizeSegment(version), sanitizeSegment(filename)
 	dir := filepath.Join(s.basePath, product, version)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -69,17 +88,19 @@ func (s *LocalStorage) Save(product, version, filename string, reader io.Reader)
 	}
 
 	path := filepath.Join(dir, filename)
+	if exclusive {
+		if _, err := os.Lstat(path); err == nil {
+			return "", ErrExists
+		}
+	}
 	tmp, err := os.CreateTemp(dir, ".upload-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
 	tmpPath := tmp.Name()
-	cleanup := true
 	defer func() {
 		_ = tmp.Close()
-		if cleanup {
-			_ = os.Remove(tmpPath)
-		}
+		_ = os.Remove(tmpPath)
 	}()
 
 	if _, err := io.Copy(tmp, reader); err != nil {
@@ -88,12 +109,30 @@ func (s *LocalStorage) Save(product, version, filename string, reader io.Reader)
 	if err := tmp.Close(); err != nil {
 		return "", fmt.Errorf("failed to close file: %w", err)
 	}
+	if exclusive {
+		// link(2) fails if path exists, so two racing uploads cannot both win.
+		if err := os.Link(tmpPath, path); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				return "", ErrExists
+			}
+			return "", fmt.Errorf("failed to finalize file: %w", err)
+		}
+		return path, nil
+	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		return "", fmt.Errorf("failed to finalize file: %w", err)
 	}
-	cleanup = false
 
 	return path, nil
+}
+
+// Rename atomically moves an artifact within one product/version directory.
+func (s *LocalStorage) Rename(product, version, from, to string) (string, error) {
+	dst := s.GetPath(product, version, to)
+	if err := os.Rename(s.GetPath(product, version, from), dst); err != nil {
+		return "", fmt.Errorf("failed to finalize file: %w", err)
+	}
+	return dst, nil
 }
 
 // Get returns a reader for an artifact

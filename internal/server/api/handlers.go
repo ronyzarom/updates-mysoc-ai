@@ -20,6 +20,7 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/catalog"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/releases"
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/storage"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/artifactprotocol"
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
@@ -44,9 +45,12 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
-// Version is the running server build, injected from the main package at
-// startup (populated via -ldflags). It defaults to "dev" for local builds.
-var Version = "dev"
+// Version and GitCommit identify the running server build, injected from the
+// main package at startup (populated via -ldflags).
+var (
+	Version   = "dev"
+	GitCommit = "unknown"
+)
 
 // requireLicense enforces a valid, active, unexpired X-License-Key on the
 // agent data plane (heartbeat, update check/report, artifact download). On
@@ -93,6 +97,7 @@ func licenseAuthorizesTier(license *types.License, tier string) bool {
 type HealthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
+	Commit  string `json:"commit"`
 }
 
 // handleHealth returns server health status
@@ -100,6 +105,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	resp := HealthResponse{
 		Status:  "ok",
 		Version: Version,
+		Commit:  GitCommit,
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -279,6 +285,10 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{ProductName: productName, Version: version, Channel: channel, TargetGroups: targetGroups, ReleaseNotes: releaseNotes, ArtifactKind: artifactKind}, []releases.VariantUpload{{Artifact: a, File: f}})
+		if errors.Is(err, releases.ErrReleaseExists) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
 		if err != nil {
 			writeError(w, 400, err.Error())
 			return
@@ -330,6 +340,10 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 			uploads = append(uploads, releases.VariantUpload{Artifact: variant, File: f})
 		}
 		release, err := s.releaseService().CreateDualRelease(r.Context(), releases.CreateReleaseRequest{ProductName: productName, Version: version, Channel: channel, ReleaseNotes: releaseNotes, TargetGroups: targetGroups}, uploads)
+		if errors.Is(err, releases.ErrReleaseExists) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -356,7 +370,14 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 		FileSize:     header.Size,
 		File:         file,
 		ArtifactKind: artifactKind,
+
+		IssuerSignature: r.FormValue("issuer_signature"),
+		IssuerKeyID:     r.FormValue("issuer_key_id"),
 	})
+	if errors.Is(err, releases.ErrReleaseExists) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -492,13 +513,18 @@ func (s *Server) handleDownloadRelease(w http.ResponseWriter, r *http.Request) {
 	if release.Signature != "" {
 		w.Header().Set("X-Signature-Ed25519", release.Signature)
 	}
+	if r.URL.Query().Get("artifact_kind") == "" && release.SealStatus == releases.SealSealed {
+		w.Header().Set("X-Issuer-Signature", release.IssuerSignature)
+		w.Header().Set("X-Issuer-Key-Id", release.IssuerKeyID)
+	}
 
 	io.Copy(w, reader)
 }
 
 // handleUploadBinary handles uploading a specific binary file
 // PUT /api/v1/releases/{product}/{version}/{filename}
-// This allows uploading multiple architecture-specific binaries for a single release
+// This allows uploading multiple architecture-specific binaries for a single
+// release. An existing file is never replaced (409).
 func (s *Server) handleUploadBinary(w http.ResponseWriter, r *http.Request) {
 	product := chi.URLParam(r, "product")
 	version := chi.URLParam(r, "version")
@@ -507,8 +533,11 @@ func (s *Server) handleUploadBinary(w http.ResponseWriter, r *http.Request) {
 	// Read the binary from request body
 	defer r.Body.Close()
 
-	// Save to storage
-	path, err := s.storage.Save(product, version, filename, r.Body)
+	path, err := s.storage.SaveNew(product, version, filename, r.Body)
+	if errors.Is(err, storage.ErrExists) {
+		writeError(w, http.StatusConflict, "binary already exists; published artifacts are immutable")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save binary: "+err.Error())
 		return
@@ -1049,6 +1078,12 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 			"release_notes":    info.ReleaseNotes,
 			"channel":          info.Channel,
 			"update_group":     updateGroup,
+		}
+		if !dualSelected && release != nil && release.SealStatus == releases.SealSealed {
+			response["seal_status"] = release.SealStatus
+			response["issuer"] = release.Issuer
+			response["issuer_key_id"] = release.IssuerKeyID
+			response["issuer_signature"] = release.IssuerSignature
 		}
 		if dualSelected {
 			response["protocol_version"] = artifactprotocol.Version

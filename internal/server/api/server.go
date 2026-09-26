@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"crypto/ed25519"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -64,6 +66,15 @@ func NewServer(cfg *config.Config, db *database.DB, store storage.Storage) *Serv
 		}
 		s.signingKey = key
 		log.Printf("release signing enabled (public key %s)", signing.PublicKeyHex(key))
+		if db != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if added, err := s.releaseService().EnsureSigningKeyTrusted(ctx); err != nil {
+				log.Printf("WARNING: could not register release key as trusted issuer key: %v", err)
+			} else if added {
+				log.Printf("trusted issuer keys: registered server release key %s", releases.KeyID(key.Public().(ed25519.PublicKey)))
+			}
+			cancel()
+		}
 	} else {
 		log.Printf("WARNING: RELEASE_SIGNING_SEED not set - releases will publish unsigned")
 	}
@@ -248,6 +259,11 @@ func (s *Server) setupRoutes() {
 			r.With(s.adminAuth).Get("/api-keys", s.handleListAPIKeys)
 			r.With(s.adminAuth).Post("/api-keys", s.handleCreateAPIKey)
 			r.With(s.adminAuth).Delete("/api-keys/{id}", s.handleRevokeAPIKey)
+
+			// Trusted issuer keys: public keys uploads may be sealed with.
+			r.With(s.adminAuth).Get("/trusted-keys", s.handleListTrustedKeys)
+			r.With(s.adminAuth).Post("/trusted-keys", s.handleAddTrustedKey)
+			r.With(s.adminAuth).Post("/trusted-keys/{id}/retire", s.handleRetireTrustedKey)
 
 			// Operators: the licensing surface of the cascade model. Issuing
 			// an operator mints its single platform key (returned once).

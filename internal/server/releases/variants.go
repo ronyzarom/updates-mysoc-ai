@@ -53,7 +53,7 @@ func (s *Service) CreateDualRelease(ctx context.Context, req CreateReleaseReques
 		return nil, err
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("release already exists; existing releases are immutable")
+		return nil, ErrReleaseExists
 	}
 	saved := []string{}
 	committed := false
@@ -90,7 +90,7 @@ func (s *Service) CreateDualRelease(ctx context.Context, req CreateReleaseReques
 			bootstrap = a
 		}
 	}
-	release := &types.Release{ProductName: req.ProductName, Version: req.Version, Channel: req.Channel, ReleaseNotes: req.ReleaseNotes, TargetGroups: req.TargetGroups, ArtifactPath: primaryPath, ArtifactSize: bootstrap.Size, Checksum: bootstrap.Checksum, Signature: bootstrap.Signature, Manifest: types.Manifest{ArtifactKind: req.ArtifactKind, Product: req.ProductName, Version: req.Version, Channel: req.Channel, ArtifactVariants: variants, Artifacts: []types.Artifact{{Name: bootstrap.Name, Arch: bootstrap.Arch, Size: bootstrap.Size, Checksum: bootstrap.Checksum}}}}
+	release := &types.Release{ProductName: req.ProductName, Version: req.Version, Channel: req.Channel, ReleaseNotes: req.ReleaseNotes, TargetGroups: req.TargetGroups, ArtifactPath: primaryPath, ArtifactSize: bootstrap.Size, Checksum: bootstrap.Checksum, Signature: bootstrap.Signature, SealStatus: SealUnsealed, Issuer: IssuerFor(req.ProductName), Manifest: types.Manifest{ArtifactKind: req.ArtifactKind, Product: req.ProductName, Version: req.Version, Channel: req.Channel, ArtifactVariants: variants, Artifacts: []types.Artifact{{Name: bootstrap.Name, Arch: bootstrap.Arch, Size: bootstrap.Size, Checksum: bootstrap.Checksum}}}}
 	if err := s.repo.Create(ctx, release); err != nil {
 		return nil, err
 	}
