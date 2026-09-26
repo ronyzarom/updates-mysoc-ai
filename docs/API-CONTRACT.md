@@ -186,7 +186,7 @@ curl https://updates.mysoc.ai/health
 ```
 
 ```json
-{ "status": "ok", "version": "1.16.2.1", "commit": "0123456789ab" }
+{ "status": "ok", "version": "1.16.2.2", "commit": "0123456789ab" }
 ```
 
 `commit` is the short git commit the binary was built from; a `-dirty` suffix
