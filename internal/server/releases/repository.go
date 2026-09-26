@@ -46,6 +46,11 @@ func scanRelease(row pgx.Row) (*types.Release, error) {
 			return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 		}
 	}
+	// Rows written before 1.16.2, or by a rolled-back 1.16.1 server, carry no
+	// issuer.
+	if release.Issuer == "" {
+		release.Issuer = IssuerFor(release.ProductName)
+	}
 	return &release, nil
 }
 

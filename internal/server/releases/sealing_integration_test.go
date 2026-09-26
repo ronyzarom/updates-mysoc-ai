@@ -290,8 +290,8 @@ func TestIssuerSealingDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r := get("swf", "0.0.1"); r.seal != SealUnsealed {
-			t.Fatalf("legacy insert must read as unsealed, got %q", r.seal)
+		if r := get("swf", "0.0.1"); r.seal != SealUnsealed || r.issuer != IssuerSWF {
+			t.Fatalf("legacy insert must read as unsealed with a derived issuer, got %q %q", r.seal, r.issuer)
 		}
 	})
 }
