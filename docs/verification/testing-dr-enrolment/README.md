@@ -59,8 +59,34 @@ sudo systemctl restart mysoc-updater
 
 _(filled during execution)_
 
-- Operator created:
-- testing-dr-a observe heartbeat / instance id / group set:
-- testing-dr-a real apply (version, dr.role, timings):
-- testing-dr-b observe heartbeat / instance id / group set:
+- Operator created: `testing-dr-mysoc-ai` (name "testing-dr.mysoc.ai DR lab"),
+  minted 2026-10-26 on the prod host via the server's own
+  `licensing.CreateOperator`; active mysoc-cloud platform license, expires
+  2027-10-26. Key stored in `keys/testing-dr-mysoc-ai-key.txt` (gitignored).
+  `IP_ALLOWLIST_ENFORCED` not set on the server (default off) -> no allowlist
+  entries needed.
+- testing-dr-a: updater installed from kit 1.16.0.1, active in **observe**
+  mode 2026-10-26 18:38Z; `heartbeat accepted instance_id=mysoc-testing-dr-a`;
+  relay listening :18443 (cert SANs include testing-dr.mysoc.ai, 10.208.0.2,
+  34.165.207.15). Instance uuid `7d7f989d-35b1-4879-972f-6dbac1ca537e`. Set
+  `update_group=alpha`, `auto_update_enabled=true`. Observe policy offer:
+  current 0.0.0 -> (held; observe never applies).
+- testing-dr-b: updater active in **observe** 2026-10-26 18:40Z;
+  `heartbeat accepted instance_id=mysoc-testing-dr-b`; relay SANs include
+  10.208.0.3, 34.165.254.130. Set `update_group=alpha`,
+  `auto_update_enabled=true`. DB is a streaming standby (pg_is_in_recovery=t).
+- Server readback: both `mysoc-testing-dr-a` and `mysoc-testing-dr-b` show
+  `product_tier=mysoc, update_group=alpha, auto_update_enabled=t`.
+- **Real apply held** pending mysoc-ai (hub reply `20261026T183957Z-51f37e`,
+  our ack + asks `20261026T184130Z-b45e03`): A) install mysoc-backend/
+  mysoc-frontend units (User=mysoc) on both hosts; B) ship the `sync_code()`
+  owner fix in an alpha artifact (current alpha 1.3.42.3 still has the
+  literal-`bitnami` fallback, which would fail on these bitnami-less hosts).
+  Once A+B land, flip `simulation.mode: real` + restart on both; expected
+  dr.role=primary on -a (migrates) and dr.role=standby on -b (migrations
+  skipped in recovery).
+
+## Pending (to fill when real apply runs)
+
+- testing-dr-a real apply (version, dr.role=primary, timings):
 - testing-dr-b real apply (migrations skipped, dr.role=standby):
