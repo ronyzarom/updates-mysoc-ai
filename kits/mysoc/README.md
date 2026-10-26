@@ -70,6 +70,39 @@ do, also add the install root to the systemd sandbox:
 ReadWritePaths=/var/lib/mysoc-updater /opt/mysoc
 ```
 
+## Fresh host enrolment (no app installed yet)
+
+Enrolling a brand-new host (no mysoc app, `current_version 0.0.0`) differs from
+updating an existing one in one important way: **the first heartbeat creates
+the instance server-side in `update_group=stable` with auto-update ON**, so a
+fresh node left in `real` mode can install the highest *stable* release before
+you move it to its intended ring. Enrol observe-first:
+
+1. Install with the executor wired but `simulation.mode: observe` (heartbeat and
+   policy check only — no download, no apply, no updater self-update).
+2. Confirm the instance appears on updates.mysoc.ai, then set its ring and
+   auto-update server-side (admin API key or admin JWT):
+
+   ```bash
+   curl -fsS -X PUT https://updates.mysoc.ai/api/v1/instances/<id>/update-group \
+     -H "X-API-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+     -d '{"group":"alpha"}'
+   curl -fsS -X PUT https://updates.mysoc.ai/api/v1/instances/<id>/auto-update \
+     -H "X-API-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+     -d '{"enabled":true}'
+   ```
+
+3. Set `simulation.mode: real` and `systemctl restart mysoc-updater`. The next
+   cycle takes the highest artifact for that ring through the executor.
+
+Before step 3 the host must already have its app units (`mysoc-backend`,
+`mysoc-frontend`), DB and `/opt/mysoc/backend/.env` in place — the updater
+swaps binaries and restarts units; it does not provision them. The DR-lab
+hosts `testing-dr-a` / `testing-dr-b` are enrolled exactly this way; their
+tailored configs and one-shot wiring script live in
+[`deploy/testing-dr/`](../../deploy/testing-dr/) and
+[`deploy/enroll-testing-dr.sh`](../../deploy/enroll-testing-dr.sh).
+
 ## Self-update
 
 The updater keeps itself updated (on by default). `install.sh` places the
