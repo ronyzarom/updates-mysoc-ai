@@ -86,7 +86,21 @@ _(filled during execution)_
   dr.role=primary on -a (migrates) and dr.role=standby on -b (migrations
   skipped in recovery).
 
+## Sequence change (Rony, 2026-10-26 ~18:49Z)
+
+Rony directed: install mysoc as two NORMAL, independent, writable standalone
+servers on BOTH hosts FIRST; re-establish the primary/secondary DR pair later.
+At the DB level the hosts were already a live pair (-a primary with slot
+`mysoc_standby` active; -b streaming standby, `pg_is_in_recovery=t`). Handed to
+mysoc-ai (hub task `20261026T184949Z-097e5b`): (1) break -b's replication so it
+has its own writable DB (promote -b standalone, drop/retire the slot on -a) —
+do NOT run the DR pairing scripts yet; (2) install mysoc-backend/mysoc-frontend
+units (User=mysoc) + runtime on both with writable DBs (both come up NORMAL,
+dr.role=primary); (3) ship the sync_code() bitnami fix (B) in an alpha artifact.
+Then updates-mysoc flips both updaters (alpha/observe) to real; each applies
+its own migrations and health-gates :8080 + :3000.
+
 ## Pending (to fill when real apply runs)
 
-- testing-dr-a real apply (version, dr.role=primary, timings):
-- testing-dr-b real apply (migrations skipped, dr.role=standby):
+- testing-dr-a real apply as NORMAL server (version, dr.role=primary, timings):
+- testing-dr-b real apply as NORMAL server (writable DB, dr.role=primary):
