@@ -73,10 +73,40 @@ healthy with no manual reinstall.
    was not. A single-shot install fails once then resumes to success. Flagged to
    mysoc to make first-pass clean.
 
-## Not run (optional)
+## Second run — reset host + explicit break/fix (same host, reused)
 
-- Standalone intentional break/fix on a dedicated second VM (hold port 80 →
-  classified `13` → free → resume): blocked by the me-west1 4-external-IP quota
-  (all in use). Equivalent refuse/back-off/resume behavior is proven above on real
-  bytes. "Same command for normal vs DR" is evidenced by `drtest` coming up as a
-  normal server (`dr.role=primary`); DR differs only at the dashboard role step.
+The me-west1 4-external-IP quota (all in use) blocks a dedicated second public VM,
+so this was run by **resetting `drtest` to a fresh-Ubuntu-like state** (purged
+mysoc user/`/opt`/updater/PostgreSQL/nginx; kept `/etc/letsencrypt`) and re-running
+the identical one-command. `instance_id` = the domain (`drtest.mysoc.ai`), so the
+re-enrol reused the same instance and stayed on `alpha` (no DB change).
+
+Break → fix → resume (`19:55`–`20:02` UTC):
+
+| Step | Observation |
+|---|---|
+| hold port 80 (`python3 -m http.server 80`) + run one-command | `first_install` ran; **preflight reported OK** (see finding below), apt installed pg16/nginx, then failed at the known `useradd rc=12` bug → **no churn**, staged release cleaned, classified back-off `5m` |
+| free port 80, clear back-off, retry | `useradd` **skipped** (user existed); role `mysoc_app` + DB `mysoc_production` created, `.env` written, LE cert reused, nginx + units scaffolded, migrations from baseline |
+| resume to healthy | `/health` healthy `1.3.49.3`, `dr.role=primary`; `needs_setup:true`; `/setup`→`200`; valid LE cert (`notAfter Jan 26 2027`) |
+| one-command wrapper | returned **`DONE  https://drtest.mysoc.ai  version=1.3.49.3`** (exit 0) — it absorbed the failure/back-off/resume transparently within its own wait loop |
+
+This confirms the **identical command** brings up a host (normal server,
+`dr.role=primary`); DR would differ only at the dashboard role step.
+
+### Finding — port 80 is not a preflight-fatal condition (report to mysoc)
+
+With port 80 **held**, `1.3.49.3` preflight still reported `preflight OK`; the apt
+step installed nginx which merely logged "Not attempting to start NGINX, port 80
+is already in use," and the run proceeded until it hit the `useradd` bug. The
+entrypoint contract classifies port conflicts under exit `13` (DNS/ports) and the
+preflight is meant to catch them read-only **before** mutating the host. Here the
+port conflict was not classified and mutation (apt installs) happened first. Two
+items for mysoc:
+- Make preflight treat a held required port (80/443) as a classified `13` refusal
+  **before** any apt/package mutation.
+- Fix `useradd --create-home --home-dir /home/mysoc` (`rc=12`) so a single-shot
+  `first_install` succeeds without needing the self-healing second pass.
+
+(One intermediate failure — `signal: killed` during migration — was operator
+interference: a `systemctl restart` issued while an install was in-flight. Not a
+product issue.)
