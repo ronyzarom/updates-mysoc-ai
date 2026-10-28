@@ -1,8 +1,9 @@
 # Fresh host in one command (normal server or DR) — 1‑2‑3
 
 A brand-new mysoc server stands itself up from a single admin command. A normal
-server and a DR server install **identically**; DR differs only in step 3
-(choosing primary/standby in the dashboard). No frictions, no per-host runbook.
+server and a DR server install **identically**; DR differs only by one extra
+click in step 3 (choosing primary/standby in the dashboard). No frictions, no
+per-host runbook.
 
 ## 1 — Start a clean VM
 
@@ -37,6 +38,24 @@ That is the whole install. It ends with:
 
 The **same command works for a DR server** — you do not install DR differently.
 
+## 3 — Open the site and create the first administrator
+
+Open `https://<fqdn>`. On a brand-new install the empty database has no users
+yet, so the login page detects it (`GET /api/v1/auth/setup-status`) and takes
+you straight to `https://<fqdn>/setup`:
+
+- create the **first administrator** (name, email, password against the live
+  policy checklist), then sign in.
+
+No SSH or extra step — this happens in the browser. `/setup` is where the admin
+is born: no password ever passes through the install seed, and once any user
+exists the endpoint is inert (409). `ADMIN_EMAIL` from the seed is not
+pre-created as a user.
+
+**DR only:** after signing in, go to **Settings → Disaster Recovery** and set
+this box as **Primary** (or **Standby**, pointed at the primary). A normal
+server is finished at this step.
+
 ### What the one command does
 
 The `mysoc-enroll.sh` bootstrap is deliberately thin — it does only what the
@@ -56,15 +75,6 @@ the systemd units, the baseline schema, and the application code — is installe
 by the artifact's `first_install` phase, through the exact same cascade path
 every later upgrade uses. See
 [`UPDATE-ENTRYPOINT-CONTRACT.md`](UPDATE-ENTRYPOINT-CONTRACT.md) for the phase.
-
-## 3 — (DR only) pick the role
-
-Open `https://<fqdn>`, sign in, and go to **Settings → Disaster Recovery**:
-
-- the primary site → **Primary**,
-- the standby site → **Standby**, pointed at the primary.
-
-A normal server skips step 3 entirely.
 
 ---
 
