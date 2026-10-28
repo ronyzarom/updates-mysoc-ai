@@ -93,19 +93,24 @@ Break → fix → resume (`19:55`–`20:02` UTC):
 This confirms the **identical command** brings up a host (normal server,
 `dr.role=primary`); DR would differ only at the dashboard role step.
 
-### Finding — port 80 is not a preflight-fatal condition (report to mysoc)
+### Note — the port-80 "break" did not exercise the `13` path (expected)
 
-With port 80 **held**, `1.3.49.3` preflight still reported `preflight OK`; the apt
-step installed nginx which merely logged "Not attempting to start NGINX, port 80
-is already in use," and the run proceeded until it hit the `useradd` bug. The
-entrypoint contract classifies port conflicts under exit `13` (DNS/ports) and the
-preflight is meant to catch them read-only **before** mutating the host. Here the
-port conflict was not classified and mutation (apt installs) happened first. Two
-items for mysoc:
-- Make preflight treat a held required port (80/443) as a classified `13` refusal
-  **before** any apt/package mutation.
-- Fix `useradd --create-home --home-dir /home/mysoc` (`rc=12`) so a single-shot
-  `first_install` succeeds without needing the self-healing second pass.
+With port 80 held, `1.3.49.3` preflight reported `preflight OK` and proceeded. This
+is **reasonable, not a bug**: the reset preserved `/etc/letsencrypt`, so a valid
+cert for `drtest.mysoc.ai` already existed; in `letsencrypt` mode with a present
+cert, certbot does not need port 80, so a held :80 is not fatal. mysoc's container
+repro that returns `13` for a held :80 had **no** pre-existing cert (certbot needs
+:80 for ACME). So the intended break didn't fire here because the cert was kept —
+the classified-`13` refusal path is a mysoc-side behavior already verified by them.
+
+### Finding — `useradd` rc=12 on first shot (reported to mysoc)
+
+The real, reproducible finding: on a truly fresh host `useradd --system
+--create-home --home-dir /home/mysoc` fails (`cannot create directory
+/home/mysoc`, `rc=12`). The user is created but its home is not, so the **first**
+`first_install` fails and only the self-healing **second** pass (user already
+exists → skipped) succeeds. The one-command absorbs this transparently (it waits
+and returns `DONE` once healthy), but a single-shot should succeed.
 
 (One intermediate failure — `signal: killed` during migration — was operator
 interference: a `systemctl restart` issued while an install was in-flight. Not a
