@@ -61,3 +61,7 @@ siemcore-updater-linux-amd64
 
 # Secrets — never commit license keys or credentials
 keys/
+
+# Local dev helper (maps the appliance hostname in /etc/hosts for SSO); not a
+# release artifact. Kept on disk, out of the tree so deployable builds stay clean.
+/setup-appliance-hosts.sh
