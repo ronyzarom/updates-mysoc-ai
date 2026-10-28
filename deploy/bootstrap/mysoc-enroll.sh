@@ -163,7 +163,9 @@ KIT_DIR="$WORK/kit"
 # ---------------------------------------------------------------------------
 log "step 3/5: writing install seed $SEED_PATH (0600)"
 install -d -m 0755 "$(dirname "$SEED_PATH")"
-umask 077
+# Scope the restrictive umask to the seed write ONLY — a leaked umask 077 would
+# make the kit's mkdir'd dirs 0700 and lock the service user out of its config.
+( umask 077
 cat > "$SEED_PATH" <<EOF
 # mysoc install seed — written by mysoc-enroll.sh for the artifact's
 # first_install phase. 0600 root:root. The artifact GENERATES JWT_SECRET,
@@ -183,6 +185,7 @@ SMTP_ENCRYPTION=$SMTP_ENCRYPTION
 SMTP_FROM=$SMTP_FROM
 ADMIN_EMAIL=$ADMIN_EMAIL
 EOF
+)
 chmod 0600 "$SEED_PATH"
 chown root:root "$SEED_PATH"
 

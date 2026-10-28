@@ -213,7 +213,11 @@ EOF
 
 echo "==> creating service user and directories"
 id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $NAME
-mkdir -p /etc/$NAME /var/lib/$NAME
+# Explicit modes (never inherit the caller's umask): the service user must be
+# able to TRAVERSE /etc/$NAME to read its 0640 config, so the dir is 0750
+# root:$NAME. install -d applies the mode even if the directory already exists.
+install -d -m 0750 -o root   -g "$NAME" /etc/$NAME
+install -d -m 0750 -o "$NAME" -g "$NAME" /var/lib/$NAME
 
 echo "==> installing binary (self-updatable layout)"
 # The binary lives in a versioned directory owned by the service user, and
