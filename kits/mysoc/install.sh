@@ -21,6 +21,11 @@ Modes (enable flag-driven config rendering):
   --update               app already installed: enrolls at its current version
 
 Options:
+  --executor filesystem  wire real installs: enable the filesystem executor in
+                         the config and install the root apply wrapper, the
+                         NOPASSWD sudoers entry, the unit drop-in, and the
+                         /opt/mysoc-cascade staging root. Required for a fresh
+                         host that self-installs via the cascade.
   --license-key KEY      operator platform key from the updates dashboard
   --instance-id ID       stable unique id, e.g. mysoc-cloud-mysoc-ai
   --parent-url URL       update server (default: https://updates.mysoc.ai)
@@ -36,11 +41,12 @@ EOF
 }
 
 MODE="" LICENSE_KEY="" PARENT_URL="" INSTANCE_ID="" SIGNING_KEY=""
-CURRENT_VERSION="" CA_FILE=""
+CURRENT_VERSION="" CA_FILE="" EXECUTOR=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)  MODE=clean ;;
         --update) MODE=update ;;
+        --executor)        EXECUTOR="${2:?--executor needs a value}"; shift ;;
         --license-key)     LICENSE_KEY="${2:?--license-key needs a value}"; shift ;;
         --instance-id)     INSTANCE_ID="${2:?--instance-id needs a value}"; shift ;;
         --parent-url)      PARENT_URL="${2:?--parent-url needs a value}"; shift ;;
@@ -52,6 +58,10 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+if [[ -n "$EXECUTOR" && "$EXECUTOR" != "filesystem" ]]; then
+    echo "unsupported --executor '$EXECUTOR' (only 'filesystem')" >&2
+    exit 1
+fi
 if [[ -z "$MODE" && ( -n "$LICENSE_KEY$INSTANCE_ID$PARENT_URL$SIGNING_KEY$CURRENT_VERSION$CA_FILE" ) ]]; then
     echo "config flags require a mode: --clean or --update" >&2
     exit 1
@@ -148,6 +158,59 @@ render_config() {
     echo "    config rendered: instance=$INSTANCE_ID parent=$PARENT_URL version=$CURRENT_VERSION mode=$MODE"
 }
 
+# enable_fs_executor_block uncomments the #BEGIN/#END-FS-EXECUTOR block in the
+# installed config (the markers and leading '#' are stripped so the YAML nests
+# correctly under simulation:). Idempotent: already-enabled configs are a no-op.
+enable_fs_executor_block() {
+    local target="$1" tmp
+    tmp=$(mktemp)
+    awk '
+        /^#BEGIN-FS-EXECUTOR$/ { inblk=1; next }
+        /^#END-FS-EXECUTOR$/   { inblk=0; next }
+        inblk && /^#/ { sub(/^#/, ""); print; next }
+        { print }
+    ' "$target" > "$tmp"
+    install -m 0640 -o root -g "$NAME" "$tmp" "$target"
+    rm -f "$tmp"
+}
+
+# wire_filesystem_executor installs everything the filesystem executor needs that
+# lives OUTSIDE the config: the root apply wrapper, the single NOPASSWD sudoers
+# entry, the unit drop-in (sudo needs NoNewPrivileges=no + ProtectSystem=no), and
+# the staging root. All steps are idempotent. The wrapper ships in the kit beside
+# this script.
+wire_filesystem_executor() {
+    local shim_src="$PWD/mysoc-apply-update.sh"
+    [[ -f "$shim_src" ]] || { echo "--executor filesystem: kit is missing mysoc-apply-update.sh" >&2; exit 1; }
+
+    echo "    enabling filesystem executor in /etc/$NAME/config.yaml"
+    enable_fs_executor_block /etc/$NAME/config.yaml
+
+    echo "    installing root apply wrapper /usr/local/sbin/mysoc-apply-update"
+    install -m 0755 -o root -g root "$shim_src" /usr/local/sbin/mysoc-apply-update
+
+    echo "    installing sudoers drop-in /etc/sudoers.d/$NAME"
+    cat > /etc/sudoers.d/$NAME <<EOF
+Defaults!/usr/local/sbin/mysoc-apply-update env_keep += "UPDATER_PHASE CURRENT_DIR VERSION FROM_VERSION PRODUCT INSTALL_ROOT"
+$NAME ALL=(root) NOPASSWD: SETENV: /usr/local/sbin/mysoc-apply-update
+EOF
+    chmod 0440 /etc/sudoers.d/$NAME
+    visudo -c -f /etc/sudoers.d/$NAME >/dev/null
+
+    echo "    installing unit drop-in (NoNewPrivileges=no, ProtectSystem=no)"
+    mkdir -p /etc/systemd/system/$NAME.service.d
+    cat > /etc/systemd/system/$NAME.service.d/executor.conf <<'EOF'
+[Service]
+NoNewPrivileges=no
+ProtectSystem=no
+EOF
+
+    echo "    creating staging root /opt/mysoc-cascade"
+    mkdir -p /opt/mysoc-cascade
+    chown "$NAME:$NAME" /opt/mysoc-cascade
+    chmod 0755 /opt/mysoc-cascade
+}
+
 echo "==> creating service user and directories"
 id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $NAME
 mkdir -p /etc/$NAME /var/lib/$NAME
@@ -186,6 +249,11 @@ else
     fi
 fi
 
+if [[ "$EXECUTOR" == "filesystem" ]]; then
+    echo "==> wiring filesystem executor (real installs)"
+    wire_filesystem_executor
+fi
+
 echo "==> installing systemd unit"
 install -m 0644 $NAME.service /etc/systemd/system/$NAME.service
 systemctl daemon-reload
@@ -195,15 +263,24 @@ echo
 echo "Done. Start with:  systemctl start $NAME"
 echo "Logs:              journalctl -u $NAME -f"
 if [[ "$MODE" == clean ]]; then
-    cat <<'EOF'
+    if [[ "$EXECUTOR" == "filesystem" ]]; then
+        cat <<'EOF'
 
-FRESH-INSTALL CHECKLIST (--clean): the first offer will install the app via
-the filesystem executor. Before enabling auto-update for this node:
-  1. Host provisioning is NOT the updater's job: .env secrets, database,
-     and service units must exist (app team's provisioning path).
-  2. The executor + root apply shim must be configured
-     (see docs/UPDATE-ENTRYPOINT-CONTRACT.md).
-  3. Releases shipping DB migrations are refused until the migration
-     baseline exists on this host.
+FRESH-INSTALL (--clean --executor filesystem): on first start the updater pulls
+the ring artifact and runs its updater/apply first_install phase, which
+self-provisions the host end to end (deps, DB baseline, .env, TLS, units, nginx,
+code, health gate). Nothing else to configure here. If first_install fails, the
+updater reports the error and backs off (5m/15m/60m); fix the host and it
+resumes automatically. Watch:  journalctl -u mysoc-updater -f
 EOF
+    else
+        cat <<'EOF'
+
+FRESH-INSTALL CHECKLIST (--clean, no executor wired): the first offer installs
+the app. For a cascade self-install pass --executor filesystem (which wires the
+executor + root apply shim). Otherwise the updater cannot apply a real install.
+Releases shipping DB migrations need an artifact that ships updater/apply (it
+lays down and records the baseline).
+EOF
+    fi
 fi

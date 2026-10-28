@@ -332,6 +332,17 @@ func (s *Simulator) processOffer(
 		return nil
 	}
 
+	// After a first_install failure a fresh host backs off instead of
+	// re-provisioning every heartbeat; skip this cycle until the window passes.
+	if remaining := s.retryBackoffRemaining(offer.Product); remaining > 0 {
+		s.logger.Info(
+			"deferring install retry (back-off after a prior failure)",
+			"product", offer.Product,
+			"retry_in", remaining.Round(time.Second).String(),
+		)
+		return nil
+	}
+
 	// verifyAndDownload enforces the origin release signature before touching
 	// the artifact. In the cascade this is what prevents any intermediate hop
 	// from substituting a payload: the signature is minted only by the updates
@@ -374,13 +385,27 @@ func (s *Simulator) processOffer(
 	if err := s.verifyDualOffer(ctx, offer); err != nil {
 		return s.recordDualFailure(offer, err)
 	}
+	// A fresh host (from 0.0.0) runs the artifact's first_install, which
+	// provisions the whole host and is idempotent/resumable. A failure there is
+	// NOT rolled back (there is nothing to roll back to, and the per-cycle
+	// stage/fail/rollback loop is exactly the churn we want to avoid): we clean
+	// the staged release, report the error, and back off so a later retry
+	// resumes once the admin fixes the host.
+	fresh := isFreshInstall(update.FromVersion)
 	if err := s.executor.Apply(ctx, update); err != nil {
+		if fresh {
+			return s.recordFirstInstallFailure(ctx, update, fmt.Errorf("first_install: %w", err))
+		}
 		return s.failAndRollback(ctx, update, fmt.Errorf("apply: %w", err))
 	}
 	if err := s.executor.Validate(ctx, update); err != nil {
+		if fresh {
+			return s.recordFirstInstallFailure(ctx, update, fmt.Errorf("first_install validation: %w", err))
+		}
 		return s.failAndRollback(ctx, update, fmt.Errorf("validation: %w", err))
 	}
 
+	s.clearRetryBackoff(update.Product)
 	s.recordAttempt(update, true, "")
 	if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
 		return err
@@ -426,6 +451,93 @@ func (s *Simulator) failAndRollback(
 		Error:   errorMessage,
 	})
 	return errors.Join(updateErr, rollbackErr, stateErr, reportErr)
+}
+
+// firstInstallBackoffSchedule is the escalating wait between fresh-host install
+// retries. The last entry is the steady-state cap.
+var firstInstallBackoffSchedule = []time.Duration{
+	5 * time.Minute,
+	15 * time.Minute,
+	60 * time.Minute,
+}
+
+// recordFirstInstallFailure handles a failed fresh-host install without a
+// rollback: it clears the staged (incomplete) release, records and reports the
+// failure, and schedules an escalating back-off so the next heartbeat does not
+// immediately re-provision. The host stays resumable (the artifact owns
+// /opt/mysoc and is idempotent), so a later retry continues from where it
+// stopped.
+func (s *Simulator) recordFirstInstallFailure(ctx context.Context, update Update, cause error) error {
+	message := cause.Error()
+	if cleaner, ok := s.executor.(interface{ CleanupStaged(Update) error }); ok {
+		if cleanErr := cleaner.CleanupStaged(update); cleanErr != nil {
+			s.logger.Warn("cleanup of staged first_install failed", "product", update.Product, "error", cleanErr)
+		}
+	}
+	delay := s.bumpRetryBackoff(update.Product)
+	s.recordAttempt(update, false, message)
+	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
+	reportErr := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
+		InstanceID:           s.config.Instance.ID,
+		FromVersion:          update.FromVersion,
+		ToVersion:            update.ToVersion,
+		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
+		Success: false,
+		Error:   message,
+	})
+	s.logger.Warn(
+		"first_install failed; backing off before retry",
+		"product", update.Product,
+		"to_version", update.ToVersion,
+		"retry_in", delay.Round(time.Second).String(),
+		"error", message,
+	)
+	return errors.Join(cause, stateErr, reportErr)
+}
+
+// retryBackoffRemaining returns how long until the next install retry is allowed
+// for a product (0 if none is pending or the window has passed).
+func (s *Simulator) retryBackoffRemaining(product string) time.Duration {
+	if s.state == nil || s.state.RetryBackoff == nil {
+		return 0
+	}
+	rb := s.state.RetryBackoff[product]
+	if rb == nil {
+		return 0
+	}
+	if remaining := time.Until(rb.NextAt); remaining > 0 {
+		return remaining
+	}
+	return 0
+}
+
+// bumpRetryBackoff advances the back-off schedule for a product and returns the
+// delay applied.
+func (s *Simulator) bumpRetryBackoff(product string) time.Duration {
+	if s.state.RetryBackoff == nil {
+		s.state.RetryBackoff = make(map[string]*RetryBackoff)
+	}
+	rb := s.state.RetryBackoff[product]
+	if rb == nil {
+		rb = &RetryBackoff{}
+		s.state.RetryBackoff[product] = rb
+	}
+	idx := rb.Count
+	if idx >= len(firstInstallBackoffSchedule) {
+		idx = len(firstInstallBackoffSchedule) - 1
+	}
+	delay := firstInstallBackoffSchedule[idx]
+	rb.Count++
+	rb.NextAt = time.Now().Add(delay)
+	return delay
+}
+
+// clearRetryBackoff removes any pending back-off for a product after a success.
+func (s *Simulator) clearRetryBackoff(product string) {
+	if s.state == nil || s.state.RetryBackoff == nil {
+		return
+	}
+	delete(s.state.RetryBackoff, product)
 }
 
 func (s *Simulator) recordAttempt(update Update, success bool, message string) {

@@ -21,6 +21,11 @@ const (
 	defaultMaxResponseBytes = int64(1 << 20)
 	defaultMaxDownloadBytes = int64(1 << 30)
 	defaultCommandTimeout   = 60 * time.Second
+	// defaultFirstInstallTimeout bounds the first_install phase (fresh host,
+	// from version 0.0.0). Unlike a routine apply it provisions the whole host
+	// (apt deps, DB baseline, TLS, nginx, health gate), so it needs a far
+	// larger budget than CommandTimeout.
+	defaultFirstInstallTimeout = 30 * time.Minute
 )
 
 // Executor kinds selectable via simulation.executor.
@@ -267,6 +272,10 @@ type FilesystemConfig struct {
 	KeepReleases int `yaml:"keep_releases,omitempty"`
 	// CommandTimeout bounds restart/health command execution.
 	CommandTimeout Duration `yaml:"command_timeout,omitempty"`
+	// FirstInstallTimeout bounds the first_install phase on a fresh host (from
+	// version 0.0.0), which does far more than a routine apply. 0 uses the
+	// built-in default (30m).
+	FirstInstallTimeout Duration `yaml:"first_install_timeout,omitempty"`
 }
 
 // ProductConfig identifies one simulated managed product.
@@ -329,6 +338,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Simulation.Filesystem.CommandTimeout.Duration == 0 {
 		c.Simulation.Filesystem.CommandTimeout.Duration = defaultCommandTimeout
+	}
+	if c.Simulation.Filesystem.FirstInstallTimeout.Duration == 0 {
+		c.Simulation.Filesystem.FirstInstallTimeout.Duration = defaultFirstInstallTimeout
 	}
 	if c.Simulation.ArtifactDir == "" {
 		c.Simulation.ArtifactDir = "simulator-artifacts"
@@ -526,6 +538,9 @@ func (c *Config) Validate() error {
 		}
 		if c.Simulation.Filesystem.CommandTimeout.Duration <= 0 {
 			return fmt.Errorf("simulation.filesystem.command_timeout must be positive")
+		}
+		if c.Simulation.Filesystem.FirstInstallTimeout.Duration <= 0 {
+			return fmt.Errorf("simulation.filesystem.first_install_timeout must be positive")
 		}
 	default:
 		return fmt.Errorf("invalid simulation executor %q (must be noop or filesystem)", c.Simulation.Executor)

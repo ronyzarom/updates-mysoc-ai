@@ -28,7 +28,19 @@ type State struct {
 	PendingSelfUpdate *SelfUpdateState  `json:"pending_self_update,omitempty"`
 	LastReconcile     *ReconcileStatus  `json:"last_reconcile,omitempty"`
 
+	// RetryBackoff throttles install retries per product after a first_install
+	// failure, so a fresh host that is not yet ready backs off instead of
+	// re-attempting the whole provisioning every heartbeat.
+	RetryBackoff map[string]*RetryBackoff `json:"retry_backoff,omitempty"`
+
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// RetryBackoff records the next time an install may be retried for a product and
+// how many consecutive failures have occurred (indexing the back-off schedule).
+type RetryBackoff struct {
+	Count  int       `json:"count"`
+	NextAt time.Time `json:"next_at"`
 }
 
 // SelfUpdateState marks an in-flight updater self-update. It is persisted before

@@ -197,7 +197,8 @@ func TestFilesystemExecutorPhaseArgumentAndEnv(t *testing.T) {
 		HealthCommand:  []string{script},
 		CommandTimeout: Duration{Duration: defaultCommandTimeout},
 	}, nil)
-	update := Update{Product: "siemcore", ToVersion: "v1.0.0", ArtifactPath: artifact}
+	// An upgrade (non-zero FromVersion) uses the "apply" phase.
+	update := Update{Product: "siemcore", FromVersion: "v0.9.0", ToVersion: "v1.0.0", ArtifactPath: artifact}
 
 	if err := e.Apply(context.Background(), update); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -216,6 +217,52 @@ func TestFilesystemExecutorPhaseArgumentAndEnv(t *testing.T) {
 	want := "apply:apply\nhealth:health\nrollback:rollback\n"
 	if string(data) != want {
 		t.Fatalf("phase log = %q, want %q", string(data), want)
+	}
+}
+
+// TestFilesystemExecutorFirstInstallPhase proves a fresh host (FromVersion
+// 0.0.0) runs the apply wrapper with the "first_install" phase, not "apply", so
+// the artifact entrypoint knows to provision the host from scratch.
+func TestFilesystemExecutorFirstInstallPhase(t *testing.T) {
+	root := t.TempDir()
+	logFile := filepath.Join(t.TempDir(), "phases.log")
+	script := filepath.Join(t.TempDir(), "entrypoint.sh")
+	if err := os.WriteFile(script,
+		[]byte("#!/bin/sh\necho \"$UPDATER_PHASE:$1\" >> "+logFile+"\n"), 0o755); err != nil {
+		t.Fatalf("write entrypoint script: %v", err)
+	}
+	artifact := filepath.Join(t.TempDir(), "siemcore-v1.0.0.artifact")
+	makeTarGz(t, artifact, map[string]string{"VERSION": "v1.0.0"})
+
+	e := NewFilesystemExecutor(FilesystemConfig{
+		InstallRoot:         root,
+		RestartCommand:      []string{script},
+		CommandTimeout:      Duration{Duration: defaultCommandTimeout},
+		FirstInstallTimeout: Duration{Duration: defaultFirstInstallTimeout},
+	}, nil)
+	update := Update{Product: "siemcore", FromVersion: "0.0.0", ToVersion: "v1.0.0", ArtifactPath: artifact}
+
+	if err := e.Apply(context.Background(), update); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read phase log: %v", err)
+	}
+	if want := "first_install:first_install\n"; string(data) != want {
+		t.Fatalf("phase log = %q, want %q", string(data), want)
+	}
+
+	// CleanupStaged removes the current symlink and the staged release so a
+	// later first_install re-stages cleanly.
+	if err := e.CleanupStaged(update); err != nil {
+		t.Fatalf("cleanup staged: %v", err)
+	}
+	if _, err := os.Readlink(e.currentLink("siemcore")); !os.IsNotExist(err) {
+		t.Fatalf("current symlink still present after cleanup: %v", err)
+	}
+	if _, err := os.Stat(e.versionDir("siemcore", "v1.0.0")); !os.IsNotExist(err) {
+		t.Fatalf("staged version dir still present after cleanup: %v", err)
 	}
 }
 

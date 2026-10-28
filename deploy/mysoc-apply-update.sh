@@ -10,8 +10,12 @@
 # which then re-syncs the previous code).
 #
 # Contract (docs/UPDATE-ENTRYPOINT-CONTRACT.md): the phase arrives as $1 and
-# as UPDATER_PHASE ("apply" or "rollback"); context in CURRENT_DIR, VERSION,
-# FROM_VERSION, PRODUCT, INSTALL_ROOT. The authoritative version is read from
+# as UPDATER_PHASE ("apply", "rollback", or "first_install" on a fresh host);
+# context in CURRENT_DIR, VERSION, FROM_VERSION, PRODUCT, INSTALL_ROOT. The
+# "first_install" phase is only ever delegated to an artifact that ships its own
+# updater/apply entrypoint (the self-provisioning installer); this script's
+# fallback apply is for routine upgrades of entrypoint-less releases and must
+# never try to bootstrap a bare host. The authoritative version is read from
 # the release directory itself so the same code path is correct on apply and
 # on rollback.
 #
@@ -53,6 +57,14 @@ fi
 
 # ---- Fallback apply (releases without an entrypoint) ---------------------
 # Everything below is this script's own apply logic and its preconditions.
+
+# A fresh-host install REQUIRES the artifact's self-provisioning entrypoint; the
+# fallback cannot create a service user, database, TLS, or units. Refuse rather
+# than attempt a partial install on a bare host.
+if [[ "$PHASE" == "first_install" ]]; then
+    log "release $RELVER ships no updater/apply entrypoint; first_install needs one — refusing"
+    exit 1
+fi
 
 [[ -x "$RELDIR/backend/mysoc-backend" ]] || { log "backend binary missing or not executable"; exit 1; }
 [[ -f "$RELDIR/frontend/server.js" ]] || { log "frontend server.js missing"; exit 1; }

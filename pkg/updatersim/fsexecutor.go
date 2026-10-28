@@ -48,8 +48,26 @@ type FilesystemExecutor struct {
 	KeepReleases int
 	// CommandTimeout bounds restart/health command execution.
 	CommandTimeout time.Duration
+	// FirstInstallTimeout bounds the first_install phase (fresh host, from
+	// version 0.0.0), which provisions the whole host and can run far longer
+	// than a routine apply.
+	FirstInstallTimeout time.Duration
 
 	logger *slog.Logger
+}
+
+// firstInstallPhase is the lifecycle phase the executor sends to the apply
+// wrapper on a fresh host (current version 0.0.0). The artifact's entrypoint
+// treats it as "provision this host from scratch, then install" and is expected
+// to be idempotent/resumable. Routine upgrades use the "apply" phase.
+const firstInstallPhase = "first_install"
+
+// isFreshInstall reports whether an install starts from a bare host (no app
+// installed yet). The server offers such a node the ring head with
+// current_version 0.0.0.
+func isFreshInstall(fromVersion string) bool {
+	v := strings.TrimSpace(fromVersion)
+	return v == "" || v == "0.0.0"
 }
 
 // NewFilesystemExecutor constructs a filesystem installer.
@@ -61,6 +79,10 @@ func NewFilesystemExecutor(cfg FilesystemConfig, logger *slog.Logger) *Filesyste
 	if timeout <= 0 {
 		timeout = defaultCommandTimeout
 	}
+	firstInstallTimeout := cfg.FirstInstallTimeout.Duration
+	if firstInstallTimeout <= 0 {
+		firstInstallTimeout = defaultFirstInstallTimeout
+	}
 	// Resolve the install root to an absolute path so that the "current" symlink
 	// target and the CURRENT_DIR passed to restart/health commands are stable
 	// regardless of the process working directory.
@@ -69,12 +91,13 @@ func NewFilesystemExecutor(cfg FilesystemConfig, logger *slog.Logger) *Filesyste
 		installRoot = abs
 	}
 	return &FilesystemExecutor{
-		InstallRoot:    installRoot,
-		RestartCommand: cfg.RestartCommand,
-		HealthCommand:  cfg.HealthCommand,
-		KeepReleases:   cfg.KeepReleases,
-		CommandTimeout: timeout,
-		logger:         logger,
+		InstallRoot:         installRoot,
+		RestartCommand:      cfg.RestartCommand,
+		HealthCommand:       cfg.HealthCommand,
+		KeepReleases:        cfg.KeepReleases,
+		CommandTimeout:      timeout,
+		FirstInstallTimeout: firstInstallTimeout,
+		logger:              logger,
 	}
 }
 
@@ -157,12 +180,29 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 		"target", versionDir,
 	)
 
-	if err := e.runCommand(ctx, "restart", "apply", e.RestartCommand, update); err != nil {
+	// A fresh host (from 0.0.0) gets the first_install phase and its own, far
+	// larger timeout; routine upgrades use apply. The artifact's entrypoint
+	// branches on the phase to decide whether to provision the host first.
+	phase := "apply"
+	if isFreshInstall(update.FromVersion) {
+		phase = firstInstallPhase
+	}
+	if err := e.runCommand(ctx, "restart", phase, e.RestartCommand, update); err != nil {
 		return fmt.Errorf("restart service: %w", err)
 	}
 
 	e.pruneOldReleases(update.Product, versionDir, prevTarget)
 	return nil
+}
+
+// CleanupStaged removes a failed fresh-install staging: the "current" symlink
+// (pointing at a not-yet-healthy release) and the staged version directory, so
+// the next first_install re-stages cleanly. It runs no command and never
+// touches the live app layout (the artifact's first_install owns /opt/mysoc and
+// is idempotent), so a resumable host stays resumable.
+func (e *FilesystemExecutor) CleanupStaged(update Update) error {
+	_ = os.Remove(e.currentLink(update.Product))
+	return os.RemoveAll(e.versionDir(update.Product, update.ToVersion))
 }
 
 // Validate confirms that the live version matches the update and (optionally)
@@ -300,10 +340,15 @@ func (e *FilesystemExecutor) runCommand(ctx context.Context, kind, phase string,
 	if len(argv) == 0 {
 		return nil
 	}
+	// first_install provisions the whole host and gets its own, larger budget.
+	timeout := e.CommandTimeout
+	if phase == firstInstallPhase && e.FirstInstallTimeout > 0 {
+		timeout = e.FirstInstallTimeout
+	}
 	runCtx := ctx
-	if e.CommandTimeout > 0 {
+	if timeout > 0 {
 		var cancel context.CancelFunc
-		runCtx, cancel = context.WithTimeout(ctx, e.CommandTimeout)
+		runCtx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 

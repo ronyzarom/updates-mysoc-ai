@@ -66,6 +66,14 @@ for tier in "${TIERS[@]}"; do
     done
     chmod +x "$OUT/install.sh"
 
+    # The mysoc kit bundles the root apply wrapper so `install.sh --executor
+    # filesystem` can install it on a fresh host with no extra files staged.
+    if [[ "$tier" == mysoc ]]; then
+        echo "==> $tier: bundling apply wrapper (mysoc-apply-update.sh)"
+        cp deploy/mysoc-apply-update.sh "$OUT/mysoc-apply-update.sh"
+        chmod +x "$OUT/mysoc-apply-update.sh"
+    fi
+
     echo "==> $tier: bundling docs (stamped)"
     for doc in RELAY-DEPLOYMENT.md UPDATER-GUIDELINES.md UPDATE-ENTRYPOINT-CONTRACT.md; do
         {
@@ -75,9 +83,22 @@ for tier in "${TIERS[@]}"; do
     done
 
     echo "==> $tier: checksums"
-    (cd "$OUT" && SHA bin/* config.yaml install.sh ./*.service > SHA256SUMS)
+    (
+        cd "$OUT"
+        files=(bin/* config.yaml install.sh ./*.service)
+        [[ -f mysoc-apply-update.sh ]] && files+=(mysoc-apply-update.sh)
+        SHA "${files[@]}" > SHA256SUMS
+    )
 
-    echo "    built $OUT"
+    # A self-describing tarball (plus its own checksum) so a fresh host can
+    # fetch and verify the whole kit over plain HTTPS, with no license header.
+    # The publish step copies/points <kit>-latest.tar.gz at the newest build.
+    echo "==> $tier: tarball"
+    base="$(basename "$OUT")"
+    tar -C "dist/updater-kits" -czf "$OUT.tar.gz" "$base"
+    (cd "dist/updater-kits" && SHA "$base.tar.gz" > "$base.tar.gz.sha256")
+
+    echo "    built $OUT (+ $base.tar.gz)"
 done
 
 # Self-update release artifacts: the same binary under the per-platform

@@ -59,24 +59,53 @@ exactly what remains):
 
 ## Enabling real installs
 
-The default executor is a no-op (the updater downloads, verifies, and reports
-but does not touch the host). To perform real versioned installs with atomic
-activation and automatic rollback, uncomment the `executor: filesystem` block
-in `config.yaml` and set the restart/health commands for this host. When you
-do, also add the install root to the systemd sandbox:
+Pass `--executor filesystem` to `install.sh` and it wires everything needed for
+real versioned installs (atomic activation, automatic rollback, and fresh-host
+`first_install`): it enables the `executor: filesystem` block in `config.yaml`,
+installs the root apply wrapper (`/usr/local/sbin/mysoc-apply-update`, bundled in
+this kit), writes the `NOPASSWD` sudoers entry and the unit drop-in
+(`NoNewPrivileges=no`, `ProtectSystem=no`), and creates `/opt/mysoc-cascade`.
 
+```bash
+sudo ./install.sh --clean --executor filesystem \
+  --license-key <platform-key> --instance-id mysoc-<operator>
 ```
-# /etc/systemd/system/mysoc-updater.service
-ReadWritePaths=/var/lib/mysoc-updater /opt/mysoc
-```
+
+(The one-command bootstrap `deploy/bootstrap/mysoc-enroll.sh` runs exactly this
+for you — see "Fresh host enrolment" below.)
 
 ## Fresh host enrolment (no app installed yet)
 
-Enrolling a brand-new host (no mysoc app, `current_version 0.0.0`) differs from
-updating an existing one in one important way: **the first heartbeat creates
-the instance server-side in `update_group=stable` with auto-update ON**, so a
-fresh node left in `real` mode can install the highest *stable* release before
-you move it to its intended ring. Enrol observe-first:
+### One command (recommended — self-provisions the whole host)
+
+A brand-new host enrols at `current_version 0.0.0` and provisions itself through
+the cascade `first_install` phase (deps, service user, DB + role, `.env`, TLS,
+units, nginx, baseline DB, code, health gate — owned by the artifact). From a
+bare VM:
+
+```bash
+curl -fsSL https://updates.mysoc.ai/install/mysoc-enroll.sh | sudo bash -s -- \
+  --license-key <platform-key> --domain <fqdn> --tls wildcard \
+  --cert /path/fullchain.pem --key /path/privkey.pem
+```
+
+The bootstrap fetches and checksum-verifies this kit, writes the install seed to
+`/etc/mysoc/install-seed.env` (0600), runs `install.sh --clean --executor
+filesystem`, starts the updater, and waits until `/health` is green — then prints
+`DONE https://<fqdn> version=<x>`. It is the **same command for a normal server
+and for DR**; DR differs only in the ring/role chosen at the dashboard (step 3).
+See [`docs/FRESH-HOST-ONE-COMMAND.md`](../../docs/FRESH-HOST-ONE-COMMAND.md).
+
+This installs the current **stable** ring head, which is what a production
+normal/DR server wants. If the host must land on a non-stable ring (e.g. the
+alpha DR lab), enrol observe-first (below) so you can set the ring before any
+install runs.
+
+### Observe-first (advanced — control the ring before installing)
+
+The first heartbeat creates the instance server-side in `update_group=stable`
+with auto-update ON, so a fresh node left in `real` mode installs the highest
+*stable* release before you can move it. To pin a different ring first:
 
 1. Install with the executor wired but `simulation.mode: observe` (heartbeat and
    policy check only — no download, no apply, no updater self-update).
