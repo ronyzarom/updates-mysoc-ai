@@ -5,6 +5,79 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ---
 
+## 1.17.0 — Fresh-host one-command install (`first_install`)
+
+**Build:** 1.17.0.2 on `version/1.17.0`, merged to `main` · **Status:** deployed
+— `/install/` hosting live, empty-VM e2e verified; updater self-update staged to
+`alpha` (verified on testing.mysoc.ai), beta/stable/production pending approval.
+
+The updater can now bring up a brand-new host from nothing. On a box with no
+app, no database and no prior version, one command enrols the updater and the
+cascade self-provisions the whole server — dependencies, database baseline,
+`.env`, TLS, systemd units, nginx, code and a health gate — then lands on a
+first-run `/setup` page. The same command installs a normal server or a DR node;
+DR differs only afterward, at the dashboard role step. Verified end to end on an
+empty Ubuntu 24.04 VM (see
+[fresh-host one-command verification](verification/fresh-host-one-command.md)).
+
+### New
+
+- **`first_install` lifecycle phase** — when a node's current version is
+  `0.0.0`, the updater offers the highest release on its ring and runs the
+  artifact's entrypoint with `UPDATER_PHASE=first_install`. The entrypoint starts
+  with a **read-only preflight** (no mutation) that either passes or refuses with
+  a **classified exit code** (10 seed · 11 OS/arch · 12 network · 13 DNS/ports ·
+  14 TLS · 15 PostgreSQL · 16 disk · 17 preflight-internal · 1 other). On any
+  failure the updater does **not** roll back: it cleans up the staged release and
+  **backs off (5m → 15m → 60m), then resumes automatically** on the next cycle
+  until the host is healthy. `first_install` has its own timeout
+  (`first_install_timeout`, default 30m), independent of normal updates.
+- **One-command fresh-host enrolment** — a hosted bootstrap plus a versioned kit:
+
+  ```bash
+  curl -fsSL https://updates.mysoc.ai/install/mysoc-enroll.sh | sudo bash -s -- \
+    --license-key <KEY> --domain <fqdn> --tls letsencrypt --email <ops@…>
+  ```
+
+  `mysoc-enroll.sh` writes a `0600` seed (domain, TLS mode/paths, SMTP, SiemCore
+  URL, admin email), fetches the checksum-verified kit, installs the updater with
+  the filesystem executor, starts it, and waits for `first_install` to report
+  `DONE`. Hosted at `https://updates.mysoc.ai/install/` (served by a deploy-gated
+  nginx `location ^~ /install/`).
+- **Filesystem executor wiring in the kit** — `install.sh --executor filesystem`
+  installs the root apply shim `/usr/local/sbin/mysoc-apply-update` (passes the
+  phase through to the artifact entrypoint), a sudoers drop-in, a unit drop-in
+  (`NoNewPrivileges=no`, `ProtectSystem=no`), and the staging root
+  `/opt/mysoc-cascade` with atomic symlink swaps.
+- **Entrypoint contract v1.3** — adds the `first_install` phase, the
+  `UPDATER_PHASE` env value, and the classified exit-code table
+  ([UPDATE-ENTRYPOINT-CONTRACT](UPDATE-ENTRYPOINT-CONTRACT.md)).
+
+### Changed
+
+- **Config directory permissions fix** — `/etc/mysoc-updater` is now created
+  `0750 root:<service-user>` (was inheriting `0700 root:root` from the seed
+  write's `umask`), so the unprivileged updater can traverse to read its `0640`
+  config. The seed write in `mysoc-enroll.sh` runs under a **scoped** `umask`
+  subshell so it no longer leaks into the kit install. (Found and fixed during
+  the live e2e.)
+- Self-update artifacts are published per platform as `updater-linux-amd64` /
+  `updater-linux-arm64`; the shim refuses `first_install` for entrypoint-less
+  releases rather than guessing.
+
+### Upgrade and rollback
+
+Fresh hosts receive `1.17.0.2` directly from the kit at `/install/`. Existing
+hosts self-update through their ring when `updater-linux-<arch>` `1.17.0.2` is
+promoted to that ring; it is currently on `alpha` only (verified:
+testing.mysoc.ai self-updated `1.16.1.33 → 1.17.0.2` and stayed healthy on the
+newest app). Updaters never downgrade, so a fresh `1.17.0.2` host stays on it even
+where a ring still offers an older updater. No server-side schema change. To hold
+a ring back, leave its newest `updater-*` at the prior `1.16.1.x`; to retract,
+re-point the ring to the prior build (already-upgraded hosts will not downgrade).
+
+---
+
 ## 1.16.2 — Issuer sealing (verify and badge, never reject)
 
 **Build:** 1.16.2.x on `version/1.16.2` · **Status:** candidate, local validation only — not deployed
