@@ -219,6 +219,17 @@ id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sb
 install -d -m 0750 -o root   -g "$NAME" /etc/$NAME
 install -d -m 0750 -o "$NAME" -g "$NAME" /var/lib/$NAME
 
+# A --clean (fresh/reinstall) enrolment must start at version 0.0.0 so the first
+# offer runs first_install. The updater's persisted state records the last
+# installed product version and WINS over the config's current_version, so a
+# re-enrol on a host that still carries state.json would report "product is up
+# to date" and silently skip first_install. Clear it so the host is genuinely
+# fresh; the updater recreates it on first heartbeat.
+if [[ "$MODE" == clean && -f /var/lib/$NAME/state.json ]]; then
+    rm -f /var/lib/$NAME/state.json
+    echo "    --clean: cleared stale updater state (/var/lib/$NAME/state.json) so first_install re-runs at 0.0.0"
+fi
+
 echo "==> installing binary (self-updatable layout)"
 # The binary lives in a versioned directory owned by the service user, and
 # runs through symlinks: this is what lets the unprivileged updater update

@@ -7,9 +7,10 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ## 1.17.0 — Fresh-host one-command install (`first_install`)
 
-**Build:** 1.17.0.2 on `version/1.17.0`, merged to `main` · **Status:** deployed
-— `/install/` hosting live, empty-VM e2e verified; updater self-update staged to
-`alpha` (verified on testing.mysoc.ai), beta/stable/production pending approval.
+**Build:** 1.17.0.3 on `version/1.17.0` (merged to `main` at .2) · **Status:**
+.2 deployed — `/install/` hosting live, empty-VM e2e verified, updater self-update
+staged to `alpha` (verified on testing.mysoc.ai); .3 is a candidate (reinstall
+fix below), local validation only — kit republish pending approval.
 
 The updater can now bring up a brand-new host from nothing. On a box with no
 app, no database and no prior version, one command enrols the updater and the
@@ -64,6 +65,13 @@ empty Ubuntu 24.04 VM (see
 - Self-update artifacts are published per platform as `updater-linux-amd64` /
   `updater-linux-arm64`; the shim refuses `first_install` for entrypoint-less
   releases rather than guessing.
+- **Reinstall fix (1.17.0.3)** — `install.sh --clean` now clears a stale
+  `/var/lib/<name>/state.json` so a re-enrol on a host that still carries updater
+  state restarts at `0.0.0` and re-runs `first_install`. Previously the persisted
+  `product_versions` out-ranked the config's `current_version: "0.0.0"`, so a
+  reinstall reported "product is up to date" and silently skipped `first_install`.
+  (A genuinely fresh VM has no updater, so this only affected reinstall/wipe of a
+  previously-enrolled host.)
 
 ### Upgrade and rollback
 
