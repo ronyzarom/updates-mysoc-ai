@@ -54,7 +54,11 @@ pre-created as a user.
 
 **DR only:** after signing in, go to **Settings → Disaster Recovery** and set
 this box as **Primary** (or **Standby**, pointed at the primary). A normal
-server is finished at this step.
+server is finished at this step. On a **Standby** you still create a first
+administrator via `/setup` to reach the wizard (a fresh box reports
+`needs_setup:true` and will not accept the primary's admin) — that admin and the
+standby's database are **replaced** when it copies the primary, so they are only
+temporary.
 
 ### What the one command does
 
