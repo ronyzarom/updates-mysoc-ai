@@ -7,10 +7,11 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ## 1.17.0 — Fresh-host one-command install (`first_install`)
 
-**Build:** 1.17.0.3 on `version/1.17.0` (merged to `main` at .2) · **Status:**
-.2 deployed — `/install/` hosting live, empty-VM e2e verified, updater self-update
-staged to `alpha` (verified on testing.mysoc.ai); .3 is a candidate (reinstall
-fix below), local validation only — kit republish pending approval.
+**Build:** 1.17.0.3 on `version/1.17.0`, merged to `main` · **Status:** deployed
+— `/install/` serves kit 1.17.0.3 (reinstall fix), empty-VM e2e verified; updater
+self-update `1.17.0.2` promoted to **all rings**, verified self-update on
+testing.mysoc.ai (alpha), mysoc-cloud (beta) and the cyfox-il production server
+(each `1.16.1.x → 1.17.0.2`, staying healthy).
 
 The updater can now bring up a brand-new host from nothing. On a box with no
 app, no database and no prior version, one command enrols the updater and the
@@ -75,14 +76,15 @@ empty Ubuntu 24.04 VM (see
 
 ### Upgrade and rollback
 
-Fresh hosts receive `1.17.0.2` directly from the kit at `/install/`. Existing
-hosts self-update through their ring when `updater-linux-<arch>` `1.17.0.2` is
-promoted to that ring; it is currently on `alpha` only (verified:
-testing.mysoc.ai self-updated `1.16.1.33 → 1.17.0.2` and stayed healthy on the
-newest app). Updaters never downgrade, so a fresh `1.17.0.2` host stays on it even
-where a ring still offers an older updater. No server-side schema change. To hold
-a ring back, leave its newest `updater-*` at the prior `1.16.1.x`; to retract,
-re-point the ring to the prior build (already-upgraded hosts will not downgrade).
+Fresh hosts receive the kit updater directly from `/install/` (kit `1.17.0.3`).
+Existing hosts self-update through their ring: `updater-linux-<arch>` `1.17.0.2`
+is now on **all rings** (alpha → beta → stable → production, staged), verified by
+clean self-updates on testing.mysoc.ai (alpha), mysoc-cloud (beta) and the
+cyfox-il production server — each `1.16.1.x → 1.17.0.2` in ~40–80 s, staying
+online. Updaters never downgrade, so a fresh kit host (stamped `1.17.0.3`) stays
+on it even though the self-update product is `1.17.0.2` (same code, different
+build stamp). No server-side schema change. To retract, re-point a ring to the
+prior `1.16.1.x` build — already-upgraded hosts will not downgrade.
 
 ---
 
