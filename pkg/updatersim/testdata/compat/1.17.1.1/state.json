@@ -1,0 +1,22 @@
+{
+  "instance_id": "siemcore-compat-golden",
+  "api_key": "server-issued-api-key-compat-golden",
+  "relay_token": "relay-token-compat-golden",
+  "product_versions": {
+    "siemcore": "3.3.152.23"
+  },
+  "last_update_attempt": {
+    "from_version": "3.3.152.22",
+    "target_version": "3.3.152.23",
+    "success": true,
+    "timestamp": "2026-10-28T09:14:03Z"
+  },
+  "updater_version": "1.17.1.1",
+  "retry_backoff": {
+    "siemcore": {
+      "count": 0,
+      "next_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  "updated_at": "2026-10-28T09:14:03Z"
+}

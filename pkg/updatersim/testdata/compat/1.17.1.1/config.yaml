@@ -1,0 +1,62 @@
+# GOLDEN COMPATIBILITY SNAPSHOT — do not "modernize".
+#
+# A representative production siemcore cascade-relay config as written for
+# platform 1.17.1.1 (the ring-fleet build at the time 1.18.0 was cut). The
+# 1.18.0 survivability code MUST load this unchanged: no field added in 1.18.0
+# (server.fallback_url, signing.public_keys, self_update.timeout,
+# simulation.{cycle,product}_timeout, filesystem.max_unavailable_seconds,
+# relay.drain_timeout) appears here, so loading it exercises every default path.
+#
+# To refresh: copy a real node's config, strip secrets to placeholders, bump the
+# directory name to the snapshot version, and keep it free of newer fields.
+
+server:
+  url: https://mysoc.example.internal:18443
+  ca_file: mysoc-relay-ca.pem
+  license_key: "SIEMCORE-COMPAT-GOLDEN-CREDENTIAL"
+  timeout: 30s
+
+instance:
+  id: siemcore-compat-golden
+  type: server
+  product_tier: siemcore
+  parent_id: mysoc-compat-golden
+  customer_id: customer-compat-golden
+  customer_name: "Compat Golden Customer"
+  hostname: ""
+  updater_version: "1.17.1.1"
+
+signing:
+  # 64 hex chars (a 32-byte ed25519 public key shape); value is illustrative.
+  public_key: "1111111111111111111111111111111111111111111111111111111111111111"
+  require: true
+
+relay:
+  enabled: true
+  listen: ":18443"
+  cache_dir: /var/lib/siemcore-cascade-updater/relay-cache
+  child_offline_after: 5m
+  tls:
+    hosts: []
+    dir: /var/lib/siemcore-cascade-updater/relay-tls
+
+heartbeat:
+  interval: 60s
+  jitter: 10s
+
+simulation:
+  mode: real
+  artifact_dir: /var/lib/siemcore-cascade-updater/artifacts
+  state_file: /var/lib/siemcore-cascade-updater/state.json
+  executor: filesystem
+  filesystem:
+    install_root: /opt/siemcore
+    restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
+    health_command: ["bash", "-c", "curl -fsS http://127.0.0.1:8443/health/live"]
+    command_timeout: 15m
+    keep_releases: 3
+
+products:
+  - name: siemcore
+    current_version: "3.3.152.23"
+    channel: stable
