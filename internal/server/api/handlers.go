@@ -660,6 +660,30 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Invariant 7 promotion gate: refuse to widen a release past alpha when any
+	// alpha-ring node reported that applying it exceeded the restart-window
+	// budget (availability_violation). Alpha is where downtime is caught; a
+	// release that took the product down for too long must not reach more rings.
+	// An operator may override with ?override=<reason>, which is audited.
+	if wideningBeyondAlpha(release.TargetGroups, req.TargetGroups) {
+		override := strings.TrimSpace(r.URL.Query().Get("override"))
+		violations, vErr := licensing.NewInstanceRepository(s.db).CountAvailabilityViolations(r.Context(), product, version)
+		if vErr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to check availability violations: "+vErr.Error())
+			return
+		}
+		if violations > 0 {
+			if override == "" {
+				writeError(w, http.StatusConflict, fmt.Sprintf(
+					"refusing to widen %s %s beyond alpha: %d alpha-ring node(s) reported an availability_violation (restart window exceeded max_unavailable_seconds). Fix the release or retry with ?override=<reason> to proceed with an audited override.",
+					product, version, violations))
+				return
+			}
+			fmt.Printf("[promotion-override] product=%s version=%s violations=%d groups=%v reason=%q\n",
+				product, version, violations, req.TargetGroups, override)
+		}
+	}
+
 	// Update target groups
 	if err := svc.UpdateReleaseTargetGroups(r.Context(), release.ID, req.TargetGroups); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -672,6 +696,23 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 		"version":       version,
 		"target_groups": req.TargetGroups,
 	})
+}
+
+// wideningBeyondAlpha reports whether the requested target groups add any ring
+// beyond alpha that the release does not already have. Narrowing, re-asserting
+// the same groups, or staying alpha-only is never gated.
+func wideningBeyondAlpha(current, requested []string) bool {
+	beyondAlpha := map[string]bool{"beta": true, "stable": true, "production": true}
+	have := map[string]bool{}
+	for _, g := range current {
+		have[g] = true
+	}
+	for _, g := range requested {
+		if beyondAlpha[g] && !have[g] {
+			return true
+		}
+	}
+	return false
 }
 
 // handleDeleteRelease deletes a release
@@ -1116,6 +1157,10 @@ type UpdateReportRequest struct {
 	ToVersion            string `json:"to_version"`
 	Success              bool   `json:"success"`
 	Error                string `json:"error,omitempty"`
+	// Restart-window telemetry (invariant 7); advisory and additive. Older
+	// updaters omit them (zero/false).
+	UnavailableSeconds    int  `json:"unavailable_seconds,omitempty"`
+	AvailabilityViolation bool `json:"availability_violation,omitempty"`
 }
 
 func (s *Server) handleUpdateReport(w http.ResponseWriter, r *http.Request) {
@@ -1148,7 +1193,7 @@ func (s *Server) handleUpdateReport(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid artifact delivery report")
 			return
 		}
-		recorded, err := licensing.NewInstanceRepository(s.db).RecordArtifactReport(r.Context(), req.InstanceID, license.ID, types.UpdateAttempt{FromVersion: req.FromVersion, TargetVersion: req.ToVersion, Success: req.Success, Error: req.Error, Timestamp: time.Now().UTC(), SelectedArtifactKind: req.SelectedArtifactKind, DependencyValidation: req.DependencyValidation, ArtifactDigest: req.ArtifactDigest})
+		recorded, err := licensing.NewInstanceRepository(s.db).RecordArtifactReport(r.Context(), req.InstanceID, license.ID, types.UpdateAttempt{FromVersion: req.FromVersion, TargetVersion: req.ToVersion, Success: req.Success, Error: req.Error, Timestamp: time.Now().UTC(), SelectedArtifactKind: req.SelectedArtifactKind, DependencyValidation: req.DependencyValidation, ArtifactDigest: req.ArtifactDigest, UnavailableSeconds: req.UnavailableSeconds, AvailabilityViolation: req.AvailabilityViolation})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to persist artifact report")
 			return

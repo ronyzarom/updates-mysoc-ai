@@ -122,6 +122,12 @@ type UpdateReportRequest struct {
 	Error                string `json:"error,omitempty"`
 	Kind                 string `json:"kind,omitempty"`
 	Stage                string `json:"stage,omitempty"`
+	// UnavailableSeconds is the measured process restart window for this change
+	// (invariant 7); AvailabilityViolation is set when it exceeded the host's
+	// max_unavailable_seconds budget. Both are additive and advisory to the
+	// server, which uses the violation flag to gate ring promotion.
+	UnavailableSeconds    int  `json:"unavailable_seconds,omitempty"`
+	AvailabilityViolation bool `json:"availability_violation,omitempty"`
 }
 
 // UpdateOffer normalizes the current policy and legacy response formats.

@@ -163,6 +163,11 @@ type UpdateAttempt struct {
 	Success              bool      `json:"success"`
 	Error                string    `json:"error,omitempty"`
 	Timestamp            time.Time `json:"timestamp"`
+	// UnavailableSeconds is the measured process restart window for this change
+	// and AvailabilityViolation is set when it exceeded the host's budget
+	// (invariant 7). The server gates ring promotion on the violation flag.
+	UnavailableSeconds    int  `json:"unavailable_seconds,omitempty"`
+	AvailabilityViolation bool `json:"availability_violation,omitempty"`
 }
 
 // Heartbeat is the payload sent by updaters

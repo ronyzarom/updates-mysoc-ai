@@ -19,3 +19,17 @@ func (r *InstanceRepository) RecordArtifactReport(ctx context.Context, instanceI
  WHERE instance_id=$1 AND license_id::text=$2 AND (last_update_at IS NULL OR last_update_at <= $8)`, instanceID, licenseID, data, attempt.FromVersion, attempt.TargetVersion, attempt.Success, attempt.Error, attempt.Timestamp)
 	return result.RowsAffected() == 1, err
 }
+
+// CountAvailabilityViolations returns how many instances of a product tier
+// reported an availability_violation (invariant 7) for a specific target
+// version. The updates server uses this to refuse widening a release beyond the
+// alpha ring: a version that has only reached alpha can only have been installed
+// by alpha-ring nodes, so any violation for it is an alpha-ring violation.
+func (r *InstanceRepository) CountAvailabilityViolations(ctx context.Context, productTier, version string) (int, error) {
+	var count int
+	err := r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM instances
+ WHERE product_tier=$1 AND last_update_target_version=$2
+ AND (last_heartbeat_data->'last_update_attempt'->>'availability_violation')='true'`,
+		productTier, version).Scan(&count)
+	return count, err
+}

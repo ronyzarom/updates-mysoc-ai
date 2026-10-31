@@ -534,6 +534,12 @@ func (s *Simulator) processOffer(
 	// resumes once the admin fixes the host.
 	fresh := isFreshInstall(update.FromVersion)
 	if err := s.executor.Apply(ctx, update); err != nil {
+		// A low-disk refusal is a clean skip, not a failed install: nothing was
+		// staged, so there is nothing to roll back. Back off and retry once the
+		// host has room, rather than churning stage/fail/rollback every cycle.
+		if errors.Is(err, ErrInsufficientDisk) {
+			return s.recordSkip(ctx, update, "insufficient_disk", err)
+		}
 		if fresh {
 			return s.recordFirstInstallFailure(ctx, update, fmt.Errorf("first_install: %w", err))
 		}
@@ -551,12 +557,15 @@ func (s *Simulator) processOffer(
 	if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
 		return err
 	}
+	unavailable, violation := s.availability()
 	if err := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
 		InstanceID:           s.config.Instance.ID,
 		FromVersion:          update.FromVersion,
 		ToVersion:            update.ToVersion,
 		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
-		Success: true,
+		Success:               true,
+		UnavailableSeconds:    unavailable,
+		AvailabilityViolation: violation,
 	}); err != nil {
 		return fmt.Errorf("report update: %w", err)
 	}
@@ -583,15 +592,54 @@ func (s *Simulator) failAndRollback(
 
 	s.recordAttempt(update, false, errorMessage)
 	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
+	unavailable, violation := s.availability()
+	reportErr := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
+		InstanceID:           s.config.Instance.ID,
+		FromVersion:          update.FromVersion,
+		ToVersion:            update.ToVersion,
+		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
+		Success:               false,
+		Error:                 errorMessage,
+		UnavailableSeconds:    unavailable,
+		AvailabilityViolation: violation,
+	})
+	return errors.Join(updateErr, rollbackErr, stateErr, reportErr)
+}
+
+// availability reads the most recent restart-window measurement from the
+// executor (invariant 7), if it reports one. Zero/false when the executor does
+// not measure availability (e.g. NoopExecutor).
+func (s *Simulator) availability() (int, bool) {
+	if reporter, ok := s.executor.(AvailabilityReporter); ok {
+		return reporter.LastUnavailable()
+	}
+	return 0, false
+}
+
+// recordSkip reports a non-failure skip (e.g. insufficient disk) without a
+// rollback and backs off before the next retry, so a transient host condition
+// does not churn stage/fail/rollback every cycle.
+func (s *Simulator) recordSkip(ctx context.Context, update Update, stage string, cause error) error {
+	message := cause.Error()
+	delay := s.bumpRetryBackoff(update.Product)
+	s.recordAttempt(update, false, message)
+	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
 	reportErr := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
 		InstanceID:           s.config.Instance.ID,
 		FromVersion:          update.FromVersion,
 		ToVersion:            update.ToVersion,
 		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
 		Success: false,
-		Error:   errorMessage,
+		Error:   message,
+		Stage:   stage,
 	})
-	return errors.Join(updateErr, rollbackErr, stateErr, reportErr)
+	s.logger.Warn("update skipped; backing off before retry",
+		"product", update.Product,
+		"stage", stage,
+		"retry_in", delay.Round(time.Second).String(),
+		"error", message,
+	)
+	return errors.Join(cause, stateErr, reportErr)
 }
 
 // firstInstallBackoffSchedule is the escalating wait between fresh-host install

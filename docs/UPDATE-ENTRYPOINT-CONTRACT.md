@@ -1,4 +1,4 @@
-# Update Entrypoint Contract (v1.3)
+# Update Entrypoint Contract (v1.4)
 
 How the updater invokes application-owned install logic. This is the interface
 app teams (mysoc, siemcore, swf) code against; the updater guarantees it from
@@ -13,7 +13,17 @@ fallback preconditions, and an entrypoint owns the whole apply.
 v1.3 adds the `first_install` phase: a fresh host (version `0.0.0`) is
 self-provisioned by the artifact through the same cascade path, gated by an
 own-phase read-only preflight, with its own timeout and a no-rollback retry
-model. The changelog is at the bottom.
+model.
+v1.4 adds requirement 6: an update never backs up or restores data and never
+takes the product down beyond the process restart window. The changelog is at
+the bottom.
+
+> **Status:** v1.4 is **proposed** (drafted 2026-10-31) and awaiting countersign
+> from mysoc, siemcore, and swf. Requirements 1–5 are the countersigned v1.3
+> contract and are in force. Requirement 6 states the updater's existing
+> no-backup/no-outage expectation explicitly so it can be countersigned; the
+> updater measures the restart window (`unavailable_seconds`) and the server
+> gates ring promotion on a budget breach as of platform 1.18.0.
 
 ## Who runs what
 
@@ -187,6 +197,27 @@ failure.)
    code against a mismatched schema is the one unrecoverable failure mode.
 5. **Output is captured** — stdout/stderr go to the updater log and to the
    error report on failure; print decisions, not spam.
+6. **No data backup/restore, no outage beyond the restart window** (v1.4,
+   proposed). An update is a code/schema/config change, not a data-custody
+   event:
+   - It **never** dumps, backs up, snapshots, or restores a database or data
+     volume as part of `apply`/`rollback`/`first_install`. Backup is an
+     operator-scheduled concern and must never be coupled to an update — an
+     update that depends on taking a backup first cannot be bounded and will
+     eventually block the fleet. Rollback is a code/symlink revert plus
+     expand/contract-safe schema, not a data restore.
+   - It **never** runs table-rewriting or long-locking operations inside
+     `apply` (`VACUUM FULL`, `REINDEX`, `CLUSTER`, `ALTER ... TYPE`,
+     non-concurrent index builds on large tables). Schema changes are
+     expand/contract and complete within the bounded budget (requirement 2).
+   - The **only unavailability** an update may cause is the process restart
+     window. `systemctl stop` (or equivalent) of the product outside that
+     window is forbidden. The updater measures the window and records
+     `unavailable_seconds`/`availability_violation` in the report; exceeding the
+     host's `max_unavailable_seconds` (default 120s) never aborts an in-flight
+     apply (that would only lengthen the outage) but flags the report, and the
+     updates server refuses to widen such a release beyond the alpha ring
+     without an audited override. Alpha is where downtime is caught.
 
 ## Reference implementations
 
@@ -206,6 +237,17 @@ failure.)
 
 ## Changelog
 
+- **v1.4 (proposed, 2026-10-31)** — added requirement 6: an update never backs
+  up or restores data and never takes the product down beyond the process
+  restart window (no data dump/snapshot/restore coupled to an update; no
+  table-rewriting/long-locking ops inside `apply`; expand/contract schema only;
+  `systemctl stop` outside the restart window forbidden). The updater measures
+  the window (`unavailable_seconds`) and flags `availability_violation` when it
+  exceeds the host's `max_unavailable_seconds`; the updates server refuses to
+  widen a flagged release past alpha without an audited override. States the
+  updater's long-standing no-backup/no-outage expectation explicitly so it can
+  be countersigned. Awaiting countersign from mysoc, siemcore, swf. Raised by
+  the updater survivability work (platform 1.18.0).
 - **v1.3** — added the `first_install` phase for fresh hosts (version
   `0.0.0`): the updater sends `first_install` instead of `apply` (and on every
   retry while still `0.0.0`); the artifact self-provisions the whole host behind

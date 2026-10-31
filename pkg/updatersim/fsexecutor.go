@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -52,9 +53,33 @@ type FilesystemExecutor struct {
 	// version 0.0.0), which provisions the whole host and can run far longer
 	// than a routine apply.
 	FirstInstallTimeout time.Duration
+	// MaxUnavailableSeconds is the restart-window budget (invariant 7): the only
+	// unavailability an update may cause is the process restart window. The
+	// executor measures the window during each restart (apply and rollback) and
+	// flags — never aborts — a report that exceeds the budget, so alpha catches a
+	// release that takes the product down for too long.
+	MaxUnavailableSeconds int
+
+	// lastUnavailableSeconds and lastAvailabilityViolation hold the most recent
+	// measured restart window. Apply/Rollback run serially within one cycle and
+	// the simulator reads these immediately after, so no lock is needed.
+	lastUnavailableSeconds    int
+	lastAvailabilityViolation bool
 
 	logger *slog.Logger
 }
+
+// AvailabilityReporter is implemented by an executor that measures the restart
+// window (invariant 7). The simulator reads it after Apply/Rollback to populate
+// the update report's unavailable_seconds and availability_violation.
+type AvailabilityReporter interface {
+	LastUnavailable() (seconds int, violation bool)
+}
+
+// ErrInsufficientDisk is returned when the install root lacks the free space to
+// stage an artifact. The apply is skipped (not rolled back) so the host backs
+// off and retries once space is freed, rather than churning.
+var ErrInsufficientDisk = errors.New("insufficient free disk to stage artifact")
 
 // firstInstallPhase is the lifecycle phase the executor sends to the apply
 // wrapper on a fresh host (current version 0.0.0). The artifact's entrypoint
@@ -83,6 +108,10 @@ func NewFilesystemExecutor(cfg FilesystemConfig, logger *slog.Logger) *Filesyste
 	if firstInstallTimeout <= 0 {
 		firstInstallTimeout = defaultFirstInstallTimeout
 	}
+	maxUnavailable := cfg.MaxUnavailableSeconds
+	if maxUnavailable <= 0 {
+		maxUnavailable = defaultMaxUnavailableSeconds
+	}
 	// Resolve the install root to an absolute path so that the "current" symlink
 	// target and the CURRENT_DIR passed to restart/health commands are stable
 	// regardless of the process working directory.
@@ -91,14 +120,21 @@ func NewFilesystemExecutor(cfg FilesystemConfig, logger *slog.Logger) *Filesyste
 		installRoot = abs
 	}
 	return &FilesystemExecutor{
-		InstallRoot:         installRoot,
-		RestartCommand:      cfg.RestartCommand,
-		HealthCommand:       cfg.HealthCommand,
-		KeepReleases:        cfg.KeepReleases,
-		CommandTimeout:      timeout,
-		FirstInstallTimeout: firstInstallTimeout,
-		logger:              logger,
+		InstallRoot:           installRoot,
+		RestartCommand:        cfg.RestartCommand,
+		HealthCommand:         cfg.HealthCommand,
+		KeepReleases:          cfg.KeepReleases,
+		CommandTimeout:        timeout,
+		FirstInstallTimeout:   firstInstallTimeout,
+		MaxUnavailableSeconds: maxUnavailable,
+		logger:                logger,
 	}
+}
+
+// LastUnavailable returns the most recently measured restart window (seconds)
+// and whether it exceeded MaxUnavailableSeconds. Satisfies AvailabilityReporter.
+func (e *FilesystemExecutor) LastUnavailable() (int, bool) {
+	return e.lastUnavailableSeconds, e.lastAvailabilityViolation
 }
 
 var versionDirPattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
@@ -141,6 +177,11 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 	}
 
 	versionDir := e.versionDir(update.Product, update.ToVersion)
+	// Refuse to stage into a filesystem that cannot hold the artifact: a
+	// half-written release that then fails is worse than a clean skip-and-retry.
+	if err := e.ensureFreeDisk(update.ArtifactPath, e.productRoot(update.Product)); err != nil {
+		return err
+	}
 	// Stage into a clean directory so re-running Apply is idempotent.
 	if err := os.RemoveAll(versionDir); err != nil {
 		return fmt.Errorf("clear staging dir: %w", err)
@@ -189,11 +230,82 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 	if isFreshInstall(update.FromVersion) {
 		phase = firstInstallPhase
 	}
-	if err := e.runCommand(ctx, "restart", phase, e.RestartCommand, update); err != nil {
+	// The restart is the only unavailability an update is allowed to cause
+	// (invariant 7). Measure the window and flag — never abort — a breach.
+	if err := e.restartAndMeasure(ctx, phase, update); err != nil {
 		return fmt.Errorf("restart service: %w", err)
 	}
 
 	e.pruneOldReleases(update.Product, versionDir, prevTarget)
+	return nil
+}
+
+// restartAndMeasure runs the restart command for a phase and records the
+// restart window as the restart command's wall-clock duration. The restart
+// command runs the product entrypoint for the phase, which performs the restart
+// and its own readiness gating, so its duration is the user-visible outage
+// (invariant 7). A window longer than MaxUnavailableSeconds sets
+// lastAvailabilityViolation but never aborts the in-flight change — aborting
+// would only lengthen the outage. Validate remains the authoritative health gate
+// run immediately after, so this adds no extra health probes.
+func (e *FilesystemExecutor) restartAndMeasure(ctx context.Context, phase string, update Update) error {
+	start := time.Now()
+	err := e.runCommand(ctx, "restart", phase, e.RestartCommand, update)
+	e.recordUnavailable(time.Since(start))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// recordUnavailable stores the measured restart window and whether it breached
+// the budget, for the simulator to carry into the update report.
+func (e *FilesystemExecutor) recordUnavailable(window time.Duration) {
+	seconds := int(window.Round(time.Second) / time.Second)
+	e.lastUnavailableSeconds = seconds
+	e.lastAvailabilityViolation = e.MaxUnavailableSeconds > 0 && seconds > e.MaxUnavailableSeconds
+	if e.lastAvailabilityViolation {
+		e.logger.Warn("restart window exceeded availability budget",
+			"unavailable_seconds", seconds,
+			"max_unavailable_seconds", e.MaxUnavailableSeconds,
+		)
+	}
+}
+
+// ensureFreeDisk refuses to stage when the target filesystem lacks room for the
+// artifact plus its extracted copy. A statfs failure is non-fatal (skip the
+// check) so the executor never blocks an install on an unsupported filesystem.
+func (e *FilesystemExecutor) ensureFreeDisk(artifactPath, targetRoot string) error {
+	info, err := os.Stat(artifactPath)
+	if err != nil {
+		return nil // nothing to size against; let the normal path surface it
+	}
+	// Need room for the artifact as staged plus its extracted tree; 3x the
+	// compressed size is a safe floor, with a 64 MiB minimum headroom.
+	need := info.Size() * 3
+	if min := int64(64 << 20); need < min {
+		need = min
+	}
+	// Measure the nearest existing ancestor of the (possibly not-yet-created)
+	// target directory.
+	probe := targetRoot
+	for probe != "" {
+		if _, statErr := os.Stat(probe); statErr == nil {
+			break
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			break
+		}
+		probe = parent
+	}
+	free, err := freeDiskBytes(probe)
+	if err != nil {
+		return nil // statfs unsupported/unavailable: do not block the install
+	}
+	if int64(free) < need {
+		return fmt.Errorf("%w: need ~%d bytes free at %s, have %d", ErrInsufficientDisk, need, probe, free)
+	}
 	return nil
 }
 
@@ -246,7 +358,7 @@ func (e *FilesystemExecutor) Rollback(ctx context.Context, update Update) error 
 			return fmt.Errorf("remove current symlink: %w", err)
 		}
 		e.logger.Info("filesystem install rolled back (fresh install removed)", "product", update.Product)
-		return e.runCommand(ctx, "restart", "rollback", e.RestartCommand, update)
+		return e.restartAndMeasure(ctx, "rollback", update)
 	}
 
 	if err := e.swapCurrent(update.Product, prevTarget); err != nil {
@@ -257,7 +369,7 @@ func (e *FilesystemExecutor) Rollback(ctx context.Context, update Update) error 
 		"product", update.Product,
 		"restored_target", prevTarget,
 	)
-	return e.runCommand(ctx, "restart", "rollback", e.RestartCommand, update)
+	return e.restartAndMeasure(ctx, "rollback", update)
 }
 
 // swapCurrent atomically points <product>/current at target using a temp symlink

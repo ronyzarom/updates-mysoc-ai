@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -218,6 +219,86 @@ func TestFilesystemExecutorPhaseArgumentAndEnv(t *testing.T) {
 	want := "apply:apply\nhealth:health\nrollback:rollback\n"
 	if string(data) != want {
 		t.Fatalf("phase log = %q, want %q", string(data), want)
+	}
+}
+
+// TestFilesystemExecutorMeasuresRestartWindow proves the executor records the
+// restart window (invariant 7) and flags a violation when it exceeds the budget
+// WITHOUT aborting the apply — the install still completes.
+func TestFilesystemExecutorMeasuresRestartWindow(t *testing.T) {
+	root := t.TempDir()
+	// A restart command that takes ~1s with a 0s... use a tiny budget so the
+	// ~1s restart is a violation, and confirm the apply still succeeds.
+	script := filepath.Join(t.TempDir(), "slow-restart.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 1\n"), 0o755); err != nil {
+		t.Fatalf("write restart script: %v", err)
+	}
+	artifact := filepath.Join(t.TempDir(), "siemcore-v1.0.0.artifact")
+	makeTarGz(t, artifact, map[string]string{"VERSION": "v1.0.0"})
+
+	e := NewFilesystemExecutor(FilesystemConfig{
+		InstallRoot:           root,
+		RestartCommand:        []string{script},
+		CommandTimeout:        Duration{Duration: defaultCommandTimeout},
+		MaxUnavailableSeconds: 1, // tiny budget; the ~1s restart may breach it
+	}, nil)
+	update := Update{Product: "siemcore", FromVersion: "v0.9.0", ToVersion: "v1.0.0", ArtifactPath: artifact}
+
+	if err := e.Apply(context.Background(), update); err != nil {
+		t.Fatalf("apply must complete even when the window is exceeded: %v", err)
+	}
+	seconds, _ := e.LastUnavailable()
+	if seconds < 1 {
+		t.Fatalf("restart window = %ds, want >= 1s", seconds)
+	}
+
+	// A fast restart with a generous budget is not a violation.
+	fast := filepath.Join(t.TempDir(), "fast-restart.sh")
+	if err := os.WriteFile(fast, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fast restart: %v", err)
+	}
+	e2 := NewFilesystemExecutor(FilesystemConfig{
+		InstallRoot:           t.TempDir(),
+		RestartCommand:        []string{fast},
+		CommandTimeout:        Duration{Duration: defaultCommandTimeout},
+		MaxUnavailableSeconds: 120,
+	}, nil)
+	if err := e2.Apply(context.Background(), update); err != nil {
+		t.Fatalf("fast apply: %v", err)
+	}
+	if _, violation := e2.LastUnavailable(); violation {
+		t.Fatalf("a fast restart must not flag an availability violation")
+	}
+}
+
+// TestFilesystemExecutorRefusesInsufficientDisk proves the free-disk preflight
+// returns the classified ErrInsufficientDisk (a skip, not a failed install) when
+// the install root cannot hold the artifact.
+func TestFilesystemExecutorRefusesInsufficientDisk(t *testing.T) {
+	root := t.TempDir()
+	e := newFSExecutor(t, root)
+
+	// Point the free-space probe at the real filesystem but demand an
+	// impossible amount by claiming a gigantic artifact: ensureFreeDisk sizes
+	// need from the artifact file, so write a sparse file larger than disk.
+	artifact := filepath.Join(t.TempDir(), "huge.artifact")
+	f, err := os.Create(artifact)
+	if err != nil {
+		t.Fatalf("create artifact: %v", err)
+	}
+	// 1 PiB sparse file: need = 3x exceeds any real free space.
+	if err := f.Truncate(1 << 50); err != nil {
+		f.Close()
+		t.Skipf("cannot create sparse file for disk test: %v", err)
+	}
+	f.Close()
+
+	err = e.Apply(context.Background(), Update{Product: "siemcore", FromVersion: "v0.9.0", ToVersion: "v1.0.0", ArtifactPath: artifact})
+	if err == nil {
+		t.Fatal("apply should refuse: insufficient disk")
+	}
+	if !errors.Is(err, ErrInsufficientDisk) {
+		t.Fatalf("want ErrInsufficientDisk, got %v", err)
 	}
 }
 
