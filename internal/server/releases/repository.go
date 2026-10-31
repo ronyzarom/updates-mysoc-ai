@@ -19,6 +19,12 @@ import (
 // already published. Published releases are immutable.
 var ErrReleaseExists = errors.New("release already exists; existing releases are immutable")
 
+// ErrStampedVersionMismatch is returned when an updater self-update artifact's
+// embedded (ldflags-stamped) version does not match the declared release
+// version. The self-update products are the fleet's lifeline, so a mislabelled
+// binary is refused rather than published.
+var ErrStampedVersionMismatch = errors.New("updater artifact version stamp does not match declared version")
+
 const releaseColumns = `id, product_name, version, channel, manifest, artifact_path, artifact_size, checksum, signature, release_notes, min_updater_version, target_groups, released_at, created_at, seal_status, issuer, issuer_key_id, issuer_signature`
 
 // Repository handles release database operations

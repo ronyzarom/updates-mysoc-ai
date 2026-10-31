@@ -1,6 +1,7 @@
 package releases
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -141,8 +142,22 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 	// the published artifact.
 	hasher := sha256.New()
 	staged := ".staging-" + uuid.NewString()
-	if _, err := s.storage.Save(req.ProductName, req.Version, staged, io.TeeReader(req.File, hasher)); err != nil {
+	// Survivability guard (1.18.0): the self-update products are the fleet's
+	// lifeline, so a mislabelled updater binary must never be published. For
+	// updater-* products, scan the artifact bytes (no code execution) for the
+	// ldflags-stamped version and require it to equal the declared version.
+	var stampScan *versionStampScanner
+	var saveReader io.Reader = io.TeeReader(req.File, hasher)
+	if isSelfUpdateProduct(req.ProductName) {
+		stampScan = newVersionStampScanner(req.Version)
+		saveReader = io.TeeReader(saveReader, stampScan)
+	}
+	if _, err := s.storage.Save(req.ProductName, req.Version, staged, saveReader); err != nil {
 		return nil, fmt.Errorf("failed to save artifact: %w", err)
+	}
+	if stampScan != nil && !stampScan.Found() {
+		return nil, fmt.Errorf("%w: product %q declared version %q but the binary is not stamped with it (built with a different version, or wrong file)",
+			ErrStampedVersionMismatch, req.ProductName, req.Version)
 	}
 	committed := false
 	defer func() {
@@ -213,6 +228,51 @@ func (s *Service) CreateRelease(ctx context.Context, req CreateReleaseRequest) (
 
 	return release, nil
 }
+
+// isSelfUpdateProduct reports whether a product name is one of the updater
+// self-update artifacts the whole fleet pulls (updater-<os>-<arch>).
+func isSelfUpdateProduct(product string) bool {
+	return strings.HasPrefix(product, "updater-")
+}
+
+// versionStampScanner is a streaming io.Writer that reports whether a needle
+// (the declared version, stamped into the binary by `-ldflags -X main.Version`)
+// appears anywhere in the written bytes. It carries the trailing len(needle)-1
+// bytes across Write boundaries so a stamp split across chunks is still found.
+// It never executes the artifact.
+type versionStampScanner struct {
+	needle []byte
+	tail   []byte
+	found  bool
+}
+
+func newVersionStampScanner(version string) *versionStampScanner {
+	return &versionStampScanner{needle: []byte(version)}
+}
+
+func (v *versionStampScanner) Write(p []byte) (int, error) {
+	n := len(p)
+	if v.found || len(v.needle) == 0 {
+		return n, nil
+	}
+	buf := p
+	if len(v.tail) > 0 {
+		buf = append(v.tail, p...)
+	}
+	if bytes.Contains(buf, v.needle) {
+		v.found = true
+		v.tail = nil
+		return n, nil
+	}
+	if keep := len(v.needle) - 1; keep > 0 && len(buf) >= keep {
+		v.tail = append(v.tail[:0:0], buf[len(buf)-keep:]...)
+	} else {
+		v.tail = append(v.tail[:0:0], buf...)
+	}
+	return n, nil
+}
+
+func (v *versionStampScanner) Found() bool { return v.found }
 
 func logSeal(product, version string, seal SealResult) {
 	switch seal.Status {

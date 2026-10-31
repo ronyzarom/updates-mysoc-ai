@@ -148,7 +148,15 @@ render_config() {
 
 echo "==> creating service user and directories"
 id -u $NAME >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin $NAME
-mkdir -p /etc/$NAME /var/lib/$NAME
+mkdir -p /var/lib/$NAME
+# The caller's umask is intentionally untrusted. Greenfield/first-install
+# commonly runs with umask 077, which would leave /etc/$NAME as 0700 root:root
+# and the unprivileged service unable to TRAVERSE it to read its 0640
+# config.yaml — the updater then cannot start, so it can never self-update out
+# of the problem. Create the dir 0750 root:$NAME explicitly (survivability:
+# matches kits/mysoc/install.sh; ported from version/1.16.1 f5dc7dd during the
+# 1.18.0 stranded-commit audit).
+install -d -m 0750 -o root -g "$NAME" /etc/$NAME
 
 echo "==> installing binary (self-updatable layout)"
 # The binary lives in a versioned directory owned by the service user, and
