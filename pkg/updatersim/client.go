@@ -303,15 +303,38 @@ func (c *Client) CheckUpdate(
 	product string,
 	request UpdateCheckRequest,
 ) (*UpdateOffer, error) {
+	offer, _, err := c.CheckUpdateRaw(ctx, product, request)
+	return offer, err
+}
+
+// CheckUpdateRaw returns both the typed offer and the raw top-level JSON fields
+// of the upstream response. A relay uses the raw map to forward an update offer
+// to its children field-for-field — including any field a future server adds
+// that this relay's build does not yet know — so a new additive protocol field
+// survives every relay hop instead of being silently dropped by an old relay's
+// typed re-encode. The self-update offer in particular must pass through a relay
+// of any version unchanged (invariant 8); see handleChildCheck.
+func (c *Client) CheckUpdateRaw(
+	ctx context.Context,
+	product string,
+	request UpdateCheckRequest,
+) (*UpdateOffer, map[string]json.RawMessage, error) {
 	if !productNamePattern.MatchString(product) {
-		return nil, fmt.Errorf("invalid product name %q", product)
+		return nil, nil, fmt.Errorf("invalid product name %q", product)
 	}
 
-	var response UpdateCheckResponse
+	var raw json.RawMessage
 	path := "/api/v1/updates/" + url.PathEscape(product) + "/check"
-	if err := c.doJSON(ctx, http.MethodPost, path, request, &response); err != nil {
-		return nil, err
+	if err := c.doJSON(ctx, http.MethodPost, path, request, &raw); err != nil {
+		return nil, nil, err
 	}
+	var response UpdateCheckResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, nil, fmt.Errorf("decode update check response: %w", err)
+	}
+	fields := map[string]json.RawMessage{}
+	// Best-effort: a non-object body still yields a usable typed offer above.
+	_ = json.Unmarshal(raw, &fields)
 
 	downloadURL := response.DownloadURL
 	if downloadURL == "" {
@@ -334,7 +357,7 @@ func (c *Client) CheckUpdate(
 		DependencyValidation: response.DependencyValidation,
 		RequiredDependencies: response.RequiredDependencies,
 		Source:               "policy",
-	}, nil
+	}, fields, nil
 }
 
 // CheckLatest calls the legacy group-unaware release endpoint.

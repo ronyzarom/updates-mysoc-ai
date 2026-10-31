@@ -53,6 +53,11 @@ const (
 	// not exceed (invariant 7). Exceeding it never aborts an in-flight apply;
 	// it flags the report so alpha catches it.
 	defaultMaxUnavailableSeconds = 120
+	// defaultRelayDrainTimeout bounds the relay's graceful child-facing drain
+	// on shutdown (self-update activation or SIGTERM): in-flight downloads
+	// finish while new requests get 503 + Retry-After, then the listener is
+	// forced closed so the relay's own self-update exit never deadlocks.
+	defaultRelayDrainTimeout = 2 * time.Minute
 )
 
 // Executor kinds selectable via simulation.executor.
@@ -203,6 +208,13 @@ type RelayConfig struct {
 	// ChildOfflineAfter marks a child offline in rollups when it has not
 	// heartbeated for this long (default 5m).
 	ChildOfflineAfter Duration `yaml:"child_offline_after,omitempty"`
+	// DrainTimeout bounds the graceful child-facing drain when the relay is
+	// shutting down (self-update activation or SIGTERM): new child requests are
+	// refused with 503 + Retry-After while in-flight artifact downloads are
+	// allowed to finish, up to this long, before the listener is forced closed
+	// (default 2m). A relay must never cut a child mid-download when it can
+	// help it, but it must also never deadlock its own self-update exit.
+	DrainTimeout Duration `yaml:"drain_timeout,omitempty"`
 	// ChildHeartbeatInterval, when set, is advertised to children in the
 	// heartbeat response as an interval hint (Fleet Scalability 1.12): at
 	// scale a mysoc relay pushes its 20k customer relays to a longer interval
@@ -470,6 +482,9 @@ func (c *Config) setDefaults() {
 		}
 		if c.Relay.ChildOfflineAfter.Duration == 0 {
 			c.Relay.ChildOfflineAfter.Duration = 5 * time.Minute
+		}
+		if c.Relay.DrainTimeout.Duration == 0 {
+			c.Relay.DrainTimeout.Duration = defaultRelayDrainTimeout
 		}
 		if c.Relay.MaxChildren == 0 {
 			c.Relay.MaxChildren = defaultRelayMaxChildren

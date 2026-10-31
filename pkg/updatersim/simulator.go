@@ -66,6 +66,11 @@ type Simulator struct {
 	// unreachable". Reset at the start of each cycle; read by buildHeartbeat.
 	parentRejectedCredential bool
 
+	// relayCredProbe reports whether the relay last had its own credential
+	// rejected by the parent while forwarding a child check. Only set in relay
+	// mode; ORed into the heartbeat's parent_rejected_credential signal.
+	relayCredProbe func() bool
+
 	// guardStatsFn supplies the relay listener's port-protection counters.
 	guardStatsFn func() *platformtypes.RelayGuardStats
 
@@ -89,6 +94,13 @@ func (s *Simulator) SetGuardStatsProvider(provider func() *platformtypes.RelayGu
 // into heartbeats, so a live process with a dead listener is visible upstream.
 func (s *Simulator) SetRelayListenerProbe(probe func() bool) {
 	s.relayListenerFn = probe
+}
+
+// SetParentCredentialProbe wires the relay's observation that the parent
+// rejected this node's own credential (while forwarding a child check) into the
+// heartbeat, so an expired or rotated license surfaces cascade-wide.
+func (s *Simulator) SetParentCredentialProbe(probe func() bool) {
+	s.relayCredProbe = probe
 }
 
 // SetDeltaProvider wires the relay's change-only delta stream into this node's
@@ -796,7 +808,7 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 		LastUpdateAttempt:        s.state.LastUpdateAttempt,
 		SelfUpdate:               s.selfUpdateStatus(),
 		RelayListenerOK:          relayListenerOK,
-		ParentRejectedCredential: s.parentRejectedCredential,
+		ParentRejectedCredential: s.parentRejectedCredential || (s.relayCredProbe != nil && s.relayCredProbe()),
 		Children:                 children,
 		RelayGuard:               guardStats,
 		Delta:                    delta,

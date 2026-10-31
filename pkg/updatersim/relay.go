@@ -13,12 +13,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/artifactprotocol"
@@ -63,6 +65,19 @@ type Relay struct {
 	lastSummary *platformtypes.FleetSummary
 
 	cacheMu sync.Mutex // serializes pull-through fetches
+
+	// draining is set while the relay is shutting down (self-update activation
+	// or SIGTERM): new child requests are refused with 503 + Retry-After so the
+	// child retries the next cycle, while in-flight downloads finish within the
+	// drain window. It prevents a relay from cutting a child mid-download and
+	// also prevents the relay's own self-update exit from deadlocking.
+	draining atomic.Bool
+
+	// parentRejectedCred is set when the parent rejects THIS relay's credential
+	// (401/403 forwarding a child check) and cleared on the next accepted
+	// forward. It is a cascade-wide signal (expired/rotated license) surfaced in
+	// the upward heartbeat, distinct from a child presenting a bad token.
+	parentRejectedCred atomic.Bool
 }
 
 type childState struct {
@@ -180,6 +195,12 @@ func (g *relayGzipBody) Close() error {
 
 // Serve runs the relay listener until the context is canceled.
 func (r *Relay) Serve(ctx context.Context) error {
+	// A relay is the cascade backbone: before it accepts a single child it
+	// self-heals its cache, dropping any artifact whose bytes no longer match
+	// the checksum encoded in its name. A corrupt cache must never be served
+	// downstream, and a relay must never refuse to start because of one.
+	r.verifyCacheIntegrity()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", r.handleHealth)
 	mux.HandleFunc("POST /api/v1/heartbeat", r.handleChildHeartbeat)
@@ -197,10 +218,13 @@ func (r *Relay) Serve(ctx context.Context) error {
 	}
 
 	// The guard fronts every route: temp-bans, per-IP rate limits, and the
-	// learned-source restriction are applied before any handler runs.
+	// learned-source restriction are applied before any handler runs. The drain
+	// gate wraps the guard so that during shutdown new requests are refused with
+	// 503 + Retry-After before any work is done, while in-flight downloads that
+	// already passed the gate are allowed to finish.
 	server := &http.Server{
 		Addr:              r.config.Relay.Listen,
-		Handler:           r.guard.middleware(relayGzipDecode(mux)),
+		Handler:           r.drainGate(r.guard.middleware(relayGzipDecode(mux))),
 		ReadHeaderTimeout: 10 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
@@ -218,9 +242,21 @@ func (r *Relay) Serve(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// Refuse new child work, then let in-flight downloads finish within the
+		// drain window so no child is cut mid-download; after that the listener
+		// is forced closed so the relay's own self-update exit never deadlocks.
+		r.draining.Store(true)
+		drain := r.config.Relay.DrainTimeout.Duration
+		if drain <= 0 {
+			drain = defaultRelayDrainTimeout
+		}
+		r.logger.Info("relay draining before shutdown", "drain_timeout", drain)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), drain)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			r.logger.Warn("relay drain window exceeded; forcing close", "error", err)
+			_ = server.Close()
+		}
 		return nil
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
@@ -228,6 +264,21 @@ func (r *Relay) Serve(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+// drainGate refuses new child requests with 503 + Retry-After while the relay
+// is draining for shutdown. /health is always answered so an orchestrator can
+// still observe the node. Requests already inside a handler are untouched, so
+// in-flight artifact downloads complete within the drain window.
+func (r *Relay) drainGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if r.draining.Load() && req.URL.Path != "/health" {
+			w.Header().Set("Retry-After", "5")
+			relayError(w, http.StatusServiceUnavailable, "relay is draining for restart; retry shortly")
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
 }
 
 // ChildrenReport builds the recursive fleet rollup for the relay's own upward
@@ -655,16 +706,24 @@ func (r *Relay) handleChildCheck(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	offer, err := r.upstream.CheckUpdate(req.Context(), product, checkReq)
+	offer, upstreamFields, err := r.upstream.CheckUpdateRaw(req.Context(), product, checkReq)
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
+			// A parent that rejects the relay's own credential is a cascade-wide
+			// problem (expired/rotated license), distinct from a child's bad
+			// request. Record it so it surfaces in the upward rollup.
+			if apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden {
+				r.noteParentCredentialRejected(apiErr.StatusCode)
+			}
 			relayError(w, apiErr.StatusCode, apiErr.Message)
 			return
 		}
 		relayError(w, http.StatusBadGateway, "upstream check failed: "+err.Error())
 		return
 	}
+	// The parent accepted the relay's credential on this forward.
+	r.parentRejectedCred.Store(false)
 
 	if !offer.UpdateAvailable {
 		relayJSON(w, http.StatusOK, map[string]interface{}{
@@ -684,16 +743,30 @@ func (r *Relay) handleChildCheck(w http.ResponseWriter, req *http.Request) {
 		}
 		localURL += "?artifact_kind=" + offer.SelectedArtifactKind
 	}
-	response := map[string]interface{}{
-		"update_available": true,
-		"latest_version":   offer.LatestVersion,
-		"download_url":     localURL,
-		"update_url":       localURL,
-		"sha256":           offer.Checksum,
-		"signature":        offer.Signature,
-		"release_notes":    offer.ReleaseNotes,
-		"channel":          offer.Channel,
-		"update_group":     offer.UpdateGroup,
+
+	// Start from the upstream object verbatim so any additive field a future
+	// server adds — one this relay build has no struct field for — is forwarded
+	// to the child untouched (invariant 8: a new protocol field must survive an
+	// old relay hop). We then override only what the relay is authoritative for.
+	response := map[string]interface{}{}
+	for k, v := range upstreamFields {
+		response[k] = v
+	}
+	// The relay rewrites the download target to itself and re-asserts the
+	// integrity-critical fields from the typed offer (normalized checksum,
+	// verified signature), never trusting a stray upstream download URL.
+	response["update_available"] = true
+	response["latest_version"] = offer.LatestVersion
+	response["download_url"] = localURL
+	response["update_url"] = localURL
+	response["sha256"] = offer.Checksum
+	response["signature"] = offer.Signature
+	response["update_group"] = offer.UpdateGroup
+	if offer.ReleaseNotes != "" {
+		response["release_notes"] = offer.ReleaseNotes
+	}
+	if offer.Channel != "" {
+		response["channel"] = offer.Channel
 	}
 	if offer.ProtocolVersion != "" {
 		response["protocol_version"] = offer.ProtocolVersion
@@ -955,6 +1028,131 @@ func (r *Relay) authorizeChild(w http.ResponseWriter, req *http.Request, instanc
 // GuardStats exposes the port-protection counters for the upward heartbeat.
 func (r *Relay) GuardStats() *platformtypes.RelayGuardStats {
 	return r.guard.Stats()
+}
+
+// noteParentCredentialRejected records that the parent rejected this relay's own
+// credential while forwarding a child check. It is cascade-wide (an expired or
+// rotated license), so it is surfaced in the upward heartbeat for operators.
+func (r *Relay) noteParentCredentialRejected(status int) {
+	if !r.parentRejectedCred.Swap(true) {
+		r.logger.Warn("parent rejected this relay's credential forwarding a child check",
+			"status", status)
+	}
+}
+
+// ParentCredentialRejected reports whether the parent last rejected this relay's
+// credential. Wired into the simulator's heartbeat via SetParentCredentialProbe.
+func (r *Relay) ParentCredentialRejected() bool { return r.parentRejectedCred.Load() }
+
+// ListenerHealthy probes the relay's own child-facing listener over a bounded
+// TLS GET /health. A relay whose listener is wedged is a dead cascade: the
+// systemd watchdog must be allowed to lapse so the process is restarted rather
+// than kept alive. Wired into the simulator via SetRelayListenerProbe.
+func (r *Relay) ListenerHealthy() bool {
+	addr := r.config.Relay.Listen
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return false
+	}
+	// Dial the loopback form of our own listener regardless of the bind host.
+	target := net.JoinHostPort("127.0.0.1", port)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			// Self-probe of our own self-signed listener: we are not
+			// authenticating the cert, only confirming the listener answers.
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // localhost self-probe
+		},
+	}
+	resp, err := client.Get("https://" + target + "/health")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	return resp.StatusCode == http.StatusOK
+}
+
+// verifyCacheIntegrity scans the pull-through cache at startup and removes any
+// artifact whose on-disk bytes no longer hash to the checksum encoded in its
+// file name (product-version-kind-<sha256>.artifact). Those are the self-update
+// and update artifacts the cascade serves; a silent bit-flip there would ship a
+// corrupt binary to every child. Files without an embedded checksum are left
+// alone (they are re-verified against upstream metadata on each cache hit).
+func (r *Relay) verifyCacheIntegrity() {
+	dir := r.config.Relay.CacheDir
+	if dir == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			r.logger.Warn("relay cache integrity scan skipped", "dir", dir, "error", err)
+		}
+		return
+	}
+	checked, removed := 0, 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".artifact") {
+			continue
+		}
+		want := checksumFromCacheName(entry.Name())
+		if want == "" {
+			continue // no embedded checksum to verify against
+		}
+		checked++
+		path := filepath.Join(dir, entry.Name())
+		ok, err := fileMatchesChecksum(path, want)
+		if err != nil {
+			r.logger.Warn("relay cache integrity read failed", "file", entry.Name(), "error", err)
+			continue
+		}
+		if !ok {
+			if rmErr := os.Remove(path); rmErr != nil {
+				r.logger.Error("relay cache integrity: corrupt artifact could not be removed",
+					"file", entry.Name(), "error", rmErr)
+				continue
+			}
+			removed++
+			r.logger.Warn("relay cache integrity: removed corrupt artifact", "file", entry.Name())
+		}
+	}
+	if checked > 0 {
+		r.logger.Info("relay cache integrity verified", "checked", checked, "removed", removed)
+	}
+}
+
+// checksumFromCacheName extracts the 64-hex sha256 encoded as the last dash
+// segment of a cache file name (product-version-kind-<sha256>.artifact), or ""
+// when the name carries no embedded checksum.
+func checksumFromCacheName(name string) string {
+	base := strings.TrimSuffix(name, ".artifact")
+	idx := strings.LastIndex(base, "-")
+	if idx < 0 {
+		return ""
+	}
+	candidate := base[idx+1:]
+	if len(candidate) != 64 {
+		return ""
+	}
+	if _, err := hex.DecodeString(candidate); err != nil {
+		return ""
+	}
+	return candidate
+}
+
+// fileMatchesChecksum streams a file through sha256 and compares to want.
+func fileMatchesChecksum(path, want string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return false, err
+	}
+	return hex.EncodeToString(h.Sum(nil)) == want, nil
 }
 
 // DeltaEnvelope drains the next bounded, change-only batch for the relay's own

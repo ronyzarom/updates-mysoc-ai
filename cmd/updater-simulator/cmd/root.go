@@ -407,6 +407,12 @@ relay.enabled: true (and relay.listen) in the configuration.`,
 				simulator.SetChildrenProvider(relay.ChildrenReport)
 			}
 			simulator.SetGuardStatsProvider(relay.GuardStats)
+			// The relay's own health feeds the node's survivability signals: a
+			// dead child-facing listener must lapse the systemd watchdog
+			// (restart, not keep-alive), and a parent that rejects the relay's
+			// credential must surface cascade-wide in the upward heartbeat.
+			simulator.SetRelayListenerProbe(relay.ListenerHealthy)
+			simulator.SetParentCredentialProbe(relay.ParentCredentialRejected)
 
 			ctx, stop := signal.NotifyContext(
 				context.Background(),
