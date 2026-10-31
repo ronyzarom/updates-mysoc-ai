@@ -11,8 +11,11 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.18.0 — Updater survivability: self-update always works, no deadlocks
 
-**Build:** 1.18.0.1 on `version/1.18.0` · **Status:** in local validation; not
-yet published to any ring. Not merged to `main`, not tagged.
+**Build:** 1.18.0.2 on `version/1.18.0` · **Status:** in local validation; not
+yet published to any ring. Not merged to `main`, not tagged. (`1.18.0.1` was the
+Phase 1 binary-only checkpoint; `1.18.0.2` adds the Phase 2 kit — the systemd
+watchdog pinger, `Type=notify`/`WatchdogSec`, and the root restore backstop —
+so the binary changed and the build number was incremented per the dev cycle.)
 
 **Theme:** make the updater's own self-update unconditional, bounded, and
 self-healing so a node can always pull itself forward and can never wedge the

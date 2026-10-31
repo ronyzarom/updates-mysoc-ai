@@ -1,0 +1,16 @@
+[Unit]
+Description=Restore MySoc updater to its previous version after repeated failures
+# Triggered by mysoc-updater.service OnFailure (start-limit hit). It is the
+# out-of-process, root-owned backstop (survivability invariant 4): the main unit
+# runs unprivileged and cannot be trusted to repair itself once the activated
+# binary is the thing crashing. This unit flips the self-update layout back to
+# .previous and restarts the main unit on the known-good binary.
+# Guard against a restore loop of its own.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+# Runs as root (no User=) so it can rewrite the service-user-owned symlink and
+# manage the main unit. Deliberately unsandboxed for the same reason.
+ExecStart=/usr/local/sbin/mysoc-updater-self-restore

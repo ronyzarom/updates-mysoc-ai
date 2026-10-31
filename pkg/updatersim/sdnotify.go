@@ -3,6 +3,8 @@ package updatersim
 import (
 	"net"
 	"os"
+	"strconv"
+	"time"
 )
 
 // sd_notify (systemd) support, implemented with the standard library only so
@@ -55,6 +57,21 @@ func sdNotifyWatchdog() { sdNotify("WATCHDOG=1") }
 // (WATCHDOG_USEC set and this is the main pid). Used to decide whether to ping.
 func sdWatchdogEnabled() bool {
 	return os.Getenv("NOTIFY_SOCKET") != "" && os.Getenv("WATCHDOG_USEC") != ""
+}
+
+// sdWatchdogInterval returns how often to ping: half of WATCHDOG_USEC (systemd's
+// recommended cadence), so a single missed cycle does not trip the watchdog.
+// Defaults to 30s when WATCHDOG_USEC is absent or unparseable.
+func sdWatchdogInterval() time.Duration {
+	usec, err := strconv.ParseInt(os.Getenv("WATCHDOG_USEC"), 10, 64)
+	if err != nil || usec <= 0 {
+		return 30 * time.Second
+	}
+	half := time.Duration(usec/2) * time.Microsecond
+	if half < time.Second {
+		half = time.Second
+	}
+	return half
 }
 
 // NotifyReady tells the service manager (systemd Type=notify) that the updater

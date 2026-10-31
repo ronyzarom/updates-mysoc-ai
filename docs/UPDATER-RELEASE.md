@@ -202,18 +202,20 @@ release, or the release that will make it hold.
 | 1 | Self-update is evaluated first in every cycle, in isolation, with its own deadline; its outcome never depends on heartbeat success or on any product hook. | 1.18.0.1 (code; Phase 1) |
 | 2 | A candidate binary must prove it boots on this host (real config and state, read-only preflight) before the symlink swap. | 1.18.0.1 (code; `preflight` subcommand) |
 | 3 | Every phase has a deadline, including downloads; a stalled cycle is cancelled, never waited on. | 1.18.0.1 (code; cycle/product/download/stall deadlines) |
-| 4 | An out-of-process, root-owned backstop restores `.previous` if the activated binary keeps dying during the handoff. | 1.18.0 kit (Phase 2; pending host-rollout approval) |
+| 4 | An out-of-process, root-owned backstop restores `.previous` if the activated binary keeps dying during the handoff. | 1.18.0.2 kit (Phase 2: `OnFailure` restore unit + root `-self-restore` script; pending host-rollout approval) |
 | 5 | Several trusted signing keys; the self-update product is served on a frozen protocol by server and relays. | 1.18.0.1 (code; `public_keys` + frozen offer pass-through) |
 | 6 | Compatibility with the previous release's `config.yaml` and `state.json` is a build-time test. | 1.18.0.1 (code; `testdata/compat/`) |
 | 7 | An update never backs up or restores data and never takes the server down beyond a process restart window; the updater measures the window and the server refuses to promote a release that broke the budget. | 1.18.0.1 code + entrypoint contract v1.4 (proposed) |
-| 8 | The relay is the backbone: it forwards every field a self-update offer needs regardless of its own version, drains children before it restarts, never reports itself alive with a dead child listener, and is the first thing the boot backstop protects. | 1.18.0.1 (code; backstop is Phase 2) |
+| 8 | The relay is the backbone: it forwards every field a self-update offer needs regardless of its own version, drains children before it restarts, never reports itself alive with a dead child listener, and is the first thing the boot backstop protects. | 1.18.0.1 (code) + 1.18.0.2 (kit backstop, Phase 2) |
 | 9 | Receipts and every other file the updater writes for a root-owned consumer (`.updater-release.json`, `state.json`) are pinned by tests on `main`. | holds since 1.17.1.1 |
 | 10 | The updater is minimal: the leaf binary carries only check, verify, stage, apply, health, rollback, repair and self-update; relay, load generation and reconciliation tooling ship as separate commands. | planned (follow-up) |
 
-> Status note: 1.18.0.1 is the Phase 1 build (updater binary) in local
-> validation — not yet on any ring, not merged, not tagged. The Phase 2 kit
-> work for invariant 4 (root OnFailure restore unit, `Type=notify`/`WatchdogSec`)
-> is gated on a separate host-rollout approval.
+> Status note: 1.18.0.1 was the Phase 1 checkpoint (updater binary). 1.18.0.2
+> is the current build and adds the Phase 2 kit — the root `OnFailure` restore
+> unit, the `-self-restore` backstop script, and `Type=notify`/`WatchdogSec`
+> with a background watchdog pinger — so the binary changed and the build number
+> was incremented. Neither is on any ring, merged, or tagged; Phase 2 host
+> rollout (the systemd unit changes) is gated on a separate approval.
 
 ### Refreshing the golden compatibility snapshot (invariant 6)
 

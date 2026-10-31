@@ -323,16 +323,15 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	// Fresh credential-rejection signal per cycle.
 	s.parentRejectedCredential = false
 
-	// Probe the relay listener once this cycle (nil for non-relays), then feed
-	// the systemd watchdog ONLY when healthy: a relay whose child-facing
-	// listener is dead is a dead cascade and must be restarted, not kept alive.
+	// Probe the relay listener once this cycle (nil for non-relays) for the
+	// heartbeat's relay_listener_ok. The systemd watchdog is fed by a separate
+	// background pinger (startWatchdog), not here, so a long-but-progressing
+	// cycle (e.g. a fresh-host first_install) never trips WatchdogSec while a
+	// dead relay listener still lapses it.
 	s.cycleListenerOK = nil
 	if s.relayListenerFn != nil {
 		ok := s.relayListenerFn()
 		s.cycleListenerOK = &ok
-	}
-	if sdWatchdogEnabled() && (s.cycleListenerOK == nil || *s.cycleListenerOK) {
-		sdNotifyWatchdog()
 	}
 
 	var cycleErrors []error
@@ -424,10 +423,38 @@ func (s *Simulator) selfUpdatePhase(ctx context.Context, mode Mode) error {
 	return errors.Join(err, fmt.Errorf("fallback: %w", fbErr))
 }
 
+// startWatchdog launches a background systemd watchdog pinger when launched
+// under a notify unit with WatchdogSec. It pings at half the watchdog interval,
+// decoupled from cycle duration so a long first_install never trips it. A relay
+// pings only while its child-facing listener self-probe passes, so a live
+// process with a dead cascade listener is restarted rather than kept alive.
+// Inert (no goroutine) when not under a watchdog unit.
+func (s *Simulator) startWatchdog(ctx context.Context) {
+	if !sdWatchdogEnabled() {
+		return
+	}
+	interval := sdWatchdogInterval()
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if s.relayListenerFn == nil || s.relayListenerFn() {
+					sdNotifyWatchdog()
+				}
+			}
+		}
+	}()
+}
+
 // Run starts an immediate cycle followed by jittered heartbeat cycles. It
 // returns ErrRestartPending when a self-update was activated, so the caller
 // can exit the process for the service manager to relaunch the new binary.
 func (s *Simulator) Run(ctx context.Context, mode Mode) error {
+	s.startWatchdog(ctx)
 	if err := s.RunCycle(ctx, mode); err != nil && !errors.Is(err, context.Canceled) {
 		if errors.Is(err, ErrRestartPending) {
 			return err

@@ -2,9 +2,27 @@
 Description=SiemCore cascade updater (relay to the operator's mysoc node)
 After=network-online.target
 Wants=network-online.target
+# Survivability (1.18.0): if the updater restarts too fast too often — the
+# signature of a self-update to a binary that cannot stay up — systemd stops
+# flapping it and triggers the restore unit, which rolls the self-update layout
+# back to .previous and starts a known-good binary.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=siemcore-cascade-updater-restore.service
 
 [Service]
-Type=simple
+# Type=notify: the updater signals READY=1 only after it has settled any pending
+# self-update, so a binary that never reaches readiness is a failed start (and
+# OnFailure restores .previous). WatchdogSec restarts a process that stops
+# pinging — a wedged process, or a relay whose child-facing listener is dead
+# (the relay pings only while its listener self-probe passes). The in-process
+# cycle/product/download deadlines bound progress; this is the last-resort
+# backstop. WatchdogSec must exceed the watchdog ping interval, not the cycle
+# length — the pinger is decoupled from cycle duration, so a long first_install
+# never trips it.
+Type=notify
+NotifyAccess=main
+WatchdogSec=180
 User=siemcore-cascade-updater
 Group=siemcore-cascade-updater
 ExecStart=/usr/local/bin/siemcore-cascade-updater relay --config /etc/siemcore-cascade-updater/config.yaml

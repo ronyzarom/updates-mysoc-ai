@@ -194,6 +194,17 @@ fi
 
 echo "==> installing systemd unit"
 install -m 0644 $NAME.service /etc/systemd/system/$NAME.service
+# Survivability (1.18.0): the root-owned restore backstop (invariant 4). The
+# main unit's OnFailure triggers it when the updater flaps past its start limit
+# — the signature of a self-update to a binary that cannot stay up — and it rolls
+# the self-update layout back to .previous and restarts the known-good binary.
+if [[ -f "$PWD/$NAME-self-restore.sh" && -f "$PWD/$NAME-restore.service" ]]; then
+    echo "    installing self-update restore backstop ($NAME-restore.service)"
+    install -m 0755 -o root -g root "$PWD/$NAME-self-restore.sh" /usr/local/sbin/$NAME-self-restore
+    install -m 0644 "$PWD/$NAME-restore.service" /etc/systemd/system/$NAME-restore.service
+else
+    echo "    WARNING: restore backstop files missing from kit; skipping (invariant 4 not armed)" >&2
+fi
 systemctl daemon-reload
 systemctl enable $NAME
 

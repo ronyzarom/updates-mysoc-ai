@@ -65,6 +65,8 @@ for tier in "${TIERS[@]}"; do
         esac
     done
     chmod +x "$OUT/install.sh"
+    # The root-owned self-update restore backstop (survivability invariant 4).
+    [[ -f "$OUT/${BIN_NAME}-self-restore.sh" ]] && chmod +x "$OUT/${BIN_NAME}-self-restore.sh"
 
     # The mysoc kit bundles the root apply wrapper so `install.sh --executor
     # filesystem` can install it on a fresh host with no extra files staged.
@@ -87,6 +89,9 @@ for tier in "${TIERS[@]}"; do
         cd "$OUT"
         files=(bin/* config.yaml install.sh ./*.service)
         [[ -f mysoc-apply-update.sh ]] && files+=(mysoc-apply-update.sh)
+        for restore in ./*-self-restore.sh; do
+            [[ -f "$restore" ]] && files+=("$restore")
+        done
         SHA "${files[@]}" > SHA256SUMS
     )
 
