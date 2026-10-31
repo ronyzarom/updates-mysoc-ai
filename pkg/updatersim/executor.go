@@ -17,6 +17,7 @@ type Update struct {
 	ReleaseNotes         string
 	ArtifactPath         string
 	ArtifactSHA256       string
+	ArtifactSignature    string // verified origin signature, retained for privileged executors
 }
 
 // Executor is the integration seam for a real SiemCore or SWF updater.

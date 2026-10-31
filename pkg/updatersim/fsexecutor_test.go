@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -316,5 +317,67 @@ func TestDualFilesystemExecutionAndRetainedRollback(t *testing.T) {
 	data, err = os.ReadFile(filepath.Join(root, "siemcore", "current", "app"))
 	if err != nil || string(data) != "retained baseline" {
 		t.Fatalf("local rollback failed: %s %v", data, err)
+	}
+}
+
+// A rollback must retain the predecessor's receipt, including its origin
+// signature, not the failed target's. greenfield-hook.py reads this receipt and
+// verifies the signature against the pinned fleet key, so a dropped signature
+// makes the live release unverifiable.
+func TestFilesystemExecutorPreservesReleaseReceipts(t *testing.T) {
+	e := newFSExecutor(t, t.TempDir())
+	updates := []Update{
+		{Product: "siemcore", ToVersion: "1.0.0.1", ArtifactSHA256: "first-sha", ArtifactSignature: "first-signature"},
+		{Product: "siemcore", FromVersion: "1.0.0.1", ToVersion: "1.0.0.2", ArtifactSHA256: "second-sha", ArtifactSignature: "second-signature"},
+	}
+	check := func(want Update) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(resolveCurrent(t, e, "siemcore"), ".updater-release.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var meta releaseMetadata
+		if err := json.Unmarshal(data, &meta); err != nil {
+			t.Fatal(err)
+		}
+		if meta.Product != want.Product || meta.Version != want.ToVersion || meta.SHA256 != want.ArtifactSHA256 || meta.Signature != want.ArtifactSignature {
+			t.Fatalf("incorrect receipt: %+v", meta)
+		}
+	}
+	for i := range updates {
+		updates[i].ArtifactPath = filepath.Join(t.TempDir(), "release.tar.gz")
+		makeTarGz(t, updates[i].ArtifactPath, map[string]string{"VERSION": updates[i].ToVersion})
+		if err := e.Apply(context.Background(), updates[i]); err != nil {
+			t.Fatal(err)
+		}
+		check(updates[i])
+	}
+	if err := e.Rollback(context.Background(), updates[1]); err != nil {
+		t.Fatal(err)
+	}
+	check(updates[0])
+}
+
+// An empty signature must be omitted from the receipt rather than written as an
+// empty string, so a receipt from an unsigned/dev build is distinguishable from
+// a signed one.
+func TestFilesystemExecutorOmitsEmptySignature(t *testing.T) {
+	e := newFSExecutor(t, t.TempDir())
+	artifact := filepath.Join(t.TempDir(), "release.tar.gz")
+	makeTarGz(t, artifact, map[string]string{"VERSION": "1.0.0.1"})
+	update := Update{Product: "siemcore", ToVersion: "1.0.0.1", ArtifactSHA256: "sha", ArtifactPath: artifact}
+	if err := e.Apply(context.Background(), update); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(resolveCurrent(t, e, "siemcore"), ".updater-release.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := fields["signature"]; present {
+		t.Fatalf("empty signature should be omitted, got: %s", raw)
 	}
 }

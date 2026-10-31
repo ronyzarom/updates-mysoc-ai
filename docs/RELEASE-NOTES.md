@@ -5,6 +5,35 @@ build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
 
 ---
 
+## 1.17.1 — Restore `signature` in the staged release receipt
+
+**Build:** 1.17.1.1 on `version/1.17.1` · **Status:** built, awaiting approval
+
+The filesystem executor again records the verified origin `signature` in each
+`.updater-release.json` it stages. A privileged root consumer (siemcore's
+recovery runtime / `greenfield-hook.py`) reads that receipt and re-verifies the
+checksum and signature against its pinned fleet key before it will apply a
+release; with the field missing it rejects the apply (`unapproved release` /
+`signed_release_not_provisioned`) and auto-rolls-back.
+
+The field had been added on `version/1.16.1` (commit `1d658e1`) and on two
+`codex/*` branches (commit `c6aa171`), but neither reached `main`, so the
+`version/1.17.0` line that became updater `1.17.0.2` — promoted to all rings —
+wrote receipts without it. This caused siemcore `3.3.175.9` to fail to apply on
+every alpha host that had self-updated to `1.17.0.2`.
+
+### Fixed
+
+- **`releaseMetadata.signature` restored** — `Apply` writes `ArtifactSignature`
+  (carried from the offer through `processOffer`) into the receipt, omitted when
+  empty so an unsigned/dev build stays distinguishable. Staged metadata remains
+  untrusted input: privileged consumers must verify it against their own key.
+- Tests: receipt retains the signature across apply and rollback; an empty
+  signature is omitted; and a signed offer produces a receipt a root consumer
+  can verify end to end (`receipt_signature_test.go`).
+
+---
+
 ## 1.17.0 — Fresh-host one-command install (`first_install`)
 
 **Build:** 1.17.0.3 on `version/1.17.0`, merged to `main` · **Status:** deployed
