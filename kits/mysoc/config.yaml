@@ -63,6 +63,31 @@ heartbeat:
 # self_update:
 #   disabled: true      # opt out of updater self-updates
 #   channel: stable
+#   timeout: 10m        # (1.18.0) whole self-update phase budget; runs first and
+#                       # in isolation so a wedged product never starves it.
+
+# Survivability bounds (1.18.0). All optional; shown with their defaults.
+# signing:
+#   # Trust several keys during a signing-key rotation so a re-keyed release
+#   # never strands this node (any listed key may verify an artifact):
+#   public_keys:
+#     - "PRIMARY-HEX-PUBLIC-KEY"
+#     - "ROTATED-IN-HEX-PUBLIC-KEY"
+# server:
+#   download_timeout: 30m        # whole-artifact download budget (not metadata)
+#   download_stall_timeout: 2m   # abort a download that makes no progress
+#   # fallback_url: https://updates.mysoc.ai   # TIER-1 ONLY — a mysoc node that
+#   #   holds an origin credential may self-update from the origin when its
+#   #   parent fails. A relay child must NOT set it.
+# simulation:
+#   cycle_timeout: 60m    # a stuck cycle self-cancels instead of starving ticks
+#   product_timeout: 40m  # per-product budget within a cycle
+#   filesystem:
+#     max_unavailable_seconds: 120   # restart-window budget; a breach flags the
+#                                    # report (never aborts) and blocks promotion.
+# relay:
+#   drain_timeout: 2m     # on shutdown, finish in-flight child downloads, refuse
+#                         # new ones (503 + Retry-After), then close.
 
 simulation:
   # "real" runs the full pipeline: verify signature + checksum, download,

@@ -199,16 +199,38 @@ release, or the release that will make it hold.
 
 | # | Invariant | Status |
 |---|-----------|--------|
-| 1 | Self-update is evaluated first in every cycle, in isolation, with its own deadline; its outcome never depends on heartbeat success or on any product hook. | 1.18.0 (today: heartbeat failure aborts the cycle; self-update runs last) |
-| 2 | A candidate binary must prove it boots on this host (real config and state, read-only preflight) before the symlink swap. | 1.18.0 (today: only `<bin> version`) |
-| 3 | Every phase has a deadline, including downloads; a stalled cycle is cancelled, never waited on. | 1.18.0 (today: downloads share the 30 s metadata timeout; a hung cycle starves later ones) |
-| 4 | An out-of-process, root-owned backstop restores `.previous` if the activated binary keeps dying during the handoff. | 1.18.0 kit (today: the watchdog runs inside the new binary; a non-booting candidate loops forever) |
-| 5 | Several trusted signing keys; the self-update product is served on a frozen protocol by server and relays. | 1.18.0 (today: one key; relay re-encodes a fixed field set) |
-| 6 | Compatibility with the previous release's `config.yaml` and `state.json` is a build-time test. | 1.18.0 |
-| 7 | An update never backs up or restores data and never takes the server down beyond a process restart window; the updater measures the window and the server refuses to promote a release that broke the budget. | 1.18.0 + entrypoint contract v1.4 |
-| 8 | The relay is the backbone: it forwards every field a self-update offer needs regardless of its own version, drains children before it restarts, never reports itself alive with a dead child listener, and is the first thing the boot backstop protects. | 1.18.0 |
+| 1 | Self-update is evaluated first in every cycle, in isolation, with its own deadline; its outcome never depends on heartbeat success or on any product hook. | 1.18.0.1 (code; Phase 1) |
+| 2 | A candidate binary must prove it boots on this host (real config and state, read-only preflight) before the symlink swap. | 1.18.0.1 (code; `preflight` subcommand) |
+| 3 | Every phase has a deadline, including downloads; a stalled cycle is cancelled, never waited on. | 1.18.0.1 (code; cycle/product/download/stall deadlines) |
+| 4 | An out-of-process, root-owned backstop restores `.previous` if the activated binary keeps dying during the handoff. | 1.18.0 kit (Phase 2; pending host-rollout approval) |
+| 5 | Several trusted signing keys; the self-update product is served on a frozen protocol by server and relays. | 1.18.0.1 (code; `public_keys` + frozen offer pass-through) |
+| 6 | Compatibility with the previous release's `config.yaml` and `state.json` is a build-time test. | 1.18.0.1 (code; `testdata/compat/`) |
+| 7 | An update never backs up or restores data and never takes the server down beyond a process restart window; the updater measures the window and the server refuses to promote a release that broke the budget. | 1.18.0.1 code + entrypoint contract v1.4 (proposed) |
+| 8 | The relay is the backbone: it forwards every field a self-update offer needs regardless of its own version, drains children before it restarts, never reports itself alive with a dead child listener, and is the first thing the boot backstop protects. | 1.18.0.1 (code; backstop is Phase 2) |
 | 9 | Receipts and every other file the updater writes for a root-owned consumer (`.updater-release.json`, `state.json`) are pinned by tests on `main`. | holds since 1.17.1.1 |
 | 10 | The updater is minimal: the leaf binary carries only check, verify, stage, apply, health, rollback, repair and self-update; relay, load generation and reconciliation tooling ship as separate commands. | planned (follow-up) |
+
+> Status note: 1.18.0.1 is the Phase 1 build (updater binary) in local
+> validation — not yet on any ring, not merged, not tagged. The Phase 2 kit
+> work for invariant 4 (root OnFailure restore unit, `Type=notify`/`WatchdogSec`)
+> is gated on a separate host-rollout approval.
+
+### Refreshing the golden compatibility snapshot (invariant 6)
+
+`pkg/updatersim/testdata/compat/<version>/{config.yaml,state.json}` is a frozen
+copy of a real node's config and state from the ring fleet at the time a build
+was cut. `TestLoadsGoldenConfigFromPriorRelease` loads it under the current
+binary so a change that adds a required field or breaks a default fails in CI,
+not on a node. When you cut a new ring build:
+
+1. Copy the `config.yaml` and `state.json` from a representative production node
+   on the **current** fleet branch.
+2. Replace secrets (license keys, API keys, relay tokens) with placeholders;
+   keep the structure and all non-secret fields intact.
+3. Save them under `testdata/compat/<new-version>/` and point the test's
+   `snapshot` constant at the new directory (keep older snapshots).
+4. Never edit a snapshot to make the test pass — a failure means the new build
+   dropped backward compatibility; fix the code or document the break.
 
 ## Known issue: binaries labeled 1.8.0.1 may not roll up children
 

@@ -9,6 +9,70 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
+## 1.18.0 — Updater survivability: self-update always works, no deadlocks
+
+**Build:** 1.18.0.1 on `version/1.18.0` · **Status:** in local validation; not
+yet published to any ring. Not merged to `main`, not tagged.
+
+**Theme:** make the updater's own self-update unconditional, bounded, and
+self-healing so a node can always pull itself forward and can never wedge the
+fleet. Eight design invariants (see [UPDATER-RELEASE.md](UPDATER-RELEASE.md)
+§Survivability):
+
+1. Self-update runs **first** each cycle, in isolation, with its own deadline
+   (`self_update.timeout`, 10m). A heartbeat failure is recorded, never fatal;
+   each product is bounded by `product_timeout`, the whole cycle by
+   `cycle_timeout`, so a stuck product never starves self-update or later ticks.
+2. **Prove-it-boots:** a new read-only `preflight --config --state` subcommand;
+   the staged candidate must pass `version` AND `preflight` against the host's
+   real config/state before the symlink swap.
+3. **Bounded downloads:** a separate download client with no overall timeout, a
+   `download_timeout` context deadline (30m) and a no-progress stall guard
+   (`download_stall_timeout`, 2m); `server.timeout` now bounds only metadata.
+4. **Key rollover:** `signing.public_keys` — a signature valid under any trusted
+   key is accepted, so rotating the signing key never strands a node.
+5. **Fallback parent:** `server.fallback_url` is used for the self-update
+   check/download after the parent fails (tier-1 only; a relay warns).
+6. **Compatibility is a build-time test:** a golden `testdata/compat/1.17.1.1/`
+   config+state must load unchanged under 1.18.0.
+7. **No data backup/restore, no outage beyond the restart window** (Entrypoint
+   Contract v1.4, proposed): the updater measures `unavailable_seconds` and the
+   server refuses to widen a release past alpha when an alpha node reported an
+   `availability_violation`, unless an audited `?override=`. A free-disk
+   preflight skips (not fails) an install that will not fit.
+8. **The relay is the backbone:** a self-update offer is forwarded
+   field-for-field (including unknown future fields) so it survives any relay
+   hop; a relay drains children before a self-update exit (503 + Retry-After,
+   in-flight downloads finish); its child-facing listener health gates the
+   systemd watchdog; its cache self-heals corrupt artifacts at start; and
+   `parent_rejected_credential` surfaces an expired/rotated license upward.
+
+Observability is additive: the heartbeat gains `self_update{capable,reason,
+current_version,last_result}`, `relay_listener_ok`, and
+`parent_rejected_credential`; state keeps `last_self_update`. `sd_notify`
+READY/WATCHDOG is wired (inert without a notify unit) ahead of the Phase 2 kit.
+
+**Relay compatibility:** additive only. New heartbeat/report fields
+(`self_update`, `relay_listener_ok`, `parent_rejected_credential`,
+`unavailable_seconds`, `availability_violation`) are ignored by an older server
+or relay. The self-update offer field set is frozen and forwarded verbatim, so a
+1.18.0 offer traverses an older relay unchanged and vice versa. Minimum
+relay/server version: unchanged. `self_update.timeout` and the new
+`simulation`/`relay`/`filesystem` bounds all default when absent, so a
+pre-1.18.0 config runs unchanged (proven by the golden compat test).
+
+### Added
+
+- `preflight` subcommand; `signing.public_keys`; `server.fallback_url` +
+  `server.download_timeout`/`download_stall_timeout`;
+  `simulation.cycle_timeout`/`product_timeout`;
+  `filesystem.max_unavailable_seconds`; `relay.drain_timeout`.
+- Server: streaming version-stamp guard rejects a mislabelled `updater-*`
+  artifact upload; promotion gate refuses to widen a flagged release past alpha
+  without an audited override.
+
+---
+
 ## 1.17.1 — Restore `signature` in the staged release receipt
 
 **Build:** 1.17.1.1 on `version/1.17.1`, commit `e860959`, tag `v1.17.1.1`,

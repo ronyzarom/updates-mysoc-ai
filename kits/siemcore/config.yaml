@@ -72,6 +72,32 @@ heartbeat:
 # self_update:
 #   disabled: true      # opt out of updater self-updates
 #   channel: stable
+#   timeout: 10m        # (1.18.0) whole self-update phase budget; it runs first
+#                       # and in isolation, so a wedged product never starves it.
+
+# Survivability bounds (1.18.0). All optional; shown with their defaults. A
+# config without them behaves exactly as these values.
+# signing:
+#   # Trust more than one key during a signing-key rotation so a re-keyed
+#   # release never strands this node (any listed key may verify an artifact):
+#   public_keys:
+#     - "PRIMARY-HEX-PUBLIC-KEY"
+#     - "ROTATED-IN-HEX-PUBLIC-KEY"
+# server:
+#   download_timeout: 30m        # whole-artifact download budget (not metadata)
+#   download_stall_timeout: 2m   # abort a download that makes no progress
+#   # fallback_url is TIER-1 ONLY (a node that holds an origin credential). A
+#   # relay child must NOT set it — its parent is the relay, not the origin.
+# simulation:
+#   cycle_timeout: 60m    # a stuck cycle self-cancels instead of starving ticks
+#   product_timeout: 40m  # per-product budget within a cycle
+#   filesystem:
+#     # The only outage an update may cause is the restart window; exceeding this
+#     # flags the report (never aborts the apply) and blocks ring promotion.
+#     max_unavailable_seconds: 120
+# relay:
+#   drain_timeout: 2m     # on shutdown, finish in-flight child downloads, refuse
+#                         # new ones (503 + Retry-After), then close.
 
 simulation:
   # "real" runs the full pipeline: verify signature + checksum, download,
