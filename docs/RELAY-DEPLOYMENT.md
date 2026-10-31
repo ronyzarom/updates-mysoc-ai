@@ -1,4 +1,16 @@
-# Relay Deployment Guide (Cascade Updaters, 1.8.0)
+# Relay Deployment Guide (Cascade Updaters)
+
+> Introduced in 1.8.0; this text describes the kits on `main` (1.17.x). Wire
+> contract index and compatibility floor: [RELAY-CONTRACT.md](RELAY-CONTRACT.md).
+> Release rules that involve relays: the "Relay" section of
+> [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
+
+**The relay is the backbone of the cascade.** Every fleet host runs the
+updater with `relay.enabled: true` (both production kits ship it on). Below
+tier 1 a node has no credential for `updates.mysoc.ai`; its relay is its only
+path to product updates and to its own self-update. A relay that is down takes
+its whole subtree out of the update system, including that subtree's ability
+to receive a fix.
 
 How to run updaters in **relay mode** to build the cascaded distribution
 chain:
@@ -59,11 +71,30 @@ heartbeat:
   interval: 60s
 ```
 
-Run:
+Run (the kit's unit does this; the binary is `mysoc-updater` on the mysoc
+tier and `siemcore-cascade-updater` on the siemcore tier, both built from the
+same source):
 
 ```bash
-updater-simulator relay --config config.yaml
+mysoc-updater relay --config /etc/mysoc-updater/config.yaml
 ```
+
+### Listener TLS
+
+The child-facing listener is TLS-only. Two modes, as shipped on `main`:
+
+- **Self-signed (default).** The relay provisions a long-lived self-signed
+  certificate under `relay.tls.dir` on first start. Children pin it with
+  `server.ca_file` (the relay's `cert.pem`).
+- **Operator-provided certificate.** Set `relay.tls.cert_file` and
+  `relay.tls.key_file` to a publicly trusted certificate for the relay's
+  hostname (the fleet uses the SSL.com wildcard on `:18443`); children then
+  need no `ca_file`. The fleet's siemcore hosts run this mode.
+
+A reconciler script that installs and rotates the public certificate
+(`provision-relay-tls.sh`) was built on `version/1.15.0` and has not reached
+`main`; until it is ported, the public-cert mode is configured by hand. This is
+tracked in the 1.18.0 stranded-commit audit.
 
 ## 3. Tier 2 — siemcore updater (child of mysoc, relay toward swf)
 
@@ -91,9 +122,9 @@ relay:
   cache_dir: /var/lib/siemcore-updater/relay-cache
 ```
 
-Run the same `relay` subcommand. On its first heartbeat the mysoc relay
-issues this node a `relay_token`; the updater persists it in its state file
-and presents it as `X-Relay-Token` from then on.
+Run the same `relay` subcommand (`siemcore-cascade-updater relay ...`). On its
+first heartbeat the mysoc relay issues this node a `relay_token`; the updater
+persists it in its state file and presents it as `X-Relay-Token` from then on.
 
 ## 4. Tier 3 — swf updater (leaf)
 
@@ -115,10 +146,11 @@ signing:
   require: true
 ```
 
-Leaves run the normal loop (no relay block):
+Leaves run the normal loop (no relay block). On Windows this is the Secure SWF
+Updater; the Linux reference leaf is:
 
 ```bash
-updater-simulator run --config config.yaml
+<updater> run --config config.yaml
 ```
 
 ## 5. What a relay does
@@ -237,12 +269,21 @@ delta-ingest path directly, or at a mysoc relay to measure the full chain.
 - **Rotate a platform key**: dashboard → Operators → Rotate key. Update
   `server.license_key` on the operator's mysoc updater and restart it.
   Children are unaffected (they authenticate to the relay, not the server).
-- **Deactivate an operator**: dashboard → Operators → Deactivate. The mysoc
-  relay's requests are rejected with `401`, which starves the whole cascade
-  of updates within one heartbeat interval.
+- **Deactivate an operator**: dashboard → Operators → Deactivate. This is a
+  fleet-impacting action. The mysoc relay's requests are rejected with `401`,
+  which starves the whole cascade beneath it of product updates **and of
+  updater self-updates** within one heartbeat interval: no node below that
+  relay can receive any fix until the operator is reactivated. Treat it like
+  powering off the operator's update path, not like a dashboard toggle.
 - **Relay restart**: the artifact cache and child tokens survive restarts via
   the cache directory and state file. A child that lost its token re-enrolls
   on its next heartbeat.
+- **Relay self-update**: when the relay's own updater binary is replaced, the
+  process exits and systemd relaunches it. Children see the parent
+  unreachable for the restart window (observed: a few seconds; a child mid-
+  download of a large artifact restarts that download on its next cycle).
+  Children recover on their next heartbeat with no operator action. Publish
+  updater releases to a ring expecting one such gap per relay in that ring.
 - **Cache hygiene**: the cache holds one verified copy per
   `product/version/filename`, bounded by `relay.max_artifact_bytes` per
   artifact (default 2 GiB). It is safe to delete; the relay re-fetches and
@@ -254,6 +295,7 @@ delta-ingest path directly, or at a mysoc relay to measure the full chain.
 
 ## 7. Related Documents
 
+- [Relay Wire Contract — Index](RELAY-CONTRACT.md)
 - [API Contract, Section 9 — Cascade Distribution](API-CONTRACT.md)
 - [Updater Guidelines, Section 14 — Cascaded Distribution](UPDATER-GUIDELINES.md)
 - [Updater Simulator](UPDATER-SIMULATOR.md)

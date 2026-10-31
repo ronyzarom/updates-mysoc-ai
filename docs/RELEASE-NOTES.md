@@ -2,12 +2,31 @@
 
 Newest first. Version numbers follow `MAJOR.MINOR.PATCH` with per-candidate
 build numbers `MAJOR.MINOR.PATCH.BUILD` (see UPDATER-GUIDELINES §Dev Cycle).
+Every entry states the build commit and tag, the ring(s) it is on, the soak
+result before any widening, and a **Relay compatibility** block (what an older
+relay or server drops, minimum hop version if any, child-facing changes) —
+see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
 ## 1.17.1 — Restore `signature` in the staged release receipt
 
-**Build:** 1.17.1.1 on `version/1.17.1` · **Status:** built, awaiting approval
+**Build:** 1.17.1.1 on `version/1.17.1`, commit `e860959`, tag `v1.17.1.1`,
+merged to `main` · **Status:** `alpha` since 2026-10-31 05:43Z; `beta`,
+`stable`, `production` remain on 1.17.0.2 pending soak and per-ring approval.
+
+**Alpha soak (2026-10-31):** testing.siemcore.ai, bezeq-pod-test-a and -b
+self-updated 1.17.0.2 → 1.17.1.1 on their next cycle, re-staged siemcore
+3.3.175.9 with `signature` present, applied it and passed its 5-minute health
+gate (siemcore confirmation 05:51Z). The pod observer has not taken it: its
+updater cycle is wedged on a retained observer operation that predates this
+release (open with siemcore). Relay check: testing.mysoc.ai (parent of the pod)
+restarted for its own self-update; pod-b logged one transient connection
+refused at 05:43:19Z and recovered on the next cycle.
+
+**Relay compatibility:** none. No new wire fields; child-facing behaviour
+unchanged. The restored `signature` is in the on-disk receipt, not on the
+wire; relays never saw a difference. Minimum relay/server version: unchanged.
 
 The filesystem executor again records the verified origin `signature` in each
 `.updater-release.json` it stages. A privileged root consumer (siemcore's
@@ -36,7 +55,19 @@ every alpha host that had self-updated to `1.17.0.2`.
 
 ## 1.17.0 — Fresh-host one-command install (`first_install`)
 
-**Build:** 1.17.0.3 on `version/1.17.0`, merged to `main` · **Status:** deployed
+**Build:** 1.17.0.3 on `version/1.17.0`, merged to `main` · **Status:** deployed.
+Updater self-update artifact is **1.17.0.2** (build commit `4b19ca4`,
+2026-10-28; tag `v1.17.0.2` to be backfilled), on all rings. 1.17.0.3 is the
+kit (install.sh `--clean` fix) at `/install/`; its binary is the same source as
+1.17.0.2 plus no updater code change.
+
+**Known regression (fixed in 1.17.1.1):** 1.17.0.2 writes `.updater-release.json`
+without `signature`, which makes siemcore's root recovery runtime reject every
+apply staged by it. Hosts on 1.17.0.2 cannot apply a SiemCore release until
+they self-update.
+
+**Relay compatibility:** none for the updater artifact. The kit/installer
+changes are host-local.
 — `/install/` serves kit 1.17.0.3 (reinstall fix), empty-VM e2e verified; updater
 self-update `1.17.0.2` promoted to **all rings**, verified self-update on
 testing.mysoc.ai (alpha), mysoc-cloud (beta) and the cyfox-il production server
@@ -119,7 +150,7 @@ prior `1.16.1.x` build — already-upgraded hosts will not downgrade.
 
 ## 1.16.2 — Issuer sealing (verify and badge, never reject)
 
-**Build:** 1.16.2.x on `version/1.16.2` · **Status:** candidate, local validation only — not deployed
+**Build:** 1.16.2.3 on `version/1.16.2`, tag `v1.16.2.3` · **Status:** merged to `main`; first fleet-wide binary containing it is updater 1.17.0.2 (no standalone 1.16.2 rollout).
 
 Each issuer can now seal its own releases. The server checks the seal on
 upload and shows the result; nothing is rejected in this phase and customer
@@ -160,7 +191,7 @@ and its inserts read as `unsealed`.
 
 ## 1.16.0 — Delivery destination telemetry (SWF)
 
-**Build:** 1.16.0.1 · **Status:** candidate, local validation only — not deployed
+**Build:** 1.16.0.1 · **Status:** merged to `main`; shipped to the fleet inside the 1.16.1.x line and later builds (no standalone 1.16.0 rollout).
 
 When a node reads **silent** or **stopped**, the detail page now also says
 **where** SWF is trying to deliver, so "right collector, blocked by the
@@ -240,7 +271,7 @@ panel.
 
 ## 1.7.0 — Operator / Reseller / Customer license ownership
 
-**Build:** 1.7.0.3 · **Status:** candidate, pending deployment
+**Build:** 1.7.0.3, tag `v1.7.0.3` · **Status:** merged to `main`; shipped with later builds (no standalone 1.7.0 rollout).
 
 Aligns the platform with the real sales flow: a **SOC operator** buys the
 mysoc platform and sells siemcore+swf to end **customers**, directly or via a

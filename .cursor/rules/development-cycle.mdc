@@ -5,10 +5,15 @@ alwaysApply: true
 
 # Development and Deployment Cycle
 
-1. `main` is the single source of truth for the exact production source and
-   version. Never develop directly on `main`.
+1. `main` is the single source of truth for the latest approved, deploy-authorized
+   build. Ring state (which version each of `alpha`, `beta`, `stable`,
+   `production` is offered) lives on the updates server, not in the repo. Never
+   develop directly on `main`.
 2. Start each release from current `main` on
-   `version/MAJOR.MINOR.PATCH` (for example, `version/1.1.0`).
+   `version/MAJOR.MINOR.PATCH` (for example, `version/1.1.0`). Before cutting the
+   branch, confirm that the branch the fleet currently runs is fully contained in
+   `main`: `git log --oneline main..<fleet branch>` must print nothing. A fix that
+   lives only on a side branch is a regression waiting for the next release.
 3. Number every release artifact build
    `MAJOR.MINOR.PATCH.BUILD`, beginning with `.1` and incrementing for every
    rebuilt candidate. Never replace an artifact under an existing build number.
@@ -20,8 +25,15 @@ alwaysApply: true
    push a production release, upload artifacts, restart production services, or
    deploy while waiting.
 6. Deploy to `updates.mysoc.ai` only after the user gives an explicit deployment
-   instruction. Deploy only the exact tested build.
-7. The approved version branch must be merged to `main` so the deployed commit
-   and version are represented by `main`. Any material change after testing
-   invalidates approval and restarts the build-and-test cycle with a new build
-   number.
+   instruction. Deploy only the exact tested build. Order: the updates server
+   first (if it changed), then publish the updater artifacts to the approved
+   ring with `scripts/publish-updater.sh` (target groups are mandatory). The
+   ring self-updates in any order; every change must tolerate any version mix
+   across relay hops.
+7. Deployed means tagged. When a build is deployed to any ring, merge the version
+   branch to `main` (fast-forward) and tag the exact build commit
+   `vMAJOR.MINOR.PATCH.BUILD`. Any material change after testing invalidates
+   approval and restarts the build-and-test cycle with a new build number.
+8. Widening a build to a further ring needs the updater soak defined in
+   `docs/UPDATER-RELEASE.md` to pass on the previous ring and a separate explicit
+   instruction per ring.
