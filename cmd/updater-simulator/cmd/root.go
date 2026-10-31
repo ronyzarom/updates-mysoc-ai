@@ -51,6 +51,7 @@ func newRootCommand(opts *options) *cobra.Command {
 	root.PersistentFlags().BoolVarP(&opts.verbose, "verbose", "v", false, "Enable debug logging")
 
 	root.AddCommand(newVersionCommand(opts))
+	root.AddCommand(newPreflightCommand(opts))
 	root.AddCommand(newEnrollCommand(opts))
 	root.AddCommand(newHeartbeatCommand(opts))
 	root.AddCommand(newCheckCommand(opts))
@@ -73,6 +74,37 @@ func newVersionCommand(opts *options) *cobra.Command {
 			fmt.Printf("  Build Time: %s\n", opts.buildTime)
 		},
 	}
+}
+
+// newPreflightCommand implements the read-only boot check a staged self-update
+// candidate must pass before activation. It loads and validates the host's real
+// config and state and prints the binary version, touching nothing. If the new
+// binary cannot parse this host's config/state it exits non-zero here, before
+// any symlink swap — the crash-loop a bare `version` check would miss.
+func newPreflightCommand(opts *options) *cobra.Command {
+	var statePath string
+	command := &cobra.Command{
+		Use:   "preflight",
+		Short: "Read-only boot check: load and validate config and state, print version",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			cfg, err := updatersim.LoadConfig(opts.configPath)
+			if err != nil {
+				return fmt.Errorf("preflight: config: %w", err)
+			}
+			sp := statePath
+			if sp == "" {
+				sp = cfg.Simulation.StateFile
+			}
+			if _, err := updatersim.LoadState(sp); err != nil {
+				return fmt.Errorf("preflight: state: %w", err)
+			}
+			fmt.Printf("updater-simulator preflight ok %s\n", opts.version)
+			return nil
+		},
+	}
+	command.Flags().StringVar(&statePath, "state", "", "Path to the state file (default: simulation.state_file from config)")
+	return command
 }
 
 func newEnrollCommand(opts *options) *cobra.Command {
@@ -467,6 +499,10 @@ func loadSimulator(opts *options) (*updatersim.Simulator, *updatersim.Config, er
 	// binary triggers the watchdog restore.
 	simulator.SetBinaryVersion(opts.version)
 	simulator.ResolveSelfUpdate()
+	// Signal systemd (Type=notify) that startup is complete and any pending
+	// self-update has been settled. Inert when not launched under a notify
+	// unit, so it is safe for one-shot subcommands too.
+	simulator.NotifyReady()
 	return simulator, cfg, nil
 }
 

@@ -26,7 +26,11 @@ type State struct {
 	ConfigHashes      map[string]string `json:"config_hashes,omitempty"`
 	UpdaterVersion    string            `json:"updater_version,omitempty"`
 	PendingSelfUpdate *SelfUpdateState  `json:"pending_self_update,omitempty"`
-	LastReconcile     *ReconcileStatus  `json:"last_reconcile,omitempty"`
+	// LastSelfUpdate records the outcome of the most recent updater self-update
+	// (finalized success or watchdog restore), distinct from product update
+	// attempts, so the heartbeat can surface self-update health on its own.
+	LastSelfUpdate *platformtypes.UpdateAttempt `json:"last_self_update,omitempty"`
+	LastReconcile  *ReconcileStatus             `json:"last_reconcile,omitempty"`
 
 	// RetryBackoff throttles install retries per product after a first_install
 	// failure, so a fresh host that is not yet ready backs off instead of

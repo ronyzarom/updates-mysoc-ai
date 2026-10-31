@@ -26,6 +26,33 @@ const (
 	// (apt deps, DB baseline, TLS, nginx, health gate), so it needs a far
 	// larger budget than CommandTimeout.
 	defaultFirstInstallTimeout = 30 * time.Minute
+
+	// Survivability deadlines (1.18.0). Each phase of a cycle is bounded so a
+	// stall is killed rather than waited on forever.
+	//
+	// defaultSelfUpdateTimeout bounds the whole self-update phase (check,
+	// verify, download, preflight, activate). It runs first and in isolation,
+	// so a wedged product can never starve it.
+	defaultSelfUpdateTimeout = 10 * time.Minute
+	// defaultProductTimeout bounds one product's work within a cycle. It must
+	// accommodate a fresh-host first_install, so it defaults above
+	// first_install_timeout.
+	defaultProductTimeout = 40 * time.Minute
+	// defaultCycleTimeout bounds a whole RunCycle; a stuck cycle self-cancels
+	// at this deadline and the loop proceeds. It must exceed the per-product
+	// and first_install budgets.
+	defaultCycleTimeout = 60 * time.Minute
+	// defaultDownloadTimeout bounds one artifact download end-to-end; unlike
+	// server.timeout (metadata calls) it is never applied to the whole HTTP
+	// client, so a large artifact on a slow-but-progressing link completes.
+	defaultDownloadTimeout = 30 * time.Minute
+	// defaultDownloadStallTimeout aborts a download that makes no progress for
+	// this long, which is the failure a slow link actually exhibits.
+	defaultDownloadStallTimeout = 2 * time.Minute
+	// defaultMaxUnavailableSeconds is the restart-window budget an apply may
+	// not exceed (invariant 7). Exceeding it never aborts an in-flight apply;
+	// it flags the report so alpha catches it.
+	defaultMaxUnavailableSeconds = 120
 )
 
 // Executor kinds selectable via simulation.executor.
@@ -116,7 +143,16 @@ type Config struct {
 	Relay      RelayConfig      `yaml:"relay,omitempty"`
 	SelfUpdate SelfUpdateConfig `yaml:"self_update,omitempty"`
 	Products   []ProductConfig  `yaml:"products"`
+
+	// source is the file this config was loaded from (LoadConfig sets it). It
+	// lets the self-update preflight run the candidate binary against the real
+	// host config. Empty for configs built in-process (e.g. tests).
+	source string `yaml:"-"`
 }
+
+// SourcePath returns the file LoadConfig read this config from, or "" if it was
+// built in-process.
+func (c *Config) SourcePath() string { return c.source }
 
 // SelfUpdateConfig controls how the updater updates its own binary. It is on
 // by default: every cycle the updater also checks its parent for the platform
@@ -131,6 +167,10 @@ type SelfUpdateConfig struct {
 	Channel string `yaml:"channel,omitempty"`
 	// Dir is the managed layout root. Default: <state_file dir>/self-update.
 	Dir string `yaml:"dir,omitempty"`
+	// Timeout bounds the entire self-update phase (check, verify, download,
+	// preflight, activate). The phase runs first and in isolation so no product
+	// hook can starve it. Default 10m.
+	Timeout Duration `yaml:"timeout,omitempty"`
 }
 
 // SigningConfig pins the release-signing public key. When Require is true the
@@ -139,7 +179,13 @@ type SigningConfig struct {
 	// PublicKey is the hex-encoded ed25519 public key published by the updates
 	// server (GET /api/v1/signing-key). Pin it at provisioning time.
 	PublicKey string `yaml:"public_key,omitempty"`
-	Require   bool   `yaml:"require,omitempty"`
+	// PublicKeys is an optional list of additional trusted hex ed25519 keys. A
+	// release signature valid under PublicKey OR any entry here is accepted.
+	// This is the key-rollover path: publish the next key here before the
+	// server starts signing with it, so a signing-key rotation never strands a
+	// node that cannot verify its own next self-update. Order does not matter.
+	PublicKeys []string `yaml:"public_keys,omitempty"`
+	Require    bool     `yaml:"require,omitempty"`
 }
 
 // RelayConfig turns the updater into a cascade relay: it keeps being a normal
@@ -210,6 +256,21 @@ type ServerConfig struct {
 	// system roots. Required when the parent is a cascade relay with a
 	// self-provisioned certificate: pin the relay's cert.pem here.
 	CAFile string `yaml:"ca_file,omitempty"`
+	// FallbackURL is an origin (e.g. https://updates.mysoc.ai) used ONLY for
+	// the updater's own self-update check and download, and ONLY after the
+	// parent fails. Product offers always stay on the parent so relay cascade
+	// semantics are unchanged. This helps tier-1 (mysoc) nodes that hold an
+	// origin credential; a child that reaches its parent only with a relay
+	// token cannot authenticate to the origin, so Validate warns if this is set
+	// on a node whose server.url is itself a relay.
+	FallbackURL string `yaml:"fallback_url,omitempty"`
+	// DownloadTimeout bounds one artifact download end-to-end (default 30m). It
+	// is applied as a context deadline, never as the HTTP client's overall
+	// Timeout, so server.timeout keeps bounding only metadata calls.
+	DownloadTimeout Duration `yaml:"download_timeout,omitempty"`
+	// DownloadStallTimeout aborts a download that transfers no bytes for this
+	// long (default 2m) — the real failure mode of a slow or dead link.
+	DownloadStallTimeout Duration `yaml:"download_stall_timeout,omitempty"`
 }
 
 // InstanceConfig identifies the simulated machine and its place in the product
@@ -243,15 +304,22 @@ type HeartbeatConfig struct {
 
 // SimulationConfig controls safe simulator behavior.
 type SimulationConfig struct {
-	Mode             Mode             `yaml:"mode"`
-	Executor         string           `yaml:"executor,omitempty"`
-	ArtifactDir      string           `yaml:"artifact_dir"`
-	StateFile        string           `yaml:"state_file"`
-	ManifestFile     string           `yaml:"manifest_file,omitempty"`
-	MaxDownloadBytes int64            `yaml:"max_download_bytes"`
-	LegacyFallback   bool             `yaml:"legacy_fallback"`
-	DrainTimeout     Duration         `yaml:"drain_timeout"`
-	Filesystem       FilesystemConfig `yaml:"filesystem,omitempty"`
+	Mode             Mode     `yaml:"mode"`
+	Executor         string   `yaml:"executor,omitempty"`
+	ArtifactDir      string   `yaml:"artifact_dir"`
+	StateFile        string   `yaml:"state_file"`
+	ManifestFile     string   `yaml:"manifest_file,omitempty"`
+	MaxDownloadBytes int64    `yaml:"max_download_bytes"`
+	LegacyFallback   bool     `yaml:"legacy_fallback"`
+	DrainTimeout     Duration `yaml:"drain_timeout"`
+	// CycleTimeout bounds a whole RunCycle; a stuck cycle self-cancels at this
+	// deadline so later ticks are never starved (default 60m, must exceed the
+	// per-product and first_install budgets).
+	CycleTimeout Duration `yaml:"cycle_timeout,omitempty"`
+	// ProductTimeout bounds one product's work within a cycle (default 40m,
+	// above first_install_timeout so a fresh host can provision).
+	ProductTimeout Duration         `yaml:"product_timeout,omitempty"`
+	Filesystem     FilesystemConfig `yaml:"filesystem,omitempty"`
 
 	// LegacySimulateMode records that the config said "simulate" and was
 	// normalized to ModeReal, so the simulator can warn about the retired
@@ -276,6 +344,13 @@ type FilesystemConfig struct {
 	// version 0.0.0), which does far more than a routine apply. 0 uses the
 	// built-in default (30m).
 	FirstInstallTimeout Duration `yaml:"first_install_timeout,omitempty"`
+	// MaxUnavailableSeconds is the restart-window budget (invariant 7). During
+	// apply/rollback the executor measures how long the product's health URL is
+	// unavailable; exceeding this never aborts the in-flight apply (that would
+	// only lengthen the outage) but flags the update report so alpha catches a
+	// release that takes the server down for too long. 0 uses the default
+	// (120s). Requires a health_command to measure anything.
+	MaxUnavailableSeconds int `yaml:"max_unavailable_seconds,omitempty"`
 }
 
 // ProductConfig identifies one simulated managed product.
@@ -306,6 +381,11 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.resolvePaths(filepath.Dir(path))
 	if err := cfg.Validate(); err != nil {
 		return nil, err
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		cfg.source = abs
+	} else {
+		cfg.source = path
 	}
 	return &cfg, nil
 }
@@ -353,6 +433,24 @@ func (c *Config) setDefaults() {
 	}
 	if c.Simulation.DrainTimeout.Duration == 0 {
 		c.Simulation.DrainTimeout.Duration = defaultDrainTimeout
+	}
+	if c.Simulation.CycleTimeout.Duration == 0 {
+		c.Simulation.CycleTimeout.Duration = defaultCycleTimeout
+	}
+	if c.Simulation.ProductTimeout.Duration == 0 {
+		c.Simulation.ProductTimeout.Duration = defaultProductTimeout
+	}
+	if c.Server.DownloadTimeout.Duration == 0 {
+		c.Server.DownloadTimeout.Duration = defaultDownloadTimeout
+	}
+	if c.Server.DownloadStallTimeout.Duration == 0 {
+		c.Server.DownloadStallTimeout.Duration = defaultDownloadStallTimeout
+	}
+	if c.Simulation.Filesystem.MaxUnavailableSeconds == 0 {
+		c.Simulation.Filesystem.MaxUnavailableSeconds = defaultMaxUnavailableSeconds
+	}
+	if c.SelfUpdate.Timeout.Duration == 0 {
+		c.SelfUpdate.Timeout.Duration = defaultSelfUpdateTimeout
 	}
 	if c.Instance.Hostname == "" {
 		c.Instance.Hostname, _ = os.Hostname()
@@ -573,8 +671,25 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("relay.tls.cert_file and relay.tls.key_file must be set together")
 		}
 	}
-	if c.Signing.Require && strings.TrimSpace(c.Signing.PublicKey) == "" {
-		return fmt.Errorf("signing.require is true but signing.public_key is not set")
+	if c.Signing.Require && len(c.TrustedSigningKeys()) == 0 {
+		return fmt.Errorf("signing.require is true but no signing.public_key or signing.public_keys is set")
+	}
+
+	if strings.TrimSpace(c.Server.FallbackURL) != "" {
+		fb, err := url.Parse(c.Server.FallbackURL)
+		if err != nil {
+			return fmt.Errorf("invalid server.fallback_url: %w", err)
+		}
+		if fb.Scheme != "http" && fb.Scheme != "https" {
+			return fmt.Errorf("server.fallback_url must use http or https")
+		}
+		if fb.Host == "" || fb.User != nil {
+			return fmt.Errorf("server.fallback_url must contain a host and no embedded credentials")
+		}
+		c.Server.FallbackURL = strings.TrimRight(c.Server.FallbackURL, "/")
+		if strings.EqualFold(c.Server.FallbackURL, c.Server.URL) {
+			return fmt.Errorf("server.fallback_url must differ from server.url")
+		}
 	}
 
 	seen := make(map[string]struct{}, len(c.Products))
@@ -598,4 +713,74 @@ func (c *Config) Product(name string) (*ProductConfig, bool) {
 		}
 	}
 	return nil, false
+}
+
+// The following accessors return the configured deadline or a built-in default
+// when unset. They let code built directly (e.g. tests) that skips setDefaults
+// still get bounded, survivable behaviour.
+
+func (c *Config) selfUpdateTimeout() time.Duration {
+	if c.SelfUpdate.Timeout.Duration > 0 {
+		return c.SelfUpdate.Timeout.Duration
+	}
+	return defaultSelfUpdateTimeout
+}
+
+func (c *Config) cycleTimeout() time.Duration {
+	if c.Simulation.CycleTimeout.Duration > 0 {
+		return c.Simulation.CycleTimeout.Duration
+	}
+	return defaultCycleTimeout
+}
+
+func (c *Config) productTimeout() time.Duration {
+	if c.Simulation.ProductTimeout.Duration > 0 {
+		return c.Simulation.ProductTimeout.Duration
+	}
+	return defaultProductTimeout
+}
+
+func (c *Config) downloadTimeout() time.Duration {
+	if c.Server.DownloadTimeout.Duration > 0 {
+		return c.Server.DownloadTimeout.Duration
+	}
+	return defaultDownloadTimeout
+}
+
+func (c *Config) downloadStallTimeout() time.Duration {
+	if c.Server.DownloadStallTimeout.Duration > 0 {
+		return c.Server.DownloadStallTimeout.Duration
+	}
+	return defaultDownloadStallTimeout
+}
+
+func (c *Config) maxUnavailableSeconds() int {
+	if c.Simulation.Filesystem.MaxUnavailableSeconds > 0 {
+		return c.Simulation.Filesystem.MaxUnavailableSeconds
+	}
+	return defaultMaxUnavailableSeconds
+}
+
+// TrustedSigningKeys returns the de-duplicated set of trusted hex public keys
+// (signing.public_key plus signing.public_keys), preserving order with
+// public_key first.
+func (c *Config) TrustedSigningKeys() []string {
+	var out []string
+	seen := make(map[string]struct{})
+	add := func(k string) {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			return
+		}
+		if _, ok := seen[strings.ToLower(k)]; ok {
+			return
+		}
+		seen[strings.ToLower(k)] = struct{}{}
+		out = append(out, k)
+	}
+	add(c.Signing.PublicKey)
+	for _, k := range c.Signing.PublicKeys {
+		add(k)
+	}
+	return out
 }

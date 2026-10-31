@@ -185,6 +185,25 @@ type Heartbeat struct {
 	// Last update attempt (included in next heartbeat after install)
 	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
 
+	// SelfUpdate carries the node's ability to replace its own binary and the
+	// outcome of its last attempt (survivability visibility, 1.18.0). A node
+	// reporting SelfUpdate.Capable=false can never fix itself through the
+	// cascade and needs a kit reinstall; the dashboard surfaces this. Additive;
+	// older servers ignore it.
+	SelfUpdate *SelfUpdateStatus `json:"self_update,omitempty"`
+
+	// RelayListenerOK reports whether this relay's own child-facing listener
+	// answered its health self-probe in the last cycle. A live process with a
+	// dead listener is a dead cascade for every child beneath it. Only relays
+	// set it (a pointer so non-relays omit it). Additive.
+	RelayListenerOK *bool `json:"relay_listener_ok,omitempty"`
+
+	// ParentRejectedCredential is true when the parent rejected this node's
+	// credential (HTTP 401/403), distinct from "parent unreachable": an
+	// operator deactivation starves the whole subtree, and this makes that
+	// cause visible rather than looking like a network blip. Additive.
+	ParentRejectedCredential bool `json:"parent_rejected_credential,omitempty"`
+
 	// Children carries the cascaded fleet rollup: every node that heartbeats
 	// to this updater (recursively). Only relays populate it.
 	Children []ChildReport `json:"children,omitempty"`
@@ -199,6 +218,23 @@ type Heartbeat struct {
 	// additive — a relay may send Delta, Children, or both during the
 	// transition, and pre-1.12 receivers simply ignore it.
 	Delta *DeltaEnvelope `json:"delta,omitempty"`
+}
+
+// SelfUpdateStatus reports a node's ability to self-update and the result of
+// its last self-update, so the fleet can see which nodes can and cannot repair
+// themselves through the cascade.
+type SelfUpdateStatus struct {
+	// Capable is false when the binary is not launched through the managed
+	// self-update layout (a legacy install), so an activation would never take
+	// effect and the node needs a kit reinstall to regain self-update.
+	Capable bool `json:"capable"`
+	// Reason explains a false Capable (e.g. "binary outside managed layout").
+	Reason string `json:"reason,omitempty"`
+	// CurrentVersion is the updater binary version actually running.
+	CurrentVersion string `json:"current_version,omitempty"`
+	// LastResult is the last self-update attempt (success finalization or
+	// watchdog restore), reused from the generic attempt record.
+	LastResult *UpdateAttempt `json:"last_result,omitempty"`
 }
 
 // FleetSummary is one customer's aggregate health, the unit of the delta

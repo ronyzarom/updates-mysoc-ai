@@ -17,6 +17,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
@@ -151,8 +153,15 @@ type DownloadResult struct {
 
 // Client communicates with the current Updates Server API.
 type Client struct {
-	baseURL                *url.URL
-	httpClient             *http.Client
+	baseURL    *url.URL
+	httpClient *http.Client
+	// downloadClient has no overall Timeout: artifact downloads are bounded by
+	// a context deadline (download_timeout) plus a stall guard, so a large
+	// artifact on a slow-but-progressing link completes instead of failing at
+	// server.timeout. server.timeout keeps bounding only metadata calls on
+	// httpClient.
+	downloadClient         *http.Client
+	downloadStallTimeout   time.Duration
 	licenseKey             string
 	apiKey                 string
 	relayToken             string
@@ -167,36 +176,45 @@ func NewClient(cfg ServerConfig) (*Client, error) {
 		return nil, fmt.Errorf("parse server URL: %w", err)
 	}
 
+	stall := cfg.DownloadStallTimeout.Duration
+	if stall <= 0 {
+		stall = defaultDownloadStallTimeout
+	}
 	client := &Client{
 		baseURL:                baseURL,
+		downloadStallTimeout:   stall,
 		licenseKey:             cfg.LicenseKey,
 		apiKey:                 cfg.APIKey,
 		maxResponseBytes:       cfg.MaxResponseBytes,
 		allowExternalDownloads: cfg.AllowExternalDownloads,
 	}
-	client.httpClient = &http.Client{
-		Timeout: cfg.Timeout.Duration,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return fmt.Errorf("too many redirects")
+	checkRedirect := func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		if !sameOrigin(baseURL, req.URL) {
+			req.Header.Del("X-API-Key")
+			req.Header.Del("X-License-Key")
+			req.Header.Del("X-Relay-Token")
+			if !cfg.AllowExternalDownloads {
+				return ErrExternalDownload
 			}
-			if !sameOrigin(baseURL, req.URL) {
-				req.Header.Del("X-API-Key")
-				req.Header.Del("X-License-Key")
-				req.Header.Del("X-Relay-Token")
-				if !cfg.AllowExternalDownloads {
-					return ErrExternalDownload
-				}
-			}
-			return nil
-		},
+		}
+		return nil
 	}
+	client.httpClient = &http.Client{
+		Timeout:       cfg.Timeout.Duration,
+		CheckRedirect: checkRedirect,
+	}
+	// No Timeout: bounded by context + stall guard in DownloadArtifact.
+	client.downloadClient = &http.Client{CheckRedirect: checkRedirect}
 	if cfg.CAFile != "" {
 		transport, err := transportWithCA(cfg.CAFile)
 		if err != nil {
 			return nil, err
 		}
 		client.httpClient.Transport = transport
+		client.downloadClient.Transport = transport.Clone()
 	}
 	return client, nil
 }
@@ -366,7 +384,14 @@ func (c *Client) DownloadArtifact(
 		return nil, ErrExternalDownload
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL.String(), nil)
+	// A stall guard cancels this request if no bytes arrive for the stall
+	// window, which is the real failure of a slow or dead link. The overall
+	// download is bounded by any deadline already on ctx (download_timeout),
+	// applied by the caller.
+	dlCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	request, err := http.NewRequestWithContext(dlCtx, http.MethodGet, downloadURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("create artifact request: %w", err)
 	}
@@ -374,7 +399,7 @@ func (c *Client) DownloadArtifact(
 		c.addAuthHeaders(request)
 	}
 
-	response, err := c.httpClient.Do(request)
+	response, err := c.downloadClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("download artifact: %w", err)
 	}
@@ -415,12 +440,17 @@ func (c *Client) DownloadArtifact(
 	}
 
 	hasher := sha256.New()
-	written, copyErr := io.Copy(
+	written, copyErr := copyWithStallGuard(
 		io.MultiWriter(tempFile, hasher),
 		io.LimitReader(response.Body, maxBytes+1),
+		c.downloadStallTimeout,
+		cancel,
 	)
 	if copyErr != nil {
 		tempFile.Close()
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("download artifact: %w", ctx.Err())
+		}
 		return nil, fmt.Errorf("write artifact: %w", copyErr)
 	}
 	if written > maxBytes {
@@ -564,6 +594,58 @@ func (c *Client) addAuthHeaders(request *http.Request) {
 	}
 	if c.relayToken != "" {
 		request.Header.Set("X-Relay-Token", c.relayToken)
+	}
+}
+
+// copyWithStallGuard copies src to dst, cancelling (via cancel) if no bytes are
+// transferred for stall. A stalled underlying HTTP body Read then unblocks with
+// a context error. stall <= 0 disables the guard. It returns the number of
+// bytes written.
+func copyWithStallGuard(dst io.Writer, src io.Reader, stall time.Duration, cancel context.CancelFunc) (int64, error) {
+	var written int64
+	if stall <= 0 {
+		return io.Copy(dst, src)
+	}
+
+	var progress int64 // atomically updated with total bytes read
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		ticker := time.NewTicker(stall)
+		defer ticker.Stop()
+		last := int64(0)
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				now := atomic.LoadInt64(&progress)
+				if now == last {
+					// No progress for a full stall window: abort the request.
+					cancel()
+					return
+				}
+				last = now
+			}
+		}
+	}()
+
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			atomic.AddInt64(&progress, int64(n))
+			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
+				return written, writeErr
+			}
+			written += int64(n)
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return written, nil
+			}
+			return written, readErr
+		}
 	}
 }
 

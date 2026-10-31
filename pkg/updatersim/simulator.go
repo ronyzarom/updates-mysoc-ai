@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -23,15 +24,26 @@ var ErrCycleInProgress = errors.New("simulator cycle already in progress")
 
 // Simulator runs safe updater protocol cycles.
 type Simulator struct {
-	config    *Config
-	client    *Client
-	executor  Executor
-	logger    *slog.Logger
-	state     *State
-	started   time.Time
-	cycleMu   sync.Mutex
-	random    *rand.Rand
-	publicKey ed25519.PublicKey // release-signing key; nil disables verification
+	config *Config
+	client *Client
+	// fallbackClient targets server.fallback_url and is used ONLY for the
+	// self-update check/download, ONLY after the parent fails. nil when no
+	// fallback is configured. It never carries the relay token (that is
+	// parent-specific); it authenticates to the origin with the node's own
+	// credential, which only tier-1 nodes hold.
+	fallbackClient *Client
+	executor       Executor
+	logger         *slog.Logger
+	state          *State
+	started        time.Time
+	cycleMu        sync.Mutex
+	random         *rand.Rand
+	publicKey      ed25519.PublicKey // primary release-signing key; nil disables verification
+	// publicKeys is the full set of trusted release-signing keys
+	// (signing.public_key plus signing.public_keys). A release signature valid
+	// under any of them is accepted — the key-rollover path, so a signing-key
+	// rotation never strands a node that cannot verify its own next self-update.
+	publicKeys []ed25519.PublicKey
 
 	// binaryVersion is the ldflags-stamped version of the running executable,
 	// set via SetBinaryVersion. It anchors self-update comparisons; empty for
@@ -40,6 +52,19 @@ type Simulator struct {
 
 	// childrenFn supplies the cascade rollup for relay-mode heartbeats.
 	childrenFn func() []platformtypes.ChildReport
+
+	// relayListenerFn reports whether the relay's child-facing listener passed
+	// its health self-probe this cycle. Only set in relay mode.
+	relayListenerFn func() bool
+	// cycleListenerOK caches this cycle's relay listener probe (nil for
+	// non-relays), so the watchdog gate and the heartbeat agree and the probe
+	// runs once per cycle.
+	cycleListenerOK *bool
+
+	// parentRejectedCredential records that the parent rejected this node's
+	// credential (401/403) during the current cycle, distinct from "parent
+	// unreachable". Reset at the start of each cycle; read by buildHeartbeat.
+	parentRejectedCredential bool
 
 	// guardStatsFn supplies the relay listener's port-protection counters.
 	guardStatsFn func() *platformtypes.RelayGuardStats
@@ -58,6 +83,12 @@ func (s *Simulator) SetChildrenProvider(provider func() []platformtypes.ChildRep
 // SetGuardStatsProvider wires the relay guard's counters into heartbeats.
 func (s *Simulator) SetGuardStatsProvider(provider func() *platformtypes.RelayGuardStats) {
 	s.guardStatsFn = provider
+}
+
+// SetRelayListenerProbe wires the relay's child-facing listener health check
+// into heartbeats, so a live process with a dead listener is visible upstream.
+func (s *Simulator) SetRelayListenerProbe(probe func() bool) {
+	s.relayListenerFn = probe
 }
 
 // SetDeltaProvider wires the relay's change-only delta stream into this node's
@@ -106,24 +137,49 @@ func NewSimulator(
 		client.SetRelayToken(state.RelayToken)
 	}
 
-	var publicKey ed25519.PublicKey
-	if pubHex := strings.TrimSpace(cfg.Signing.PublicKey); pubHex != "" {
-		publicKey, err = signing.ParsePublicKeyHex(pubHex)
+	var publicKeys []ed25519.PublicKey
+	for _, pubHex := range cfg.TrustedSigningKeys() {
+		key, err := signing.ParsePublicKeyHex(pubHex)
 		if err != nil {
-			return nil, fmt.Errorf("signing.public_key: %w", err)
+			return nil, fmt.Errorf("signing key %q: %w", pubHex, err)
 		}
+		publicKeys = append(publicKeys, key)
+	}
+	var publicKey ed25519.PublicKey
+	if len(publicKeys) > 0 {
+		publicKey = publicKeys[0]
 	}
 
-	return &Simulator{
-		config:    cfg,
-		client:    client,
-		executor:  executor,
-		logger:    logger,
-		state:     state,
-		started:   time.Now(),
-		random:    rand.New(rand.NewSource(time.Now().UnixNano())),
-		publicKey: publicKey,
-	}, nil
+	sim := &Simulator{
+		config:     cfg,
+		client:     client,
+		executor:   executor,
+		logger:     logger,
+		state:      state,
+		started:    time.Now(),
+		random:     rand.New(rand.NewSource(time.Now().UnixNano())),
+		publicKey:  publicKey,
+		publicKeys: publicKeys,
+	}
+	if fb := strings.TrimSpace(cfg.Server.FallbackURL); fb != "" {
+		fbCfg := cfg.Server
+		fbCfg.URL = fb
+		// The fallback is the origin; it uses system roots, not the relay's
+		// pinned CA, and never the parent-issued relay token.
+		fbCfg.CAFile = ""
+		fallbackClient, err := NewClient(fbCfg)
+		if err != nil {
+			return nil, fmt.Errorf("server.fallback_url client: %w", err)
+		}
+		sim.fallbackClient = fallbackClient
+		if cfg.Relay.Enabled {
+			logger.Warn(
+				"server.fallback_url is set on a relay node; it only helps nodes that hold an origin credential — a relay's children reach the origin via the relay, not a fallback URL",
+				"fallback_url", fb,
+			)
+		}
+	}
+	return sim, nil
 }
 
 // SendHeartbeat sends one heartbeat and returns server update hints.
@@ -247,41 +303,113 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 		return fmt.Errorf("invalid cycle mode %q", mode)
 	}
 
-	if _, err := s.SendHeartbeat(ctx); err != nil {
-		return err
+	// Whole-cycle deadline: a stuck cycle self-cancels here so the next tick is
+	// never starved (ErrCycleInProgress forever was a confirmed deadlock).
+	ctx, cancelCycle := context.WithTimeout(ctx, s.config.cycleTimeout())
+	defer cancelCycle()
+
+	// Fresh credential-rejection signal per cycle.
+	s.parentRejectedCredential = false
+
+	// Probe the relay listener once this cycle (nil for non-relays), then feed
+	// the systemd watchdog ONLY when healthy: a relay whose child-facing
+	// listener is dead is a dead cascade and must be restarted, not kept alive.
+	s.cycleListenerOK = nil
+	if s.relayListenerFn != nil {
+		ok := s.relayListenerFn()
+		s.cycleListenerOK = &ok
+	}
+	if sdWatchdogEnabled() && (s.cycleListenerOK == nil || *s.cycleListenerOK) {
+		sdNotifyWatchdog()
 	}
 
 	var cycleErrors []error
-	for _, configuredProduct := range s.config.Products {
-		offer, err := s.Check(ctx, configuredProduct.Name)
-		if err != nil {
-			cycleErrors = append(cycleErrors, err)
-			continue
-		}
-		if !offer.UpdateAvailable {
-			s.logger.Info(
-				"product is up to date",
-				"product", configuredProduct.Name,
-				"current_version", configuredProduct.CurrentVersion,
-				"source", offer.Source,
-			)
-			continue
-		}
-		if err := s.processOffer(ctx, mode, offer); err != nil {
-			cycleErrors = append(cycleErrors, err)
-		}
-	}
 
-	// After product work, see whether the updater itself has a newer release.
-	// A successful activation aborts the cycle with ErrRestartPending so the
-	// process can exit for the service manager to relaunch the new binary.
-	if err := s.maybeSelfUpdate(ctx, mode); err != nil {
+	// 1. Self-update FIRST, in isolation, with its own deadline. Its outcome
+	//    never depends on heartbeat or product results, so a rejected heartbeat
+	//    or a wedged product hook can never stop the updater from fetching the
+	//    release that fixes the host. A successful activation returns
+	//    ErrRestartPending immediately so the process can hand off.
+	if err := s.selfUpdatePhase(ctx, mode); err != nil {
 		if errors.Is(err, ErrRestartPending) {
 			return err
 		}
 		cycleErrors = append(cycleErrors, err)
 	}
+
+	// 2. Heartbeat. A heartbeat error is recorded but NEVER fatal: a
+	//    server-side rejection must not block product work or (above)
+	//    self-update.
+	if _, err := s.SendHeartbeat(ctx); err != nil {
+		s.noteParentAuth(err)
+		cycleErrors = append(cycleErrors, fmt.Errorf("heartbeat: %w", err))
+	}
+
+	// 3. Products, each bounded by its own deadline so one hung hook cannot
+	//    consume the whole cycle budget.
+	for _, configuredProduct := range s.config.Products {
+		if err := s.runProductCycle(ctx, mode, configuredProduct.Name); err != nil {
+			cycleErrors = append(cycleErrors, err)
+		}
+	}
 	return errors.Join(cycleErrors...)
+}
+
+// runProductCycle checks and (in non-observe modes) applies one product's
+// offer, bounded by the per-product deadline.
+func (s *Simulator) runProductCycle(ctx context.Context, mode Mode, productName string) error {
+	ctx, cancel := context.WithTimeout(ctx, s.config.productTimeout())
+	defer cancel()
+
+	offer, err := s.Check(ctx, productName)
+	if err != nil {
+		return err
+	}
+	if !offer.UpdateAvailable {
+		current := ""
+		if p, ok := s.config.Product(productName); ok {
+			current = p.CurrentVersion
+		}
+		s.logger.Info(
+			"product is up to date",
+			"product", productName,
+			"current_version", current,
+			"source", offer.Source,
+		)
+		return nil
+	}
+	return s.processOffer(ctx, mode, offer)
+}
+
+// selfUpdatePhase runs the self-update check/apply with its own deadline, and
+// (for nodes that hold an origin credential) falls back to server.fallback_url
+// if the parent is unreachable. A successful activation returns
+// ErrRestartPending; all other errors are returned for the cycle to record.
+func (s *Simulator) selfUpdatePhase(ctx context.Context, mode Mode) error {
+	ctx, cancel := context.WithTimeout(ctx, s.config.selfUpdateTimeout())
+	defer cancel()
+
+	err := s.maybeSelfUpdate(ctx, mode, s.client)
+	if err == nil || errors.Is(err, ErrRestartPending) {
+		return err
+	}
+	s.noteParentAuth(err)
+	if s.fallbackClient == nil {
+		return err
+	}
+	// The parent failed; try the origin fallback. Only effective for nodes that
+	// hold an origin credential (tier 1); for a relay child this simply fails
+	// again, which is fine — the error was already going to be recorded.
+	s.logger.Warn(
+		"self-update via parent failed; retrying via fallback origin",
+		"fallback_url", s.config.Server.FallbackURL,
+		"parent_error", err.Error(),
+	)
+	fbErr := s.maybeSelfUpdate(ctx, mode, s.fallbackClient)
+	if fbErr == nil || errors.Is(fbErr, ErrRestartPending) {
+		return fbErr
+	}
+	return errors.Join(err, fmt.Errorf("fallback: %w", fbErr))
 }
 
 // Run starts an immediate cycle followed by jittered heartbeat cycles. It
@@ -350,7 +478,7 @@ func (s *Simulator) processOffer(
 	if err := s.verifyDualOffer(ctx, offer); err != nil {
 		return s.recordDualFailure(offer, err)
 	}
-	result, err := s.verifyAndDownload(ctx, offer)
+	result, err := s.verifyAndDownload(ctx, offer, s.client)
 	if err != nil {
 		if offer.SelectedArtifactKind != "" {
 			return s.recordDualFailure(offer, err)
@@ -562,6 +690,44 @@ func (s *Simulator) recordAttempt(update Update, success bool, message string) {
 	}
 }
 
+// noteParentAuth records a parent credential rejection (401/403) so the next
+// heartbeat distinguishes "operator deactivated us" from "parent unreachable".
+func (s *Simulator) noteParentAuth(err error) {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && (apiErr.StatusCode == 401 || apiErr.StatusCode == 403) {
+		s.parentRejectedCredential = true
+	}
+}
+
+// selfUpdateStatus reports whether this node can replace its own binary and the
+// result of its last self-update, for fleet visibility.
+func (s *Simulator) selfUpdateStatus() *platformtypes.SelfUpdateStatus {
+	status := &platformtypes.SelfUpdateStatus{
+		CurrentVersion: s.binaryVersion,
+		LastResult:     s.state.LastSelfUpdate,
+	}
+	if s.config.SelfUpdate.Disabled {
+		status.Capable = false
+		status.Reason = "self-update disabled in config"
+		return status
+	}
+	exe, err := executablePath()
+	if err != nil {
+		status.Reason = "cannot resolve running executable: " + err.Error()
+		return status
+	}
+	if resolved, e := filepath.EvalSymlinks(exe); e == nil {
+		exe = resolved
+	}
+	updater := &SelfUpdater{Dir: s.config.SelfUpdate.Dir}
+	if updater.Manages(exe) {
+		status.Capable = true
+	} else {
+		status.Reason = "binary is outside the managed self-update layout (needs a kit reinstall to self-update)"
+	}
+	return status
+}
+
 func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	operatingSystem, architecture := s.platform()
 	products := make([]platformtypes.ProductStatus, 0, len(s.config.Products))
@@ -591,6 +757,7 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	if s.deltaFn != nil {
 		delta = s.deltaFn()
 	}
+	relayListenerOK := s.cycleListenerOK
 
 	// Report real host measurements when the platform supports collection.
 	// Anything not measured stays zero, which the dashboard renders as
@@ -623,13 +790,16 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 			Valid:     s.config.Server.LicenseKey != "",
 			LastCheck: time.Now().UTC(),
 		},
-		Products:          products,
-		System:            system,
-		Timestamp:         time.Now().UTC(),
-		LastUpdateAttempt: s.state.LastUpdateAttempt,
-		Children:          children,
-		RelayGuard:        guardStats,
-		Delta:             delta,
+		Products:                 products,
+		System:                   system,
+		Timestamp:                time.Now().UTC(),
+		LastUpdateAttempt:        s.state.LastUpdateAttempt,
+		SelfUpdate:               s.selfUpdateStatus(),
+		RelayListenerOK:          relayListenerOK,
+		ParentRejectedCredential: s.parentRejectedCredential,
+		Children:                 children,
+		RelayGuard:               guardStats,
+		Delta:                    delta,
 	}
 }
 

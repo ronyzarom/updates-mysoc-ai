@@ -2,6 +2,7 @@ package updatersim
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"os"
@@ -148,6 +149,27 @@ func (u *SelfUpdater) ValidateStaged(ctx context.Context, stagedPath, version st
 	return nil
 }
 
+// Preflight runs the staged candidate's read-only "preflight" subcommand
+// against the host's real config and state. Where ValidateStaged proves the
+// binary can report its version, Preflight proves it can actually parse THIS
+// host's configuration and state and get far enough to run — the real
+// crash-loop risk a bare version check misses (a config key the new binary
+// rejects, a state file it cannot read). It is strictly read-only and bounded.
+func (u *SelfUpdater) Preflight(ctx context.Context, stagedPath, configPath, statePath string) error {
+	runCtx, cancel := context.WithTimeout(ctx, selfUpdateValidateTimeout)
+	defer cancel()
+
+	args := []string{"preflight", "--config", configPath}
+	if statePath != "" {
+		args = append(args, "--state", statePath)
+	}
+	output, err := exec.CommandContext(runCtx, stagedPath, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("staged updater preflight failed: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 // Activate records the current symlink target for restore and atomically
 // points current at the staged version directory.
 func (u *SelfUpdater) Activate(version string) error {
@@ -204,10 +226,29 @@ func (s *Simulator) SetBinaryVersion(version string) {
 	s.config.Instance.UpdaterVersion = version
 }
 
+// verifyAnyKey accepts the release signature if it verifies under any trusted
+// key. This is the key-rollover path: during a signing-key rotation both the
+// old and new keys are trusted, so a node never fails to verify an artifact
+// signed by whichever key the server currently uses.
+func verifyAnyKey(keys []ed25519.PublicKey, product, version, checksum, signature string) error {
+	var lastErr error
+	for _, key := range keys {
+		if err := signing.Verify(key, product, version, checksum, signature); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no trusted signing keys")
+	}
+	return lastErr
+}
+
 // maybeSelfUpdate checks the parent for a newer updater binary and, when one
 // is offered, verifies, stages, validates, and activates it, then returns
 // ErrRestartPending so the process exits for the service manager to relaunch.
-func (s *Simulator) maybeSelfUpdate(ctx context.Context, mode Mode) error {
+func (s *Simulator) maybeSelfUpdate(ctx context.Context, mode Mode, client *Client) error {
 	if s.config.SelfUpdate.Disabled {
 		return nil
 	}
@@ -218,7 +259,7 @@ func (s *Simulator) maybeSelfUpdate(ctx context.Context, mode Mode) error {
 
 	product := SelfUpdateProduct()
 	operatingSystem, architecture := s.platform()
-	offer, err := s.client.CheckUpdate(ctx, product, UpdateCheckRequest{
+	offer, err := client.CheckUpdate(ctx, product, UpdateCheckRequest{
 		InstanceID:       s.config.Instance.ID,
 		CurrentVersion:   s.binaryVersion,
 		UpdaterVersion:   s.binaryVersion,
@@ -252,7 +293,7 @@ func (s *Simulator) maybeSelfUpdate(ctx context.Context, mode Mode) error {
 		return nil
 	}
 
-	result, err := s.verifyAndDownload(ctx, offer)
+	result, err := s.verifyAndDownload(ctx, offer, client)
 	if err != nil {
 		return fmt.Errorf("self-update %s: %w", offer.LatestVersion, err)
 	}
@@ -301,6 +342,13 @@ func (s *Simulator) applySelfUpdate(ctx context.Context, offer *UpdateOffer, art
 
 	fail := func(stage string, cause error) error {
 		s.state.PendingSelfUpdate = nil
+		s.state.LastSelfUpdate = &platformtypes.UpdateAttempt{
+			FromVersion:   s.binaryVersion,
+			TargetVersion: offer.LatestVersion,
+			Success:       false,
+			Error:         fmt.Sprintf("self-update %s: %v", stage, cause),
+			Timestamp:     time.Now().UTC(),
+		}
 		stateErr := SaveState(s.config.Simulation.StateFile, s.state)
 		reportErr := s.client.ReportUpdate(ctx, offer.Product, UpdateReportRequest{
 			InstanceID:  s.config.Instance.ID,
@@ -320,6 +368,14 @@ func (s *Simulator) applySelfUpdate(ctx context.Context, offer *UpdateOffer, art
 	}
 	if err := updater.ValidateStaged(ctx, staged, offer.LatestVersion); err != nil {
 		return fail("validate", err)
+	}
+	// Prove the candidate can boot on THIS host (parse the real config and
+	// state) before the swap. Skipped only when the config was not loaded from
+	// a file (in-process construction), since there is no file to hand it.
+	if cfgPath := s.config.SourcePath(); cfgPath != "" {
+		if err := updater.Preflight(ctx, staged, cfgPath, s.config.Simulation.StateFile); err != nil {
+			return fail("preflight", err)
+		}
 	}
 	if err := updater.Activate(offer.LatestVersion); err != nil {
 		return fail("activate", err)
@@ -349,12 +405,14 @@ func (s *Simulator) ResolveSelfUpdate() {
 	if s.binaryVersion != "" && s.binaryVersion == pending.ToVersion {
 		s.state.UpdaterVersion = pending.ToVersion
 		s.config.Instance.UpdaterVersion = pending.ToVersion
-		s.state.LastUpdateAttempt = &platformtypes.UpdateAttempt{
+		attempt := &platformtypes.UpdateAttempt{
 			FromVersion:   pending.FromVersion,
 			TargetVersion: pending.ToVersion,
 			Success:       true,
 			Timestamp:     time.Now().UTC(),
 		}
+		s.state.LastUpdateAttempt = attempt
+		s.state.LastSelfUpdate = attempt
 		s.state.PendingSelfUpdate = nil
 		if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
 			s.logger.Warn("failed to persist finalized self-update", "error", err)
@@ -378,13 +436,15 @@ func (s *Simulator) ResolveSelfUpdate() {
 	} else {
 		message += "; previous updater restored"
 	}
-	s.state.LastUpdateAttempt = &platformtypes.UpdateAttempt{
+	attempt := &platformtypes.UpdateAttempt{
 		FromVersion:   pending.FromVersion,
 		TargetVersion: pending.ToVersion,
 		Success:       false,
 		Error:         message,
 		Timestamp:     time.Now().UTC(),
 	}
+	s.state.LastUpdateAttempt = attempt
+	s.state.LastSelfUpdate = attempt
 	s.state.PendingSelfUpdate = nil
 	if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
 		s.logger.Warn("failed to persist self-update watchdog result", "error", err)
@@ -395,20 +455,25 @@ func (s *Simulator) ResolveSelfUpdate() {
 // verifyAndDownload enforces the release signature policy and downloads the
 // artifact with checksum verification. Shared by product updates and
 // self-updates so both paths have identical supply-chain guarantees.
-func (s *Simulator) verifyAndDownload(ctx context.Context, offer *UpdateOffer) (*DownloadResult, error) {
+func (s *Simulator) verifyAndDownload(ctx context.Context, offer *UpdateOffer, client *Client) (*DownloadResult, error) {
 	if offer.DownloadURL == "" {
 		return nil, fmt.Errorf("update %s %s has no download URL", offer.Product, offer.LatestVersion)
 	}
-	if s.publicKey != nil {
-		if err := signing.Verify(s.publicKey, offer.Product, offer.LatestVersion, offer.Checksum, offer.Signature); err != nil {
+	if len(s.publicKeys) > 0 {
+		if err := verifyAnyKey(s.publicKeys, offer.Product, offer.LatestVersion, offer.Checksum, offer.Signature); err != nil {
 			return nil, fmt.Errorf("release signature for %s %s: %w", offer.Product, offer.LatestVersion, err)
 		}
 	} else if s.config.Signing.Require {
-		return nil, fmt.Errorf("signing.require is set but signing.public_key is not configured")
+		return nil, fmt.Errorf("signing.require is set but no signing key is configured")
 	}
 
-	result, err := s.client.DownloadArtifact(
-		ctx,
+	// Bound the download by its own deadline (download_timeout), separate from
+	// server.timeout which bounds only metadata. A deadline already present on
+	// ctx (e.g. the self-update or product phase budget) still applies.
+	dlCtx, cancel := context.WithTimeout(ctx, s.config.downloadTimeout())
+	defer cancel()
+	result, err := client.DownloadArtifact(
+		dlCtx,
 		offer.DownloadURL,
 		offer.Checksum,
 		s.config.Simulation.ArtifactDir,
