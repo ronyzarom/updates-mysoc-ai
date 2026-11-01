@@ -23,7 +23,27 @@ per the dev cycle.)
 |------|--------|------------|----------|
 | alpha | published (`publish-updater.sh --groups alpha`) | 2026-10-31 ~10:45 | Rony: "go alpha" |
 | beta | widened via `PUT …/target-groups` → `[alpha,beta]` | 2026-11-01 ~06:45 | Rony: "widen to beta" |
-| stable, production | **not yet** — needs beta soak + a separate instruction each | — | — |
+| stable | widened → `[alpha,beta,stable]` | 2026-11-01 19:19 | Rony: "widen to production, follow the release policy" (stable is the required intermediate ring) |
+| production | widened → `[alpha,beta,stable,production]` | 2026-11-01 19:29 | same instruction, after stable soak passed |
+
+**Beta soak (read-only, 2026-11-01 19:17Z, before widening to stable):**
+`mysoc-cloud-mysoc-ai` and `siemcore-cloud-01` both self-upgraded 1.17.0.2 →
+1.18.0.2 and held it ~12.5 h with ~1-min heartbeats (≫ 3 cycles); product
+checks completing through the new binary (`mysoc=1.3.51.7`, `siemcore=3.3.175.8`
+— SiemCore had reverted .10 to alpha-only, so a no-op check is the expected
+product result); nothing stuck. PASS.
+
+**Stable soak (read-only, 19:23Z and 19:28Z, before widening to production):**
+all four live stable cascade nodes — `testing-dr.mysoc.ai`, `testing-dr-b.mysoc.ai`,
+`siemcore-seetech`, `siemcore-danshar` — self-upgraded to 1.18.0.2 within 4 min
+of widening and held it 6–9 min with ~1-min heartbeats (≥ 3 consecutive
+cycles), product checks completing (`siemcore=3.3.175.8`, `mysoc=1.3.49.4`), no
+rollback, nothing stuck. SWF nodes in stable run the Windows updater and do not
+take `updater-linux-*`; Sept/Oct rows are dead instance IDs. PASS.
+
+**Production result (19:33Z):** `mysoc-cyfox-il` and `siemcore-cyfox-il` both on
+1.18.0.2 within 4 min, heartbeating. Whole cascade fleet is on 1.18.0.2 except
+the wedged Bezeq observer (1.16.1.33, separate track).
 
 **Alpha soak (checked read-only against `instances` before widening to beta,
 2026-11-01 06:37Z):** every live cascade-updater node in alpha was on 1.18.0.2
