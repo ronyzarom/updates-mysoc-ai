@@ -11,11 +11,42 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.18.0 — Updater survivability: self-update always works, no deadlocks
 
-**Build:** 1.18.0.2 on `version/1.18.0` · **Status:** in local validation; not
-yet published to any ring. Not merged to `main`, not tagged. (`1.18.0.1` was the
-Phase 1 binary-only checkpoint; `1.18.0.2` adds the Phase 2 kit — the systemd
-watchdog pinger, `Type=notify`/`WatchdogSec`, and the root restore backstop —
-so the binary changed and the build number was incremented per the dev cycle.)
+**Build:** 1.18.0.2 · commit `8cab819` · tag `v1.18.0.2` (`main` fast-forwarded).
+(`1.18.0.1` was the Phase 1 binary-only checkpoint; `1.18.0.2` adds the Phase 2
+kit — the systemd watchdog pinger, `Type=notify`/`WatchdogSec`, and the root
+restore backstop — so the binary changed and the build number was incremented
+per the dev cycle.)
+
+**Rings (self-update artifacts `updater-linux-amd64`/`-arm64`):**
+
+| Ring | Action | When (UTC) | Approval |
+|------|--------|------------|----------|
+| alpha | published (`publish-updater.sh --groups alpha`) | 2026-10-31 ~10:45 | Rony: "go alpha" |
+| beta | widened via `PUT …/target-groups` → `[alpha,beta]` | 2026-11-01 ~06:45 | Rony: "widen to beta" |
+| stable, production | **not yet** — needs beta soak + a separate instruction each | — | — |
+
+**Alpha soak (checked read-only against `instances` before widening to beta,
+2026-11-01 06:37Z):** every live cascade-updater node in alpha was on 1.18.0.2
+and heartbeating — `siemcore-testing-01`, pod a (`siemcore-normal-db91d16e…`),
+pod b (`siemcore-normal-b-90881d89…`), `drtest.mysoc.ai`, and the testing relay
+`mysoc-testing-mysoc-ai` — ~20 h on the new binary (≫ 3 cycles), with SiemCore
+3.3.175.10 applied through it on testing + both pods and the pods heartbeating
+via the relay. Waived by Rony: the Bezeq witness/observer
+(`bezeq-pod-test-observer-…`, still on 1.16.1.33), wedged on an unrelated
+retained observer operation — see the observer investigation. Stale Sept/Oct-29
+rows were dead or re-enrolled instance IDs, not live nodes.
+
+**Why beta was widened:** the whole customer fleet ran updater 1.17.0.2, whose
+unsigned `.updater-release.json` receipt is (correctly) refused by SiemCore's
+fail-closed recovery runtime (`signed_release_not_provisioned`), so no SiemCore
+release could be promoted past alpha until the fixed updater reached customer
+rings. Beta nodes at widening: `mysoc-cloud-mysoc-ai`, `siemcore-cloud-01`
+(both 1.17.0.2).
+
+**Server:** the 1.18.0 server changes (promotion gate, availability-violation
+counting) are **not deployed**; the running server is pre-1.18.0. The updater
+artifacts are compatible with it (the report endpoint ignores the new fields).
+A server deploy is required before the promotion gate can protect any widening.
 
 **Theme:** make the updater's own self-update unconditional, bounded, and
 self-healing so a node can always pull itself forward and can never wedge the
