@@ -13,11 +13,42 @@ NAME=mysoc-updater
 LAYOUT=${SELF_RESTORE_LAYOUT:-/var/lib/$NAME/self-update}
 CURRENT_LINK=$LAYOUT/current
 PREV_FILE=$LAYOUT/.previous
+# SELF_RESTORE_STATE overrides the state file (tests only).
+STATE_FILE=${SELF_RESTORE_STATE:-/var/lib/$NAME/state.json}
 
 log() { logger -t "$NAME-self-restore" -- "$*" 2>/dev/null || echo "$NAME-self-restore: $*" >&2; }
 
+# Only roll the self-update layout back when this failure is actually a
+# self-update failure. Evidence: state.json carries a pending_self_update marker
+# (written just before the handoff), OR .previous was touched very recently
+# (within 1 h) — i.e. an activation just happened. Otherwise an unrelated
+# start-limit failure (a bad config edit, a missing dependency) would wrongly
+# downgrade to a possibly weeks-old .previous. In that case we still clear the
+# failed state and restart so Restart=always keeps trying the intended binary.
+is_selfupdate_failure() {
+    if [ -f "$STATE_FILE" ] && grep -q '"pending_self_update"' "$STATE_FILE" 2>/dev/null; then
+        return 0
+    fi
+    if [ -f "$PREV_FILE" ]; then
+        # .previous modified within the last hour => an activation just happened.
+        if [ -n "$(find "$PREV_FILE" -mmin -60 2>/dev/null)" ]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+if ! is_selfupdate_failure; then
+    log "failure is not a recent self-update (no pending marker, .previous not recent); not rolling back, just restarting"
+    systemctl reset-failed "$NAME.service" 2>/dev/null || true
+    systemctl start "$NAME.service" 2>/dev/null || true
+    exit 0
+fi
+
 if [ ! -f "$PREV_FILE" ]; then
     log "no .previous recorded; nothing to restore"
+    systemctl reset-failed "$NAME.service" 2>/dev/null || true
+    systemctl start "$NAME.service" 2>/dev/null || true
     exit 0
 fi
 

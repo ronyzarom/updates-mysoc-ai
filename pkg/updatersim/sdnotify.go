@@ -53,6 +53,11 @@ func sdNotifyReady() { sdNotify("READY=1") }
 // genuinely healthy this cycle.
 func sdNotifyWatchdog() { sdNotify("WATCHDOG=1") }
 
+// sdNotifyStopping signals that the updater has begun a graceful shutdown so
+// systemd starts the TimeoutStopSec clock from the drain, not from the signal,
+// and does not treat the drain window as a hang.
+func sdNotifyStopping() { sdNotify("STOPPING=1") }
+
 // sdWatchdogEnabled reports whether systemd asked for watchdog pings
 // (WATCHDOG_USEC set and this is the main pid). Used to decide whether to ping.
 func sdWatchdogEnabled() bool {
@@ -78,3 +83,8 @@ func sdWatchdogInterval() time.Duration {
 // has finished startup, settled any pending self-update, and is serving. Inert
 // unless launched under a notify unit.
 func (s *Simulator) NotifyReady() { sdNotifyReady() }
+
+// NotifyStopping tells the service manager that a graceful shutdown/drain has
+// begun, so TimeoutStopSec is measured from here. Inert unless launched under a
+// notify unit.
+func (s *Simulator) NotifyStopping() { sdNotifyStopping() }

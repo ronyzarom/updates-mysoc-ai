@@ -78,6 +78,13 @@ type Relay struct {
 	// forward. It is a cascade-wide signal (expired/rotated license) surfaced in
 	// the upward heartbeat, distinct from a child presenting a bad token.
 	parentRejectedCred atomic.Bool
+
+	// probeClient is the single shared client used by ListenerHealthy. Building
+	// a fresh client (and its Transport) on every watchdog tick leaked idle
+	// connections, goroutines and file descriptors; one keep-alive-disabled
+	// client, reused, closes each self-probe connection cleanly.
+	probeOnce   sync.Once
+	probeClient *http.Client
 }
 
 type childState struct {
@@ -1049,28 +1056,59 @@ func (r *Relay) ParentCredentialRejected() bool { return r.parentRejectedCred.Lo
 // systemd watchdog must be allowed to lapse so the process is restarted rather
 // than kept alive. Wired into the simulator via SetRelayListenerProbe.
 func (r *Relay) ListenerHealthy() bool {
-	addr := r.config.Relay.Listen
-	_, port, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(r.config.Relay.Listen)
 	if err != nil || port == "" {
 		return false
 	}
-	// Dial the loopback form of our own listener regardless of the bind host.
-	target := net.JoinHostPort("127.0.0.1", port)
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			// Self-probe of our own self-signed listener: we are not
-			// authenticating the cert, only confirming the listener answers.
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // localhost self-probe
-		},
-	}
-	resp, err := client.Get("https://" + target + "/health")
+	// Probe the host the listener is actually bound to. A wildcard or unspecified
+	// bind (":18443", "0.0.0.0:18443", "[::]:18443") is reached via loopback of
+	// the matching family; a specific bind host is dialed directly. Either way
+	// the self-probe matches the loopback /health guard exemption for the common
+	// wildcard case, and reaches a single-IP bind for the rare pinned case.
+	target := net.JoinHostPort(selfProbeHost(host), port)
+	resp, err := r.listenerProbeClient().Get("https://" + target + "/health")
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
 	return resp.StatusCode == http.StatusOK
+}
+
+// listenerProbeClient returns the shared, keep-alive-disabled client used for
+// the loopback self-probe. Built once and reused so repeated watchdog ticks do
+// not leak idle connections or goroutines.
+func (r *Relay) listenerProbeClient() *http.Client {
+	r.probeOnce.Do(func() {
+		r.probeClient = &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				// Self-probe of our own self-signed listener: we are not
+				// authenticating the cert, only confirming the listener answers.
+				TLSClientConfig:   &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // localhost self-probe
+				DisableKeepAlives: true,
+				MaxIdleConns:      1,
+				IdleConnTimeout:   time.Second,
+			},
+		}
+	})
+	return r.probeClient
+}
+
+// selfProbeHost maps a listener bind host to the address to dial for a loopback
+// self-probe. Unspecified/wildcard binds map to loopback of the right family;
+// a specific host is returned unchanged.
+func selfProbeHost(bindHost string) string {
+	if bindHost == "" {
+		return "127.0.0.1"
+	}
+	if ip := net.ParseIP(bindHost); ip != nil && ip.IsUnspecified() {
+		if ip.To4() == nil {
+			return "::1"
+		}
+		return "127.0.0.1"
+	}
+	return bindHost
 }
 
 // verifyCacheIntegrity scans the pull-through cache at startup and removes any

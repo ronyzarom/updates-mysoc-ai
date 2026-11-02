@@ -331,6 +331,9 @@ func newRunCommand(opts *options) *cobra.Command {
 				"mode", mode,
 				"interval", cfg.Heartbeat.Interval.String(),
 			)
+			// A leaf has no listener to bind; startup is complete once the loop is
+			// about to run. Inert when not under a systemd notify unit.
+			simulator.NotifyReady()
 
 			// Graceful shutdown: on a signal, stop starting new update work and
 			// give any in-flight cycle a bounded window to drain before forcing
@@ -344,6 +347,9 @@ func newRunCommand(opts *options) *cobra.Command {
 			case err := <-runErr:
 				return finishOnRestart(log, err)
 			case <-ctx.Done():
+				// Tell systemd we are stopping so TimeoutStopSec is measured from
+				// the drain, not from the signal.
+				simulator.NotifyStopping()
 				drain := cfg.Simulation.DrainTimeout.Duration
 				log.Info(
 					"shutdown signal received; pausing updates and draining",
@@ -432,6 +438,28 @@ relay.enabled: true (and relay.listen) in the configuration.`,
 
 			serveErr := make(chan error, 1)
 			go func() { serveErr <- relay.Serve(ctx) }()
+
+			// Signal systemd readiness only after the child-facing listener is
+			// actually accepting connections, so a relay that fails to bind is not
+			// reported as started. Bounded poll; inert when not under a notify unit.
+			go func() {
+				deadline := time.Now().Add(10 * time.Second)
+				for time.Now().Before(deadline) {
+					if relay.ListenerHealthy() {
+						simulator.NotifyReady()
+						return
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(200 * time.Millisecond):
+					}
+				}
+				// Bind did not confirm in time; still signal so a slow-but-live
+				// node is not killed by the notify unit's TimeoutStartSec.
+				simulator.NotifyReady()
+			}()
+
 			runErr := make(chan error, 1)
 			go func() { runErr <- simulator.Run(ctx, mode) }()
 
@@ -445,8 +473,32 @@ relay.enabled: true (and relay.listen) in the configuration.`,
 				<-serveErr
 				return finishOnRestart(log, err)
 			case <-ctx.Done():
-				<-serveErr
-				<-runErr
+				// Graceful shutdown: tell systemd we are stopping (so
+				// TimeoutStopSec is measured from here) and give the serve loop and
+				// in-flight cycle a bounded window to drain before forcing exit, so
+				// a stuck stage or a child connection that will not close cannot
+				// hang shutdown indefinitely.
+				simulator.NotifyStopping()
+				drain := cfg.Simulation.DrainTimeout.Duration
+				log.Info(
+					"shutdown signal received; pausing updates and draining",
+					"drain_timeout", drain.String(),
+				)
+				timer := time.NewTimer(drain)
+				defer timer.Stop()
+				drained := 0
+				for drained < 2 {
+					select {
+					case <-serveErr:
+						drained++
+					case <-runErr:
+						drained++
+					case <-timer.C:
+						log.Warn("drain timeout exceeded; forcing shutdown", "drain_timeout", drain.String())
+						return nil
+					}
+				}
+				log.Info("relay drained cleanly")
 				return nil
 			}
 		},
@@ -501,14 +553,15 @@ func loadSimulator(opts *options) (*updatersim.Simulator, *updatersim.Config, er
 		return nil, nil, err
 	}
 	// The stamped binary version anchors self-update comparisons and settles
-	// any pending self-update marker: the new binary finalizes it, any other
-	// binary triggers the watchdog restore.
+	// any pending self-update marker. ResolveSelfUpdate now only handles the
+	// watchdog path (wrong binary -> restore); the happy path is finalized by
+	// the first successful heartbeat, so a binary that boots but cannot reach
+	// its parent is never declared good.
 	simulator.SetBinaryVersion(opts.version)
 	simulator.ResolveSelfUpdate()
-	// Signal systemd (Type=notify) that startup is complete and any pending
-	// self-update has been settled. Inert when not launched under a notify
-	// unit, so it is safe for one-shot subcommands too.
-	simulator.NotifyReady()
+	// NOTE: systemd readiness (NotifyReady) is signaled by the long-running
+	// commands (run, relay) themselves — for relay, only after the child-facing
+	// listener is actually accepting connections — not here.
 	return simulator, cfg, nil
 }
 

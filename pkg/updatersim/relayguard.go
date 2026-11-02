@@ -307,6 +307,18 @@ func (g *relayGuard) Stats() *platformtypes.RelayGuardStats {
 	return stats
 }
 
+// isLoopbackRemote reports whether an http.Request RemoteAddr (host:port) is a
+// loopback address. Used to scope the /health guard exemption to the relay's
+// own self-probe.
+func isLoopbackRemote(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // middleware wraps the relay mux with the guard checks. Unknown IPs may
 // reach only the enrollment path (child heartbeat) and the decommission
 // path — the latter because guard learning is in-memory, so a goodbye
@@ -316,6 +328,18 @@ func (g *relayGuard) Stats() *platformtypes.RelayGuardStats {
 // any body parsing.
 func (g *relayGuard) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// The relay's own liveness self-probe (Relay.ListenerHealthy) does a
+		// loopback GET /health. The guard denies any non-enroll path from an
+		// unlearned source, and loopback is never learned, so without this
+		// exemption the self-probe always 403s and the systemd watchdog can
+		// never be fed. The exemption is scoped to loopback so /health is not
+		// exposed to arbitrary unlearned external sources; it is a GET with no
+		// child-facing contract, so this relaxation does not touch the frozen
+		// child protocol.
+		if req.Method == http.MethodGet && req.URL.Path == "/health" && isLoopbackRemote(req.RemoteAddr) {
+			next.ServeHTTP(w, req)
+			return
+		}
 		enrollPath := req.Method == http.MethodPost &&
 			(req.URL.Path == "/api/v1/heartbeat" || req.URL.Path == "/api/v1/decommission")
 		switch g.check(req.RemoteAddr, enrollPath) {

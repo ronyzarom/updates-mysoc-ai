@@ -59,8 +59,9 @@ func TestSelfUpdaterStageValidateActivateRestore(t *testing.T) {
 		t.Fatalf("current points at %s, want 2.0.0 dir", target)
 	}
 
-	// The watchdog path restores the previous target.
-	if err := updater.RestorePrevious(); err != nil {
+	// The watchdog path restores the previous target. current resolves to the
+	// failed 2.0.0 release, so the restore to 1.0.0 is allowed.
+	if err := updater.RestorePrevious("2.0.0"); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 	target, _ = os.Readlink(updater.currentLink())
@@ -187,17 +188,28 @@ func TestResolveSelfUpdateFinalizesOnNewBinary(t *testing.T) {
 	simulator.state.PendingSelfUpdate = &SelfUpdateState{FromVersion: "1.0.0", ToVersion: "2.0.0"}
 	simulator.SetBinaryVersion("2.0.0")
 
+	// Boot: the happy path no longer finalizes. The new binary is live and the
+	// reported version is updated, but success is deferred until a heartbeat.
 	simulator.ResolveSelfUpdate()
 
-	if simulator.state.PendingSelfUpdate != nil {
-		t.Fatal("pending marker should be cleared")
+	if simulator.state.PendingSelfUpdate == nil {
+		t.Fatal("pending marker must survive boot until the first heartbeat")
 	}
 	if simulator.state.UpdaterVersion != "2.0.0" {
 		t.Fatalf("updater version = %q, want 2.0.0", simulator.state.UpdaterVersion)
 	}
-	attempt := simulator.state.LastUpdateAttempt
+	if simulator.state.LastSelfUpdate != nil && simulator.state.LastSelfUpdate.Success {
+		t.Fatal("self-update must not be declared successful before a heartbeat")
+	}
+
+	// First successful heartbeat finalizes it.
+	simulator.finalizeSelfUpdateOnHeartbeat()
+	if simulator.state.PendingSelfUpdate != nil {
+		t.Fatal("pending marker should be cleared after the first heartbeat")
+	}
+	attempt := simulator.state.LastSelfUpdate
 	if attempt == nil || !attempt.Success || attempt.TargetVersion != "2.0.0" {
-		t.Fatalf("expected successful attempt record, got %+v", attempt)
+		t.Fatalf("expected successful self-update record, got %+v", attempt)
 	}
 }
 

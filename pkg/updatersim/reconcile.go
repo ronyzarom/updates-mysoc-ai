@@ -239,7 +239,10 @@ func (s *Simulator) failReconcile(
 	cause error,
 	reconciler ReconcilingExecutor,
 ) error {
-	rollbackErr := reconciler.RollbackReconcile(ctx, plan)
+	// Rollback and report must run even if ctx already hit the cycle deadline.
+	rbCtx, rbCancel := s.recoveryContext()
+	defer rbCancel()
+	rollbackErr := reconciler.RollbackReconcile(rbCtx, plan)
 	message := fmt.Sprintf("stage=%s: %v", stage, cause)
 	if rollbackErr != nil {
 		message += "; rollback: " + rollbackErr.Error()
@@ -247,7 +250,9 @@ func (s *Simulator) failReconcile(
 
 	s.recordReconcile(plan.Release, stage, false, message)
 	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
-	reportErr := s.client.ReportUpdate(ctx, plan.Product, UpdateReportRequest{
+	repCtx, repCancel := s.recoveryContext()
+	defer repCancel()
+	reportErr := s.client.ReportUpdate(repCtx, plan.Product, UpdateReportRequest{
 		InstanceID:  s.config.Instance.ID,
 		FromVersion: s.state.SystemRelease,
 		ToVersion:   plan.Release,

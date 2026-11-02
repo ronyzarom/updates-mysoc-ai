@@ -28,6 +28,10 @@ Group=mysoc-updater
 ExecStart=/usr/local/bin/mysoc-updater relay --config /etc/mysoc-updater/config.yaml
 Restart=always
 RestartSec=10
+# The updater drains in-flight work for up to drain_timeout (2 m) on stop and
+# signals STOPPING=1 when it begins, so systemd's default 90 s stop timeout
+# would SIGKILL mid-drain. Give the drain headroom (2 m drain + margin).
+TimeoutStopSec=150
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

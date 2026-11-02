@@ -173,7 +173,15 @@ type Client struct {
 	relayToken             string
 	maxResponseBytes       int64
 	allowExternalDownloads bool
+	// progressFn, when set, is called while an artifact download is advancing.
+	// The simulator wires it to its liveness marker so a long but progressing
+	// download keeps the systemd watchdog fed instead of being mistaken for a
+	// wedged cycle.
+	progressFn func()
 }
+
+// SetProgressCallback registers a callback invoked while a download advances.
+func (c *Client) SetProgressCallback(fn func()) { c.progressFn = fn }
 
 // NewClient creates an Updates Server client.
 func NewClient(cfg ServerConfig) (*Client, error) {
@@ -474,6 +482,7 @@ func (c *Client) DownloadArtifact(
 		io.LimitReader(response.Body, maxBytes+1),
 		c.downloadStallTimeout,
 		cancel,
+		c.progressFn,
 	)
 	if copyErr != nil {
 		tempFile.Close()
@@ -630,9 +639,12 @@ func (c *Client) addAuthHeaders(request *http.Request) {
 // transferred for stall. A stalled underlying HTTP body Read then unblocks with
 // a context error. stall <= 0 disables the guard. It returns the number of
 // bytes written.
-func copyWithStallGuard(dst io.Writer, src io.Reader, stall time.Duration, cancel context.CancelFunc) (int64, error) {
+func copyWithStallGuard(dst io.Writer, src io.Reader, stall time.Duration, cancel context.CancelFunc, onProgress func()) (int64, error) {
 	var written int64
 	if stall <= 0 {
+		if onProgress != nil {
+			onProgress()
+		}
 		return io.Copy(dst, src)
 	}
 
@@ -653,6 +665,11 @@ func copyWithStallGuard(dst io.Writer, src io.Reader, stall time.Duration, cance
 					// No progress for a full stall window: abort the request.
 					cancel()
 					return
+				}
+				// Download advanced this window: mark liveness so a long but
+				// progressing download keeps the watchdog fed.
+				if onProgress != nil {
+					onProgress()
 				}
 				last = now
 			}

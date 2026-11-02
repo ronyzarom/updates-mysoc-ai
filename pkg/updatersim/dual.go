@@ -29,7 +29,9 @@ func (s *Simulator) prerequisiteEvidence(ctx context.Context, product string) (a
 	cmd := exec.CommandContext(ctx, p.PrerequisiteVerifier[0], p.PrerequisiteVerifier[1:]...)
 	out := &boundedEvidence{}
 	cmd.Stdout = out
-	cmd.WaitDelay = time.Second
+	// Process-group isolation so a verifier that spawns a child cannot outlive
+	// the timeout; a short WaitDelay bounds Wait if it holds stdout.
+	hardenCommand(cmd, time.Second)
 	if err := cmd.Run(); err != nil {
 		return artifactprotocol.Evidence{}, fmt.Errorf("prerequisite verifier failed: %w", err)
 	}
@@ -112,6 +114,10 @@ func (s *Simulator) verifyDualOffer(ctx context.Context, offer *UpdateOffer) err
 }
 
 func (s *Simulator) recordDualFailure(offer *UpdateOffer, err error) error {
+	// A dual/prerequisite or download failure for a dual-artifact product backs
+	// off too, keyed by this target version, so a persistently mismatched offer
+	// is not re-evaluated every cycle.
+	s.bumpRetryBackoff(offer.Product, offer.LatestVersion)
 	s.recordAttempt(Update{Product: offer.Product, FromVersion: offer.CurrentVersion, ToVersion: offer.LatestVersion, SelectedArtifactKind: offer.SelectedArtifactKind, DependencyValidation: "mismatch", ArtifactSHA256: offer.Checksum}, false, err.Error())
 	if saveErr := SaveState(s.config.Simulation.StateFile, s.state); saveErr != nil {
 		return fmt.Errorf("%w; persist failure: %v", err, saveErr)

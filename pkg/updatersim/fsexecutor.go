@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -169,6 +170,11 @@ func (e *FilesystemExecutor) previousFile(product string) string {
 
 // Apply installs the artifact for update and atomically activates it.
 func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
+	// Clear any measurement from a previous update first, so a failure anywhere
+	// in this Apply cannot report a stale window, and a skipped first_install
+	// does not inherit a prior apply's violation.
+	e.resetUnavailable()
+
 	if e.InstallRoot == "" {
 		return fmt.Errorf("filesystem executor requires an install_root")
 	}
@@ -230,8 +236,11 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 	if isFreshInstall(update.FromVersion) {
 		phase = firstInstallPhase
 	}
-	// The restart is the only unavailability an update is allowed to cause
-	// (invariant 7). Measure the window and flag — never abort — a breach.
+	// The restart is the only unavailability a routine upgrade is allowed to
+	// cause (invariant 7). Measure the window and flag — never abort — a breach.
+	// A first_install provisions the whole host and legitimately runs far longer
+	// than a steady-state restart, so it is NOT measured as an availability
+	// window (doing so flagged every fresh host as a violation).
 	if err := e.restartAndMeasure(ctx, phase, update); err != nil {
 		return fmt.Errorf("restart service: %w", err)
 	}
@@ -251,17 +260,34 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 func (e *FilesystemExecutor) restartAndMeasure(ctx context.Context, phase string, update Update) error {
 	start := time.Now()
 	err := e.runCommand(ctx, "restart", phase, e.RestartCommand, update)
-	e.recordUnavailable(time.Since(start))
+	// first_install is whole-host provisioning, not a steady-state restart
+	// window: measuring it would mark every fresh host as a violation. The
+	// window stays at its reset value (0, no violation).
+	if phase != firstInstallPhase {
+		e.recordUnavailable(time.Since(start))
+	}
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
+// resetUnavailable clears the measured window before a new Apply so a failure
+// before the restart, or a skipped first_install, never reports a stale value.
+func (e *FilesystemExecutor) resetUnavailable() {
+	e.lastUnavailableSeconds = 0
+	e.lastAvailabilityViolation = false
+}
+
 // recordUnavailable stores the measured restart window and whether it breached
-// the budget, for the simulator to carry into the update report.
+// the budget, for the simulator to carry into the update report. A positive but
+// sub-second window rounds UP to 1s: rounding down to 0 made a real measurement
+// indistinguishable (under omitempty) from "not measured".
 func (e *FilesystemExecutor) recordUnavailable(window time.Duration) {
-	seconds := int(window.Round(time.Second) / time.Second)
+	seconds := 0
+	if window > 0 {
+		seconds = int(math.Ceil(window.Seconds()))
+	}
 	e.lastUnavailableSeconds = seconds
 	e.lastAvailabilityViolation = e.MaxUnavailableSeconds > 0 && seconds > e.MaxUnavailableSeconds
 	if e.lastAvailabilityViolation {
@@ -276,6 +302,14 @@ func (e *FilesystemExecutor) recordUnavailable(window time.Duration) {
 // artifact plus its extracted copy. A statfs failure is non-fatal (skip the
 // check) so the executor never blocks an install on an unsupported filesystem.
 func (e *FilesystemExecutor) ensureFreeDisk(artifactPath, targetRoot string) error {
+	return ensureFreeDiskForArtifact(artifactPath, targetRoot)
+}
+
+// ensureFreeDiskForArtifact refuses to stage when the target filesystem lacks
+// room for the artifact plus its extracted copy. Shared by the product executor
+// and the updater self-update staging. A stat/statfs failure is non-fatal (skip
+// the check) so staging is never blocked on an unsupported filesystem.
+func ensureFreeDiskForArtifact(artifactPath, targetRoot string) error {
 	info, err := os.Stat(artifactPath)
 	if err != nil {
 		return nil // nothing to size against; let the normal path surface it
@@ -479,12 +513,21 @@ func (e *FilesystemExecutor) runCommand(ctx context.Context, kind, phase string,
 		"DEPENDENCY_VALIDATION="+update.DependencyValidation,
 		"ARTIFACT_SHA256="+update.ArtifactSHA256,
 	)
-	output, err := cmd.CombinedOutput()
+	// Process-group isolation + WaitDelay: a hook that backgrounds a daemon
+	// holding stdout must not wedge Wait past the deadline, and on timeout the
+	// whole group (the root wrapper, not only sudo) must be signaled. Bounded
+	// output caps a chatty hook without failing it.
+	hardenCommand(cmd, commandWaitDelay)
+	out := &boundedOutput{}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	err := cmd.Run()
+	output := out.String()
 	if err != nil {
-		return fmt.Errorf("%s command failed: %w: %s", kind, err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("%s command failed: %w: %s", kind, err, strings.TrimSpace(output))
 	}
 	if len(output) > 0 {
-		e.logger.Debug("command output", "kind", kind, "output", strings.TrimSpace(string(output)))
+		e.logger.Debug("command output", "kind", kind, "output", strings.TrimSpace(output))
 	}
 	return nil
 }

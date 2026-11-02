@@ -762,6 +762,16 @@ func (c *Config) downloadTimeout() time.Duration {
 	return defaultDownloadTimeout
 }
 
+// commandTimeout bounds a single rollback/report performed on a detached
+// context after the cycle deadline has already fired. It mirrors the executor's
+// per-command budget so a post-deadline rollback and its report can still run.
+func (c *Config) commandTimeout() time.Duration {
+	if c.Simulation.Filesystem.CommandTimeout.Duration > 0 {
+		return c.Simulation.Filesystem.CommandTimeout.Duration
+	}
+	return defaultCommandTimeout
+}
+
 func (c *Config) downloadStallTimeout() time.Duration {
 	if c.Server.DownloadStallTimeout.Duration > 0 {
 		return c.Server.DownloadStallTimeout.Duration

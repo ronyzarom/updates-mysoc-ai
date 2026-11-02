@@ -26,6 +26,12 @@ type State struct {
 	ConfigHashes      map[string]string `json:"config_hashes,omitempty"`
 	UpdaterVersion    string            `json:"updater_version,omitempty"`
 	PendingSelfUpdate *SelfUpdateState  `json:"pending_self_update,omitempty"`
+	// QuarantinedSelfUpdateVersion is the last self-update target that failed to
+	// stage/validate/activate or did not come up correctly. maybeSelfUpdate skips
+	// an offer for exactly this version so a bad updater release does not flap
+	// (restore, re-download, re-activate every cycle). Cleared when the server
+	// offers a different version or a self-update finalizes successfully.
+	QuarantinedSelfUpdateVersion string `json:"quarantined_self_update_version,omitempty"`
 	// LastSelfUpdate records the outcome of the most recent updater self-update
 	// (finalized success or watchdog restore), distinct from product update
 	// attempts, so the heartbeat can surface self-update health on its own.

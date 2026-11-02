@@ -109,6 +109,10 @@ func TestDualFixtureDeliveryAndRetry(t *testing.T) {
 						t.Fatal("failure not persisted")
 					}
 					writeEvidence(evidence)
+					// The failure armed a per-version back-off; simulate the
+					// window elapsing so the retry is allowed. This test exercises
+					// delivery/retry correctness, not back-off timing.
+					sim.clearRetryBackoff(product)
 					if err = sim.processOffer(context.Background(), ModeReal, offer); err != nil {
 						t.Fatal("retry failed", err)
 					}

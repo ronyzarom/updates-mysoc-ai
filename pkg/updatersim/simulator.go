@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/artifactprotocol"
@@ -21,6 +22,11 @@ import (
 )
 
 var ErrCycleInProgress = errors.New("simulator cycle already in progress")
+
+// watchdogProgressGrace is added to the whole-cycle deadline to decide whether
+// the cycle loop is still alive for the systemd watchdog. It absorbs the gap
+// between a cycle self-cancelling on its deadline and the next cycle starting.
+const watchdogProgressGrace = 30 * time.Second
 
 // Simulator runs safe updater protocol cycles.
 type Simulator struct {
@@ -78,6 +84,19 @@ type Simulator struct {
 	// 1.12); deltaAckFn prunes that queue once the parent acks the cursor.
 	deltaFn    func() *platformtypes.DeltaEnvelope
 	deltaAckFn func(uint64)
+
+	// lastProgress is the UnixNano of the most recent sign of cycle progress:
+	// a phase boundary (self-update, heartbeat, each product) or an advancing
+	// download. The watchdog pinger reads it so a cycle wedged mid-phase (e.g.
+	// a hook whose Wait never returns) stops feeding the systemd watchdog and
+	// the process is restarted, while a long-but-progressing cycle is not.
+	lastProgress atomic.Int64
+}
+
+// noteProgress records that the cycle is making forward progress. Called at
+// phase boundaries and from the download progress callback.
+func (s *Simulator) noteProgress() {
+	s.lastProgress.Store(time.Now().UnixNano())
 }
 
 // SetChildrenProvider wires the relay's rollup into this node's heartbeats.
@@ -173,6 +192,9 @@ func NewSimulator(
 		publicKey:  publicKey,
 		publicKeys: publicKeys,
 	}
+	sim.noteProgress()
+	// A long but progressing download must keep the watchdog fed.
+	client.SetProgressCallback(sim.noteProgress)
 	if fb := strings.TrimSpace(cfg.Server.FallbackURL); fb != "" {
 		fbCfg := cfg.Server
 		fbCfg.URL = fb
@@ -184,6 +206,7 @@ func NewSimulator(
 			return nil, fmt.Errorf("server.fallback_url client: %w", err)
 		}
 		sim.fallbackClient = fallbackClient
+		fallbackClient.SetProgressCallback(sim.noteProgress)
 		if cfg.Relay.Enabled {
 			logger.Warn(
 				"server.fallback_url is set on a relay node; it only helps nodes that hold an origin credential — a relay's children reach the origin via the relay, not a fallback URL",
@@ -336,6 +359,11 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 
 	var cycleErrors []error
 
+	// A new cycle beginning is itself progress; each phase boundary below bumps
+	// again, so the watchdog pinger can tell a progressing cycle (even a long
+	// first_install) from one wedged inside a single phase.
+	s.noteProgress()
+
 	// 1. Self-update FIRST, in isolation, with its own deadline. Its outcome
 	//    never depends on heartbeat or product results, so a rejected heartbeat
 	//    or a wedged product hook can never stop the updater from fetching the
@@ -351,18 +379,26 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	// 2. Heartbeat. A heartbeat error is recorded but NEVER fatal: a
 	//    server-side rejection must not block product work or (above)
 	//    self-update.
+	s.noteProgress()
 	if _, err := s.SendHeartbeat(ctx); err != nil {
 		s.noteParentAuth(err)
 		cycleErrors = append(cycleErrors, fmt.Errorf("heartbeat: %w", err))
+	} else {
+		// A successful heartbeat is the proof a freshly self-updated binary can
+		// reach its parent; finalize any pending self-update now (deferred from
+		// boot so a node that cannot heartbeat is never declared good).
+		s.finalizeSelfUpdateOnHeartbeat()
 	}
 
 	// 3. Products, each bounded by its own deadline so one hung hook cannot
 	//    consume the whole cycle budget.
 	for _, configuredProduct := range s.config.Products {
+		s.noteProgress()
 		if err := s.runProductCycle(ctx, mode, configuredProduct.Name); err != nil {
 			cycleErrors = append(cycleErrors, err)
 		}
 	}
+	s.noteProgress()
 	return errors.Join(cycleErrors...)
 }
 
@@ -380,6 +416,14 @@ func (s *Simulator) runProductCycle(ctx context.Context, mode Mode, productName 
 		current := ""
 		if p, ok := s.config.Product(productName); ok {
 			current = p.CurrentVersion
+		}
+		// The product is current: drop any lingering back-off (including a
+		// version-keyed entry from a since-superseded target, or a legacy
+		// product-only entry) so a later genuine offer is not throttled.
+		if s.clearRetryBackoff(productName) {
+			if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
+				s.logger.Warn("failed to persist cleared back-off", "product", productName, "error", err)
+			}
 		}
 		s.logger.Info(
 			"product is up to date",
@@ -425,9 +469,17 @@ func (s *Simulator) selfUpdatePhase(ctx context.Context, mode Mode) error {
 
 // startWatchdog launches a background systemd watchdog pinger when launched
 // under a notify unit with WatchdogSec. It pings at half the watchdog interval,
-// decoupled from cycle duration so a long first_install never trips it. A relay
-// pings only while its child-facing listener self-probe passes, so a live
-// process with a dead cascade listener is restarted rather than kept alive.
+// decoupled from cycle duration so a long first_install never trips it. Two
+// independent liveness gates must both hold for a ping:
+//
+//   - Cycle progress: the last phase boundary or download advance was recent
+//     (within cycle_timeout + grace). A cycle wedged inside a single phase — a
+//     hook whose Wait never returns, so RunCycle never releases cycleMu and no
+//     further cycle runs — freezes this marker, so the watchdog lapses and the
+//     process is restarted. A long-but-progressing cycle keeps feeding it.
+//   - Relay listener (relay mode only): the child-facing listener self-probe
+//     passes, so a live process with a dead cascade listener is restarted.
+//
 // Inert (no goroutine) when not under a watchdog unit.
 func (s *Simulator) startWatchdog(ctx context.Context) {
 	if !sdWatchdogEnabled() {
@@ -442,12 +494,28 @@ func (s *Simulator) startWatchdog(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				if !s.cycleProgressing() {
+					continue
+				}
 				if s.relayListenerFn == nil || s.relayListenerFn() {
 					sdNotifyWatchdog()
 				}
 			}
 		}
 	}()
+}
+
+// cycleProgressing reports whether the cycle loop has shown progress recently
+// enough to be considered alive. The bound is the whole-cycle deadline plus a
+// grace margin: a cycle that self-cancels on cycle_timeout starts the next one
+// (bumping the marker), so only a cycle truly wedged mid-phase lets this lapse.
+func (s *Simulator) cycleProgressing() bool {
+	last := s.lastProgress.Load()
+	if last == 0 {
+		return true // not yet initialized; do not starve the watchdog at boot
+	}
+	limit := s.config.cycleTimeout() + watchdogProgressGrace
+	return time.Since(time.Unix(0, last)) < limit
 }
 
 // Run starts an immediate cycle followed by jittered heartbeat cycles. It
@@ -501,7 +569,7 @@ func (s *Simulator) processOffer(
 
 	// After a first_install failure a fresh host backs off instead of
 	// re-provisioning every heartbeat; skip this cycle until the window passes.
-	if remaining := s.retryBackoffRemaining(offer.Product); remaining > 0 {
+	if remaining := s.retryBackoffRemaining(offer.Product, offer.LatestVersion); remaining > 0 {
 		s.logger.Info(
 			"deferring install retry (back-off after a prior failure)",
 			"product", offer.Product,
@@ -521,6 +589,13 @@ func (s *Simulator) processOffer(
 	if err != nil {
 		if offer.SelectedArtifactKind != "" {
 			return s.recordDualFailure(offer, err)
+		}
+		// A download/checksum failure for a single-artifact product: back off,
+		// keyed by this target version, so a persistently bad or corrupt release
+		// is not re-fetched every cycle (today a restart pair every 60 s).
+		s.bumpRetryBackoff(offer.Product, offer.LatestVersion)
+		if saveErr := SaveState(s.config.Simulation.StateFile, s.state); saveErr != nil {
+			return errors.Join(err, saveErr)
 		}
 		return err
 	}
@@ -606,21 +681,39 @@ func (s *Simulator) processOffer(
 	return nil
 }
 
+// recoveryContext derives a context for post-failure cleanup (rollback, state
+// save, report) that survives cancellation of the cycle/product deadline. A
+// product_timeout firing mid-apply must still run the rollback hook and report
+// the outcome; on the original (already-cancelled) context neither would run.
+func (s *Simulator) recoveryContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(context.Background()), s.config.commandTimeout())
+}
+
 func (s *Simulator) failAndRollback(
 	ctx context.Context,
 	update Update,
 	updateErr error,
 ) error {
-	rollbackErr := s.executor.Rollback(ctx, update)
+	// The rollback hook and its report must run even when ctx has already hit
+	// the product/cycle deadline, so detach from that cancellation.
+	rbCtx, rbCancel := s.recoveryContext()
+	defer rbCancel()
+	rollbackErr := s.executor.Rollback(rbCtx, update)
 	errorMessage := updateErr.Error()
 	if rollbackErr != nil {
 		errorMessage += "; rollback: " + rollbackErr.Error()
 	}
 
+	// A failed upgrade+rollback must back off too, keyed by this target version,
+	// so a persistently bad release stops churning a stage/apply/rollback pair
+	// every cycle. Cleared on the next success or once the product is current.
+	s.bumpRetryBackoff(update.Product, update.ToVersion)
 	s.recordAttempt(update, false, errorMessage)
 	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
 	unavailable, violation := s.availability()
-	reportErr := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
+	repCtx, repCancel := s.recoveryContext()
+	defer repCancel()
+	reportErr := s.client.ReportUpdate(repCtx, update.Product, UpdateReportRequest{
 		InstanceID:           s.config.Instance.ID,
 		FromVersion:          update.FromVersion,
 		ToVersion:            update.ToVersion,
@@ -648,10 +741,12 @@ func (s *Simulator) availability() (int, bool) {
 // does not churn stage/fail/rollback every cycle.
 func (s *Simulator) recordSkip(ctx context.Context, update Update, stage string, cause error) error {
 	message := cause.Error()
-	delay := s.bumpRetryBackoff(update.Product)
+	delay := s.bumpRetryBackoff(update.Product, update.ToVersion)
 	s.recordAttempt(update, false, message)
 	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
-	reportErr := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
+	repCtx, repCancel := s.recoveryContext()
+	defer repCancel()
+	reportErr := s.client.ReportUpdate(repCtx, update.Product, UpdateReportRequest{
 		InstanceID:           s.config.Instance.ID,
 		FromVersion:          update.FromVersion,
 		ToVersion:            update.ToVersion,
@@ -690,10 +785,12 @@ func (s *Simulator) recordFirstInstallFailure(ctx context.Context, update Update
 			s.logger.Warn("cleanup of staged first_install failed", "product", update.Product, "error", cleanErr)
 		}
 	}
-	delay := s.bumpRetryBackoff(update.Product)
+	delay := s.bumpRetryBackoff(update.Product, update.ToVersion)
 	s.recordAttempt(update, false, message)
 	stateErr := SaveState(s.config.Simulation.StateFile, s.state)
-	reportErr := s.client.ReportUpdate(ctx, update.Product, UpdateReportRequest{
+	repCtx, repCancel := s.recoveryContext()
+	defer repCancel()
+	reportErr := s.client.ReportUpdate(repCtx, update.Product, UpdateReportRequest{
 		InstanceID:           s.config.Instance.ID,
 		FromVersion:          update.FromVersion,
 		ToVersion:            update.ToVersion,
@@ -711,32 +808,57 @@ func (s *Simulator) recordFirstInstallFailure(ctx context.Context, update Update
 	return errors.Join(cause, stateErr, reportErr)
 }
 
+// backoffKey namespaces a back-off entry by product AND target version, so a
+// persistently bad upgrade throttles only that version: when the server moves
+// the product to a new target, the fresh key starts with a clean schedule
+// instead of inheriting the failed version's cool-down.
+func backoffKey(product, version string) string {
+	if version == "" {
+		return product
+	}
+	return product + "@" + version
+}
+
+// maxRetryBackoff is the steady-state cap (the last schedule entry). It also
+// bounds the honored wait, so a corrupt or forward-jumped NextAt can never
+// freeze updates for longer than one steady-state interval.
+func maxRetryBackoff() time.Duration {
+	return firstInstallBackoffSchedule[len(firstInstallBackoffSchedule)-1]
+}
+
 // retryBackoffRemaining returns how long until the next install retry is allowed
-// for a product (0 if none is pending or the window has passed).
-func (s *Simulator) retryBackoffRemaining(product string) time.Duration {
+// for a product+version (0 if none is pending or the window has passed). The
+// result is clamped to maxRetryBackoff so a clock jump or a NextAt persisted
+// from a faster/future clock cannot wedge updates indefinitely.
+func (s *Simulator) retryBackoffRemaining(product, version string) time.Duration {
 	if s.state == nil || s.state.RetryBackoff == nil {
 		return 0
 	}
-	rb := s.state.RetryBackoff[product]
+	rb := s.state.RetryBackoff[backoffKey(product, version)]
 	if rb == nil {
 		return 0
 	}
-	if remaining := time.Until(rb.NextAt); remaining > 0 {
-		return remaining
+	remaining := time.Until(rb.NextAt)
+	if remaining <= 0 {
+		return 0
 	}
-	return 0
+	if capDelay := maxRetryBackoff(); remaining > capDelay {
+		return capDelay
+	}
+	return remaining
 }
 
-// bumpRetryBackoff advances the back-off schedule for a product and returns the
-// delay applied.
-func (s *Simulator) bumpRetryBackoff(product string) time.Duration {
+// bumpRetryBackoff advances the back-off schedule for a product+version and
+// returns the delay applied.
+func (s *Simulator) bumpRetryBackoff(product, version string) time.Duration {
 	if s.state.RetryBackoff == nil {
 		s.state.RetryBackoff = make(map[string]*RetryBackoff)
 	}
-	rb := s.state.RetryBackoff[product]
+	key := backoffKey(product, version)
+	rb := s.state.RetryBackoff[key]
 	if rb == nil {
 		rb = &RetryBackoff{}
-		s.state.RetryBackoff[product] = rb
+		s.state.RetryBackoff[key] = rb
 	}
 	idx := rb.Count
 	if idx >= len(firstInstallBackoffSchedule) {
@@ -748,22 +870,41 @@ func (s *Simulator) bumpRetryBackoff(product string) time.Duration {
 	return delay
 }
 
-// clearRetryBackoff removes any pending back-off for a product after a success.
-func (s *Simulator) clearRetryBackoff(product string) {
+// clearRetryBackoff removes every pending back-off for a product (all target
+// versions, plus any legacy product-only key) after a success or once the
+// product is reported current. It reports whether any entry was removed so
+// callers can skip a needless state write.
+func (s *Simulator) clearRetryBackoff(product string) bool {
 	if s.state == nil || s.state.RetryBackoff == nil {
-		return
+		return false
 	}
-	delete(s.state.RetryBackoff, product)
+	prefix := product + "@"
+	removed := false
+	for key := range s.state.RetryBackoff {
+		if key == product || strings.HasPrefix(key, prefix) {
+			delete(s.state.RetryBackoff, key)
+			removed = true
+		}
+	}
+	return removed
 }
 
 func (s *Simulator) recordAttempt(update Update, success bool, message string) {
+	// Carry the measured restart window into the attempt so it rides the next
+	// heartbeat's last_update_attempt. The promotion gate reads
+	// last_heartbeat_data->last_update_attempt->availability_violation; without
+	// this it was always absent and the gate was inert. The executor resets the
+	// measurement at Apply start, so a failure before the restart reports 0.
+	unavailable, violation := s.availability()
 	attempt := &platformtypes.UpdateAttempt{
-		FromVersion:          update.FromVersion,
-		TargetVersion:        update.ToVersion,
-		Success:              success,
-		Error:                message,
-		Timestamp:            time.Now().UTC(),
-		SelectedArtifactKind: update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
+		FromVersion:           update.FromVersion,
+		TargetVersion:         update.ToVersion,
+		Success:               success,
+		Error:                 message,
+		Timestamp:             time.Now().UTC(),
+		UnavailableSeconds:    unavailable,
+		AvailabilityViolation: violation,
+		SelectedArtifactKind:  update.SelectedArtifactKind, DependencyValidation: update.DependencyValidation, ArtifactDigest: update.ArtifactSHA256,
 	}
 	s.state.LastUpdateAttempt = attempt
 	if success {

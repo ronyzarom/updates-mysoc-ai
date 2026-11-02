@@ -9,12 +9,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/cyfox-labs/updates-mysoc-ai/pkg/signing"
 	platformtypes "github.com/cyfox-labs/updates-mysoc-ai/pkg/types"
 )
+
+// selfUpdateReleasesKeep is how many old release directories to retain beyond
+// the current and previous targets, so a fleet keeps a short rollback history
+// without letting releases/ grow without bound.
+const selfUpdateReleasesKeep = 2
 
 // ErrRestartPending signals that a new updater binary has been staged and
 // activated, and the process must exit so the service manager (systemd)
@@ -28,6 +34,20 @@ const selfUpdateValidateTimeout = 30 * time.Second
 // executablePath resolves the running binary; a variable so tests can point
 // the simulator at a fake managed layout.
 var executablePath = os.Executable
+
+// resolvedExecutable returns the on-disk path of the running binary with any
+// symlinks resolved, so managed-layout checks compare real paths (the service
+// launches the updater through the managed "current" symlink).
+func resolvedExecutable() (string, error) {
+	exePath, err := executablePath()
+	if err != nil {
+		return "", err
+	}
+	if resolved, resErr := filepath.EvalSymlinks(exePath); resErr == nil {
+		exePath = resolved
+	}
+	return exePath, nil
+}
 
 // SelfUpdateProduct is the release product name this node watches for its own
 // binary. Updater binaries are architecture-specific single files, so each
@@ -106,6 +126,12 @@ func (u *SelfUpdater) Stage(artifactPath, version, binaryName string) (string, e
 	if u.Dir == "" {
 		return "", fmt.Errorf("self-update dir is not configured")
 	}
+	// Refuse to stage when the layout's filesystem lacks room, so a full disk is
+	// a clean skip-and-retry rather than a half-written binary that cannot be
+	// validated or activated.
+	if err := ensureFreeDiskForArtifact(artifactPath, u.Dir); err != nil {
+		return "", err
+	}
 	dir := u.releaseDir(version)
 	if err := os.RemoveAll(dir); err != nil {
 		return "", fmt.Errorf("clear staging dir: %w", err)
@@ -135,14 +161,20 @@ func (u *SelfUpdater) ValidateStaged(ctx context.Context, stagedPath, version st
 	runCtx, cancel := context.WithTimeout(ctx, selfUpdateValidateTimeout)
 	defer cancel()
 
-	output, err := exec.CommandContext(runCtx, stagedPath, "version").CombinedOutput()
+	cmd := exec.CommandContext(runCtx, stagedPath, "version")
+	hardenCommand(cmd, commandWaitDelay)
+	out := &boundedOutput{}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	err := cmd.Run()
+	output := out.String()
 	if err != nil {
-		return fmt.Errorf("staged updater failed to execute: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("staged updater failed to execute: %w: %s", err, strings.TrimSpace(output))
 	}
-	if !strings.Contains(string(output), version) {
+	if !strings.Contains(output, version) {
 		return fmt.Errorf(
 			"staged updater reports %q, expected version %s",
-			strings.TrimSpace(strings.SplitN(string(output), "\n", 2)[0]),
+			strings.TrimSpace(strings.SplitN(output, "\n", 2)[0]),
 			version,
 		)
 	}
@@ -163,26 +195,54 @@ func (u *SelfUpdater) Preflight(ctx context.Context, stagedPath, configPath, sta
 	if statePath != "" {
 		args = append(args, "--state", statePath)
 	}
-	output, err := exec.CommandContext(runCtx, stagedPath, args...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("staged updater preflight failed: %w: %s", err, strings.TrimSpace(string(output)))
+	cmd := exec.CommandContext(runCtx, stagedPath, args...)
+	hardenCommand(cmd, commandWaitDelay)
+	out := &boundedOutput{}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("staged updater preflight failed: %w: %s", err, strings.TrimSpace(out.String()))
 	}
 	return nil
 }
 
 // Activate records the current symlink target for restore and atomically
-// points current at the staged version directory.
+// points current at the staged version directory. It is idempotent (a no-op
+// when current already points at the target) and never records target as its
+// own .previous, so a restore can never loop back to the version it is rolling
+// back from.
 func (u *SelfUpdater) Activate(version string) error {
+	target := u.releaseDir(version)
 	prev, _ := os.Readlink(u.currentLink())
-	if err := os.WriteFile(u.previousFile(), []byte(prev), 0o644); err != nil {
-		return fmt.Errorf("record previous updater: %w", err)
+	if filepath.Clean(prev) == filepath.Clean(target) {
+		// Already active: Activate ran before, or a retry after a crash past the
+		// swap. Nothing to do, and do not overwrite .previous with target.
+		return nil
 	}
-	return u.swapCurrent(u.releaseDir(version))
+	if prev != "" {
+		// Atomic .previous write: a crash mid-write must not leave a truncated
+		// pointer that a later restore would act on.
+		if err := atomicWriteFile(u.previousFile(), []byte(prev), 0o644); err != nil {
+			return fmt.Errorf("record previous updater: %w", err)
+		}
+	}
+	return u.swapCurrent(target)
 }
 
 // RestorePrevious points current back at the recorded previous target. It is
-// the watchdog path when the wrong binary comes up after an activation.
-func (u *SelfUpdater) RestorePrevious() error {
+// the watchdog path when the wrong binary comes up after an activation. It
+// refuses to act unless current actually resolves to failedTarget's release:
+// if the swap never took effect (a crash between the pending marker and the
+// symlink swap), current still points at the old release and the recorded
+// .previous may be two versions back, so restoring it would wrongly downgrade.
+func (u *SelfUpdater) RestorePrevious(failedVersion string) error {
+	cur, _ := os.Readlink(u.currentLink())
+	if filepath.Clean(cur) != filepath.Clean(u.releaseDir(failedVersion)) {
+		return fmt.Errorf(
+			"current does not point at failed target %s (points at %q); refusing to restore a possibly stale .previous",
+			failedVersion, cur,
+		)
+	}
 	data, err := os.ReadFile(u.previousFile())
 	if err != nil {
 		return fmt.Errorf("read previous updater target: %w", err)
@@ -191,10 +251,105 @@ func (u *SelfUpdater) RestorePrevious() error {
 	if target == "" {
 		return fmt.Errorf("no previous updater target recorded")
 	}
+	if filepath.Clean(target) == filepath.Clean(u.releaseDir(failedVersion)) {
+		return fmt.Errorf("recorded previous target is the failed version itself; refusing to restore")
+	}
 	if _, err := os.Stat(target); err != nil {
 		return fmt.Errorf("previous updater target missing: %w", err)
 	}
 	return u.swapCurrent(target)
+}
+
+// atomicWriteFile writes data to a temp file in the destination directory, syncs
+// it, and renames it into place, so a crash never leaves a partial file.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if err := f.Chmod(perm); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// Prune removes stale release directories, keeping the current target, the
+// recorded previous target, and the keep most-recent other releases (by mtime).
+// Best-effort and crash-safe: it never touches current or previous, so a
+// concurrent restore always has its target. Errors are joined but do not stop
+// the sweep.
+func (u *SelfUpdater) Prune(keep int) error {
+	if u.Dir == "" {
+		return nil
+	}
+	releasesDir := filepath.Join(u.Dir, "releases")
+	entries, err := os.ReadDir(releasesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	protected := map[string]bool{}
+	if cur, e := os.Readlink(u.currentLink()); e == nil && cur != "" {
+		protected[filepath.Clean(cur)] = true
+	}
+	if data, e := os.ReadFile(u.previousFile()); e == nil {
+		if prev := strings.TrimSpace(string(data)); prev != "" {
+			protected[filepath.Clean(prev)] = true
+		}
+	}
+
+	type releaseEntry struct {
+		path string
+		mod  time.Time
+	}
+	var candidates []releaseEntry
+	for _, ent := range entries {
+		if !ent.IsDir() {
+			continue
+		}
+		path := filepath.Clean(filepath.Join(releasesDir, ent.Name()))
+		if protected[path] {
+			continue
+		}
+		info, e := ent.Info()
+		if e != nil {
+			continue
+		}
+		candidates = append(candidates, releaseEntry{path: path, mod: info.ModTime()})
+	}
+	// Newest first; keep the first `keep`, remove the rest.
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].mod.After(candidates[j].mod) })
+	var errs []error
+	for i, c := range candidates {
+		if i < keep {
+			continue
+		}
+		if e := os.RemoveAll(c.path); e != nil {
+			errs = append(errs, e)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (u *SelfUpdater) swapCurrent(target string) error {
@@ -282,6 +437,24 @@ func (s *Simulator) maybeSelfUpdate(ctx context.Context, mode Mode, client *Clie
 		return nil
 	}
 
+	// Quarantine: a version that previously failed to apply or come up is skipped
+	// until the server offers a different one, so a bad release does not flap
+	// (restore, re-download, re-activate) every cycle. A different offer clears
+	// the quarantine so a corrected build is taken.
+	if q := s.state.QuarantinedSelfUpdateVersion; q != "" {
+		if offer.LatestVersion == q {
+			s.logger.Warn(
+				"skipping self-update: target is quarantined after a prior failure",
+				"target_version", offer.LatestVersion,
+			)
+			return nil
+		}
+		s.state.QuarantinedSelfUpdateVersion = ""
+		if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
+			return err
+		}
+	}
+
 	s.logger.Info(
 		"updater self-update available",
 		"product", product,
@@ -290,6 +463,21 @@ func (s *Simulator) maybeSelfUpdate(ctx context.Context, mode Mode, client *Clie
 		"mode", mode,
 	)
 	if mode == ModeObserve {
+		return nil
+	}
+
+	// Check the managed-layout precondition BEFORE downloading. A legacy install
+	// (binary in /usr/local/bin, not launched through the managed symlink) can
+	// never apply a swap, so fetching the artifact every cycle is pure waste.
+	// A kit reinstall with the self-updatable layout is required.
+	updater := &SelfUpdater{Dir: s.config.SelfUpdate.Dir}
+	if exePath, exeErr := resolvedExecutable(); exeErr == nil && !updater.Manages(exePath) {
+		s.logger.Warn(
+			"self-update offered but this install cannot apply it: binary is outside the managed layout; skipping download",
+			"exe", exePath,
+			"managed_dir", s.config.SelfUpdate.Dir,
+			"target_version", offer.LatestVersion,
+		)
 		return nil
 	}
 
@@ -311,12 +499,9 @@ func (s *Simulator) maybeSelfUpdate(ctx context.Context, mode Mode, client *Clie
 func (s *Simulator) applySelfUpdate(ctx context.Context, offer *UpdateOffer, artifactPath string) error {
 	updater := &SelfUpdater{Dir: s.config.SelfUpdate.Dir}
 
-	exePath, err := executablePath()
+	exePath, err := resolvedExecutable()
 	if err != nil {
 		return fmt.Errorf("resolve running executable: %w", err)
-	}
-	if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
-		exePath = resolved
 	}
 	if !updater.Manages(exePath) {
 		// Legacy install (binary in /usr/local/bin, not launched through the
@@ -342,6 +527,9 @@ func (s *Simulator) applySelfUpdate(ctx context.Context, offer *UpdateOffer, art
 
 	fail := func(stage string, cause error) error {
 		s.state.PendingSelfUpdate = nil
+		// Quarantine this target so the next cycle does not immediately retry the
+		// same bad version; a different offer clears it.
+		s.state.QuarantinedSelfUpdateVersion = offer.LatestVersion
 		s.state.LastSelfUpdate = &platformtypes.UpdateAttempt{
 			FromVersion:   s.binaryVersion,
 			TargetVersion: offer.LatestVersion,
@@ -350,7 +538,11 @@ func (s *Simulator) applySelfUpdate(ctx context.Context, offer *UpdateOffer, art
 			Timestamp:     time.Now().UTC(),
 		}
 		stateErr := SaveState(s.config.Simulation.StateFile, s.state)
-		reportErr := s.client.ReportUpdate(ctx, offer.Product, UpdateReportRequest{
+		// Report on a detached context: a self-update phase that hit its own
+		// deadline must still report the failure so fleet visibility is correct.
+		repCtx, repCancel := s.recoveryContext()
+		defer repCancel()
+		reportErr := s.client.ReportUpdate(repCtx, offer.Product, UpdateReportRequest{
 			InstanceID:  s.config.Instance.ID,
 			FromVersion: s.binaryVersion,
 			ToVersion:   offer.LatestVersion,
@@ -380,6 +572,10 @@ func (s *Simulator) applySelfUpdate(ctx context.Context, offer *UpdateOffer, art
 	if err := updater.Activate(offer.LatestVersion); err != nil {
 		return fail("activate", err)
 	}
+	// The compressed download is now redundant (the binary is staged under
+	// releases/ and validated); drop it so it does not linger in the artifact
+	// dir. Best-effort.
+	_ = os.Remove(artifactPath)
 
 	s.logger.Info(
 		"self-update activated; exiting for service manager restart",
@@ -403,30 +599,26 @@ func (s *Simulator) ResolveSelfUpdate() {
 	}
 
 	if s.binaryVersion != "" && s.binaryVersion == pending.ToVersion {
+		// The new binary is running. Do NOT declare success yet: a binary that
+		// boots but cannot reach its parent must not be marked good. The pending
+		// marker is left in place and finalized by the first successful heartbeat
+		// (finalizeSelfUpdateOnHeartbeat). Record the live version so heartbeats
+		// report what is actually executing in the meantime.
 		s.state.UpdaterVersion = pending.ToVersion
 		s.config.Instance.UpdaterVersion = pending.ToVersion
-		attempt := &platformtypes.UpdateAttempt{
-			FromVersion:   pending.FromVersion,
-			TargetVersion: pending.ToVersion,
-			Success:       true,
-			Timestamp:     time.Now().UTC(),
-		}
-		s.state.LastUpdateAttempt = attempt
-		s.state.LastSelfUpdate = attempt
-		s.state.PendingSelfUpdate = nil
-		if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
-			s.logger.Warn("failed to persist finalized self-update", "error", err)
-		}
 		s.logger.Info(
-			"self-update finalized: new updater is live",
+			"self-update binary is live; awaiting first successful heartbeat to finalize",
 			"from", pending.FromVersion,
 			"to", pending.ToVersion,
 		)
 		return
 	}
 
+	// Watchdog path: a different version came up (activation did not stick, or a
+	// broken binary was replaced). Restore the previous binary, but only if the
+	// swap actually took effect; quarantine the target so it is not retried.
 	updater := &SelfUpdater{Dir: s.config.SelfUpdate.Dir}
-	restoreErr := updater.RestorePrevious()
+	restoreErr := updater.RestorePrevious(pending.ToVersion)
 	message := fmt.Sprintf(
 		"self-update to %s did not take effect (running %s)",
 		pending.ToVersion, s.binaryVersion,
@@ -446,10 +638,51 @@ func (s *Simulator) ResolveSelfUpdate() {
 	s.state.LastUpdateAttempt = attempt
 	s.state.LastSelfUpdate = attempt
 	s.state.PendingSelfUpdate = nil
+	s.state.QuarantinedSelfUpdateVersion = pending.ToVersion
 	if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
 		s.logger.Warn("failed to persist self-update watchdog result", "error", err)
 	}
 	s.logger.Error("self-update watchdog triggered", "detail", message)
+}
+
+// finalizeSelfUpdateOnHeartbeat marks a pending self-update successful once the
+// new binary has proven it can reach its parent (a heartbeat succeeded). This is
+// the deferred half of ResolveSelfUpdate: booting is not enough, a node that
+// cannot heartbeat its parent is not a good self-update.
+func (s *Simulator) finalizeSelfUpdateOnHeartbeat() {
+	pending := s.state.PendingSelfUpdate
+	if pending == nil {
+		return
+	}
+	if s.binaryVersion == "" || s.binaryVersion != pending.ToVersion {
+		return
+	}
+	attempt := &platformtypes.UpdateAttempt{
+		FromVersion:   pending.FromVersion,
+		TargetVersion: pending.ToVersion,
+		Success:       true,
+		Timestamp:     time.Now().UTC(),
+	}
+	s.state.UpdaterVersion = pending.ToVersion
+	s.config.Instance.UpdaterVersion = pending.ToVersion
+	s.state.LastSelfUpdate = attempt
+	s.state.PendingSelfUpdate = nil
+	s.state.QuarantinedSelfUpdateVersion = ""
+	if err := SaveState(s.config.Simulation.StateFile, s.state); err != nil {
+		s.logger.Warn("failed to persist finalized self-update", "error", err)
+	}
+	// Now that the new binary is confirmed good, prune stale release directories
+	// so the self-update layout does not grow without bound. Best-effort: a prune
+	// failure must never affect the running updater.
+	updater := &SelfUpdater{Dir: s.config.SelfUpdate.Dir}
+	if err := updater.Prune(selfUpdateReleasesKeep); err != nil {
+		s.logger.Warn("self-update release prune incomplete", "error", err)
+	}
+	s.logger.Info(
+		"self-update finalized: new updater reached its parent",
+		"from", pending.FromVersion,
+		"to", pending.ToVersion,
+	)
 }
 
 // verifyAndDownload enforces the release signature policy and downloads the
