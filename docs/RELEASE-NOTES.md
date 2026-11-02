@@ -63,10 +63,18 @@ release could be promoted past alpha until the fixed updater reached customer
 rings. Beta nodes at widening: `mysoc-cloud-mysoc-ai`, `siemcore-cloud-01`
 (both 1.17.0.2).
 
-**Server:** the 1.18.0 server changes (promotion gate, availability-violation
-counting) are **not deployed**; the running server is pre-1.18.0. The updater
-artifacts are compatible with it (the report endpoint ignores the new fields).
-A server deploy is required before the promotion gate can protect any widening.
+**Server:** `update-server` 1.18.0.2 (commit `8cab819`) deployed to
+updates.mysoc.ai 2026-11-02 03:45Z via `scripts/deploy.sh` on Rony's instruction
+("go production, release the deadlock"), replacing 1.16.2.3 (`7d8056fd`). Delta
+since the running build was the three 1.18.0 server commits only (promotion
+gate, availability-violation counting, stamped-version upload guard); **no new
+migrations** (`schema at head, 19 in ledger`). Single graceful restart;
+heartbeats resumed on all rings within a minute. Pre-deploy check: zero
+`availability_violation` rows for any product/version, so the promotion gate
+could not block anyone on day one. Note for 1.18.0.3: `unavailable_seconds` is
+empty in every heartbeat's `last_update_attempt`, so the measurement is not
+reaching the gate yet (gate is effectively inert until that and the
+health-poll-derived definition from SiemCore's countersign are fixed).
 
 **Theme:** make the updater's own self-update unconditional, bounded, and
 self-healing so a node can always pull itself forward and can never wedge the
