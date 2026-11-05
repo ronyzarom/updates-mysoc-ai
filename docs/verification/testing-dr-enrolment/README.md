@@ -5,10 +5,33 @@ into updates.mysoc.ai, update_group **alpha** (same ring as testing.mysoc.ai),
 so the cascade installs the same alpha mysoc artifact on both. Coordinated with
 the mysoc-ai project (host prerequisites + artifact entrypoint) over the hub.
 
-| Host | Zone | Internal / public | Role | instance.id |
+| Host | Zone | Internal / public | Role | Current instance.id |
 |---|---|---|---|---|
-| testing-dr-a | me-west1-a | 10.208.0.2 / 34.165.207.15 | MySoc primary (nominal), `testing-dr.mysoc.ai` | `mysoc-testing-dr-a` |
-| testing-dr-b | me-west1-b | 10.208.0.3 / 34.165.254.130 | MySoc streaming standby (read-only) | `mysoc-testing-dr-b` |
+| testing-dr-a | me-west1-a | 10.208.0.2 / 34.165.207.15 | MySoc primary (nominal), `testing-dr.mysoc.ai` | `testing-dr.mysoc.ai` |
+| testing-dr-b | me-west1-b | 10.208.0.3 / 34.165.254.130 | MySoc streaming standby (read-only) | `testing-dr-b.mysoc.ai` |
+
+> Current instance IDs (2026-11-04): `testing-dr.mysoc.ai` (UUID
+> `081c9edf-963c-4c7a-8d31-572d31008bfa`) and `testing-dr-b.mysoc.ai`
+> (UUID `3f41f0fc-62cb-425a-b3b5-310ec2e45aeb`), both in `update_group=alpha`.
+> The original IDs `mysoc-testing-dr-a` / `mysoc-testing-dr-b` were retired
+> (soft-deleted) after a from-scratch re-enrol replaced them — see the
+> **Re-enrolment rule** below.
+
+## Re-enrolment rule (read before wiping a ring host)
+
+`update_group` is stored **per instance row**, keyed by `instance_id`, and a
+brand-new row always defaults to `stable` (`internal/server/licensing/instances.go`).
+`deploy/bootstrap/mysoc-enroll.sh` sets `INSTANCE_ID="${INSTANCE_ID:-$DOMAIN}"`,
+so a re-enrol that does not pass `--instance-id` registers the host under its
+domain as a **new** instance in `stable`, silently dropping it out of alpha
+(the alpha-only build is then never offered — the 2026-11-04 "stuck on 1.3.49.4"
+incident). When re-enrolling a host that must stay in a ring, either:
+
+1. pass `--instance-id <existing id>` to `mysoc-enroll.sh` so it reuses the row
+   already in the ring, **or**
+2. immediately after the first heartbeat, reset the new row's group via the
+   admin API (`PUT /api/v1/instances/<uuid>/update-group {"group":"alpha"}`) and
+   retire the stale row (`DELETE /api/v1/instances/<old-uuid>`).
 
 - Operator: `testing-dr-mysoc-ai` (one platform key for both hosts; stored in
   `keys/testing-dr-mysoc-ai-key.txt`, gitignored, never on the hub).
