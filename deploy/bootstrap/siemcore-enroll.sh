@@ -93,6 +93,9 @@ UPDATE_GROUP="$(conf_get UPDATE_GROUP)"
 # SiemCore server.conf / server_config.py name this key in the SINGULAR.
 ARCHIVE_CREDENTIAL_FILE="$(conf_get ARCHIVE_CREDENTIAL_FILE)"
 DOMAIN="$(conf_get DOMAIN)"
+# SiemCore server.conf names the server SERVER_NAME; use it for the DONE address
+# when DOMAIN is not set.
+SERVER_NAME="$(conf_get SERVER_NAME)"
 # SiemCore's key for the updater identity is UPDATER_INSTANCE_ID (not INSTANCE_ID,
 # which is a different SiemCore concept). Precedence: --instance-id flag > conf
 # UPDATER_INSTANCE_ID > persisted file > freshly generated id.
@@ -232,20 +235,31 @@ install_args=(--clean --executor filesystem
 # container, partial bring-up). We wait on the log line, read the version it
 # reports, then confirm health and print the address + version.
 # ---------------------------------------------------------------------------
+# Record the wall-clock instant just before we (re)start the updater, so the
+# journal reads below see ONLY this run. Reading a fixed -2100s window would pick
+# up lines from an earlier run — an old "backing off" would make us die at once,
+# and an old success would print DONE at once (findings 3). %F %T is the format
+# journalctl --since accepts.
+RUN_SINCE="$(date '+%F %T')"
 log "step 5/5: starting updater; waiting up to ${WAIT_SECONDS}s for first_install"
 systemctl restart siemcore-cascade-updater
 
 # The applied-and-verified line for the siemcore product (slog; tolerate both the
-# text handler "to_version=X" and a JSON handler "to_version":"X").
+# text handler "to_version=X" and a JSON handler "to_version":"X"). The trailing
+# `|| true` is load-bearing: under `set -euo pipefail` a grep with no match
+# returns 1 and pipefail would propagate it, ending the whole script at the
+# `line="$(applied_line)"` assignment before DONE is ever printed (finding 4).
 applied_line() {
-    journalctl -u siemcore-cascade-updater --since "-${WAIT_SECONDS}s" --no-pager 2>/dev/null \
-        | grep "update applied and verified" | grep -i siemcore | tail -1
+    { journalctl -u siemcore-cascade-updater --since "$RUN_SINCE" --no-pager 2>/dev/null \
+        | grep "update applied and verified" | grep -i siemcore | tail -1; } || true
 }
 applied_version() {
-    printf '%s' "$1" | grep -oE 'to_version["=:[:space:]]+"?[0-9][0-9.]+' \
-        | grep -oE '[0-9][0-9.]+' | tail -1
+    { printf '%s' "$1" | grep -oE 'to_version["=:[:space:]]+"?[0-9][0-9.]+' \
+        | grep -oE '[0-9][0-9.]+' | tail -1; } || true
 }
-ADDRESS="${DOMAIN:+https://$DOMAIN}"
+# DONE address: prefer DOMAIN, fall back to SERVER_NAME (finding 2).
+ADDR_HOST="${DOMAIN:-$SERVER_NAME}"
+ADDRESS="${ADDR_HOST:+https://$ADDR_HOST}"
 
 deadline=$((SECONDS + WAIT_SECONDS))
 while (( SECONDS < deadline )); do
@@ -260,12 +274,12 @@ while (( SECONDS < deadline )); do
         fi
         echo
         log "DONE  siemcore ${version:+version $version }$health"
-        log "      address:  ${ADDRESS:-<set DOMAIN in server.conf>}"
+        log "      address:  ${ADDRESS:-<set DOMAIN or SERVER_NAME in server.conf>}"
         log "      instance: $INSTANCE_ID"
         log "If this is a new server, set its update ring on the updates server (defaults to 'stable')."
         exit 0
     fi
-    if journalctl -u siemcore-cascade-updater --since "-${WAIT_SECONDS}s" --no-pager 2>/dev/null \
+    if journalctl -u siemcore-cascade-updater --since "$RUN_SINCE" --no-pager 2>/dev/null \
         | grep -q "first_install failed; backing off"; then
         echo
         warn "first_install failed and the updater is backing off. Recent log:"

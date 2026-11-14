@@ -11,13 +11,40 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.18.1 — SiemCore one-command fresh install (kit + bootstrap only)
 
-**Build:** 1.18.1.3 · commit _pending_ · tag `v1.18.1.3` · branch `version/1.18.1`.
+**Build:** 1.18.1.4 · commit _pending_ · tag `v1.18.1.4` · branch `version/1.18.1`.
 **Status:** **published** to `https://updates.mysoc.ai/install/` (siemcore tier)
-on Rony's explicit go (hub `20261114T184422Z-e4d016`). Build history: `.1` first
+on Rony's explicit go. Build history: `.1` first
 cut; `.2` folded in SiemCore's six branch corrections (placeholders); `.3` swaps
 in SiemCore's four **authoritative** first_install-capable host files from
 release/v3.3.198 (verified byte-for-byte against their handover SHA-256) and
-reconciles the archive-credential key name to the singular form.
+reconciles the archive-credential key name to the singular form; `.4` fixes four
+enrol-script findings SiemCore reported from pod a's first run (below) and
+carries SiemCore's **3.3.198.2** apply wrapper.
+
+**`.4` fixes (pod a first-run findings, enrol-script + host-file only):**
+
+- **#4 — silent `exit 1` with no message (the blocker).** The step-5 wait loop
+  ran `line="$(applied_line)"` under `set -euo pipefail`, where `applied_line`
+  ends in a `grep` for `update applied and verified`. On no-match the `grep`
+  returns 1, `pipefail` propagates it, and `set -e` aborts the whole script with
+  a bare `exit 1` **before** the DONE line — exactly SiemCore's symptom.
+  `applied_line`/`applied_version` now end in `|| true`. Proven against the real
+  extracted functions on bash 3.2 (macOS) and bash 5.2 (the pod's shell): the
+  fix survives no-match; the pre-fix form reproduces the silent `exit 1` on 5.2.
+- **#3 — stale journal window.** The wait loop read `journalctl --since
+  "-${WAIT_SECONDS}s"`, which could pick up a previous run's `backing off` (die
+  at once) or an old success (false DONE). It now anchors `--since` to a
+  wall-clock timestamp (`RUN_SINCE`) captured immediately before `systemctl
+  restart`, so only the current run is considered.
+- **#2 — DONE address.** Falls back to `SERVER_NAME` (SiemCore's `server.conf`
+  key) when `DOMAIN` is unset, instead of printing a placeholder.
+- **#1 — carry the current wrapper.** The kit now ships SiemCore's **3.3.198.2**
+  apply wrapper (`siemcore-apply-update`, sha256 `125ec2224…`, from the
+  `siemcore-universal-3.3.198.2` artifact) instead of the 3.3.198.1 bytes, so a
+  fresh host starts on the same wrapper the alpha fleet runs. The other three
+  host files (sudoers, `override.conf`, `executor-block.yaml`) are byte-for-byte
+  identical between 3.3.198.1 and 3.3.198.2, so only the pin for the wrapper
+  changed in `siemcore-host-files.sha256`.
 
 **Scope:** kit and bootstrap only — **no updater-binary logic change and no
 releases-API change.** Gives SiemCore the MySoc fresh-install model one tier

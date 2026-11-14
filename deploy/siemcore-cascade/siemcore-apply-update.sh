@@ -36,6 +36,27 @@ case "$PHASE" in
     *) die "unsupported phase '$PHASE' (expected apply, rollback, health or first_install)" ;;
 esac
 
+# Servers installed by first_install: ordinary phases go to the root hook.
+#
+# first_install ends by installing the release's own update boundary
+# (updater/host_files.py): the hook, the recovery runtime it runs, and the
+# pin that names the signing key. From then on an update, a rollback and the
+# health check all go through that hook, which takes a snapshot before the
+# update, verifies the signed release from a private copy, and restores the
+# previous version when the update fails (recovery protocol 1). updater/apply
+# refuses an ordinary update that does not arrive that way.
+#
+# first_install itself never goes to the hook: it is the phase that puts the
+# hook in place, and it must stay runnable again after an interruption.
+# A host with no hook (installed before the hook existed, and without the
+# recovery runtime in its own wrapper) keeps the direct path below.
+HOOK="/usr/local/lib/siemcore-cascade/greenfield-hook.py"
+HOOK_PIN="/etc/siemcore/greenfield-release.json"
+if [ "$PHASE" != "first_install" ] && [ -f "$HOOK" ] && [ ! -L "$HOOK" ] && [ -f "$HOOK_PIN" ] && [ ! -L "$HOOK_PIN" ]; then
+    [ "$(stat -c %u "$HOOK")" = "0" ] || die "update hook $HOOK is not root-owned"
+    exec /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin /usr/bin/python3 "$HOOK" "$PHASE"
+fi
+
 # Missing symlink is phase-dependent:
 #  - rollback: the executor removes the symlink on a FRESH-install rollback
 #    (the first-ever cascade apply failed). The pre-existing app was installed
