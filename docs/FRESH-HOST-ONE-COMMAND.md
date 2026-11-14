@@ -124,3 +124,29 @@ The one command lands the host on the current **stable** release, which is what
 a production normal/DR server wants. To put a fresh host on a non-stable ring
 (e.g. the alpha DR lab), enrol observe-first and set the ring before any install
 runs — see "Observe-first" in [`../kits/mysoc/README.md`](../kits/mysoc/README.md).
+
+---
+
+## SiemCore: the same model, one tier down
+
+A fresh **SiemCore** server installs the same way, except it enrols against its
+parent **MySoc relay** (not `updates.mysoc.ai`) and takes a config file rather
+than flags:
+
+```bash
+curl -fsSL https://updates.mysoc.ai/install/siemcore-enroll.sh | sudo bash -s -- \
+  --license-key <KEY> --config /root/server.conf
+```
+
+`server.conf` is a root-only `KEY=value` file; `siemcore-enroll.sh` copies it to
+`/etc/siemcore/install-seed.env` and reads only the enrolment keys
+(`UPDATES_PARENT_URL`, `UPDATES_PARENT_ID`, `CUSTOMER_ID`, `CUSTOMER_NAME`,
+`UPDATES_SIGNING_KEY`, optional `UPDATES_RELAY_CA_FILE`, `TLS_CERT_FILE`,
+`TLS_KEY_FILE`). It installs the kit with `--executor filesystem` (which lays
+down the SiemCore apply shim + sudoers + unit drop-in), enrols the updater at
+`0.0.0`, and waits for health on `http://127.0.0.1:8443/health/live`. The
+release provisions itself through its `first_install` phase (30-minute budget),
+with the same read-only preflight, refuse-and-back-off, and resume behaviour
+described above. See [`../kits/siemcore/README.md`](../kits/siemcore/README.md)
+for `server.conf` keys, re-enrolment, and the ring note (a new SiemCore instance
+enrols in `stable`; set its ring on the updates server afterward).

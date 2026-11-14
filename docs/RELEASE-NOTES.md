@@ -9,6 +9,92 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
+## 1.18.1 — SiemCore one-command fresh install (kit + bootstrap only)
+
+**Build:** 1.18.1.1 · commit _pending_ · tag _pending_ · branch `version/1.18.1`.
+**Status:** built and validated locally; **not published, not deployed, no ring
+change.** Publishing `siemcore-enroll.sh` + the siemcore kit to `/install/` and
+any ring widening of 1.18.0.3 each wait for Rony's explicit instruction.
+
+**Scope:** kit and bootstrap only — **no updater-binary logic change and no
+releases-API change.** Gives SiemCore the MySoc fresh-install model one tier
+down (answer to siemcore hub task `20261113T194332Z-9b2cdc`, for their 3.3.198):
+
+- New [`deploy/bootstrap/siemcore-enroll.sh`](../deploy/bootstrap/siemcore-enroll.sh),
+  the twin of `mysoc-enroll.sh`: `--license-key … --config /root/server.conf`.
+  Copies `server.conf` verbatim to `/etc/siemcore/install-seed.env`, reads only
+  the enrolment keys, enrols the updater at `0.0.0` against the parent MySoc
+  relay, waits on `:8443/health/live`. Persists a generated instance id to
+  `/etc/siemcore/instance-id` so a re-run never makes a second identity (never
+  derived from the domain — the DR-lab lesson).
+- `kits/siemcore/install.sh` gains `--executor filesystem` (ported from the
+  mysoc kit): enables the `#BEGIN/#END-FS-EXECUTOR` block in `config.yaml` and
+  installs the SiemCore apply shim (`/usr/local/sbin/siemcore-apply-update`),
+  its NOPASSWD sudoers entry, the unit drop-in, and the `/opt/siemcore` staging
+  root. `first_install_timeout: 30m`.
+- The apply shim is SiemCore-owned: the kit bundles
+  [`deploy/siemcore-cascade/siemcore-apply-update.sh`](../deploy/siemcore-cascade/siemcore-apply-update.sh)
+  with a **pinned SHA-256**; `build-kits.sh` and `install.sh` both refuse bytes
+  that do not match the pin. The committed file is a faithful **placeholder**
+  (delegates to the release's `updater/apply`, refuses otherwise) until SiemCore
+  hands over their authoritative bytes + checksum.
+- `install.sh --clean` on siemcore now **preserves the relay identity**: it
+  rewrites `state.json` to reset the product version to `0.0.0` while keeping
+  `instance_id`, `api_key` and `relay_token` (a relay child that lost its token
+  is rejected `401 relay_token_absent`), saving the prior state beside it. The
+  fallback (clear the stale binding at the parent) is documented in the kit
+  README.
+- `scripts/publish-install.sh` takes a tier argument (`mysoc` default,
+  `siemcore`); nginx `/install/` needs no change (prefix alias).
+
+**Relay compatibility:** none affected — no child-facing protocol, config
+schema, or releases-API change. The updater binary is identical to 1.18.0.3
+(the self-update artifacts carry the new version only so kit and binary report
+in lockstep).
+
+**Open on SiemCore:** authoritative apply-shim bytes + SHA-256; confirmation of
+the preferred seed path (`/etc/siemcore/install-seed.env`) and of exit codes
+17/18. Registry/pull-through and ready-made base images were declined as
+Updates scope (offered the signed-release-artifact path instead).
+
+## 1.18.0.3 — Updater self-install / deadlock / relay survivability hotfix
+
+**Build:** 1.18.0.3 · commit `fbe2b3a` (VERSION bump `2fabc37`) · tag `v1.18.0.3`
+(`main` fast-forwarded). Binary-only hotfix (`pkg/updatersim` +
+`cmd/updater-simulator` + kit units/scripts); **no protocol or config-schema
+change, child-facing relay contract frozen** (byte-for-byte child-contract
+golden test recorded against the 1.18.0.2 relay). Fixes h1–h9: loopback relay
+health exempt from the guard/drain gate; watchdog gates pings on cycle progress
+AND the relay listener; exec hygiene (Setpgid + signal the group + WaitDelay +
+bounded output); recovery under `WithoutCancel`; `unavailable_seconds` wired
+into the heartbeat so the promotion gate measures with no server change;
+self-update finalize deferred to first successful heartbeat + quarantine of a
+failed target; per-target backoff; prune stale self-update releases +
+`ensureFreeDisk` in Stage.
+
+**Rings (self-update artifacts `updater-linux-amd64`/`-arm64`):**
+
+| Ring | Action | When (UTC) | Approval |
+|------|--------|------------|----------|
+| alpha | published (`publish-updater.sh --groups alpha`) | 2026-11-02 06:26 | Rony: "go alpha" |
+| beta / stable / production | **not widened** | — | awaiting soak sign-off + per-ring instruction |
+
+**Alpha soak (read-only against `instances`, 2026-11-12/13):** all seven live
+alpha cascade nodes self-upgraded to 1.18.0.3 and held it ≫ 3 cycles with
+~1-min heartbeats, no failed update attempt, no failed self-update, none stuck
+in `pending_self_update`: the testing relay `mysoc-testing-mysoc-ai`,
+`drtest.mysoc.ai`, `testing-dr.mysoc.ai`, `testing-dr-b.mysoc.ai`,
+`siemcore-testing-01`, and pods a/b (`siemcore-normal-db91d16e…`,
+`siemcore-normal-b-90881d89…`). Relay path proven: the pods took SiemCore
+`3.3.197.3` and the no-change `3.3.197.4` through the relay's cache during the
+soak. Beta/stable/production remain on 1.18.0.2 pending their own soak and a
+per-ring widening instruction.
+
+**Server:** unchanged — `update-server` 1.18.0.2 (commit `8cab819`) remains live
+(the 1.18.0.3 server-side gate note is inert until the measurement/countersign
+fix; see 1.18.0 below). `git diff v1.18.0.2 main -- internal cmd/update-server`
+is empty.
+
 ## 1.18.0 — Updater survivability: self-update always works, no deadlocks
 
 **Build:** 1.18.0.2 · commit `8cab819` · tag `v1.18.0.2` (`main` fast-forwarded).

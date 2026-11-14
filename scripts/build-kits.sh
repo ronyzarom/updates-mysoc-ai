@@ -68,12 +68,27 @@ for tier in "${TIERS[@]}"; do
     # The root-owned self-update restore backstop (survivability invariant 4).
     [[ -f "$OUT/${BIN_NAME}-self-restore.sh" ]] && chmod +x "$OUT/${BIN_NAME}-self-restore.sh"
 
-    # The mysoc kit bundles the root apply wrapper so `install.sh --executor
-    # filesystem` can install it on a fresh host with no extra files staged.
+    # Each kit bundles its root apply shim so `install.sh --executor filesystem`
+    # can install it on a fresh host with no extra files staged.
     if [[ "$tier" == mysoc ]]; then
         echo "==> $tier: bundling apply wrapper (mysoc-apply-update.sh)"
         cp deploy/mysoc-apply-update.sh "$OUT/mysoc-apply-update.sh"
         chmod +x "$OUT/mysoc-apply-update.sh"
+    elif [[ "$tier" == siemcore ]]; then
+        # The siemcore shim is SiemCore-owned; we bundle it with a pinned
+        # SHA-256 and verify the bytes match the pin before shipping, so a
+        # drifted or tampered shim fails the build (and later install).
+        echo "==> $tier: bundling apply shim (siemcore-apply-update.sh) + verifying pin"
+        cp deploy/siemcore-cascade/siemcore-apply-update.sh "$OUT/siemcore-apply-update.sh"
+        cp deploy/siemcore-cascade/siemcore-apply-update.sh.sha256 "$OUT/siemcore-apply-update.sh.sha256"
+        chmod +x "$OUT/siemcore-apply-update.sh"
+        want="$(awk '{print $1}' "$OUT/siemcore-apply-update.sh.sha256" | head -1)"
+        have="$(SHA "$OUT/siemcore-apply-update.sh" | awk '{print $1}')"
+        if [[ -z "$want" || "$want" != "$have" ]]; then
+            echo "ERROR: siemcore apply shim does not match its pinned SHA-256 (pin $want, got $have)." >&2
+            echo "       Update deploy/siemcore-cascade/siemcore-apply-update.sh.sha256 after a deliberate change." >&2
+            exit 1
+        fi
     fi
 
     echo "==> $tier: bundling docs (stamped)"
@@ -89,6 +104,7 @@ for tier in "${TIERS[@]}"; do
         cd "$OUT"
         files=(bin/* config.yaml install.sh ./*.service)
         [[ -f mysoc-apply-update.sh ]] && files+=(mysoc-apply-update.sh)
+        [[ -f siemcore-apply-update.sh ]] && files+=(siemcore-apply-update.sh siemcore-apply-update.sh.sha256)
         for restore in ./*-self-restore.sh; do
             [[ -f "$restore" ]] && files+=("$restore")
         done

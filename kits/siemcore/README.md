@@ -35,9 +35,12 @@ mysoc relay  ◀── heartbeat + rollup ── THIS NODE (siemcore-cascade-upd
 | `bin/siemcore-cascade-updater-linux-{amd64,arm64}` | Static updater binary (relay-capable). |
 | `config.yaml` | Production configuration template. |
 | `siemcore-cascade-updater.service` | Hardened systemd unit. |
-| `install.sh` | Installs binary, user, config, and unit. |
+| `siemcore-cascade-updater-restore.service` / `-self-restore.sh` | Self-update restore backstop (invariant 4). |
+| `install.sh` | Installs binary, user, config, and unit (`--executor filesystem` also wires real installs). |
+| `siemcore-apply-update.sh` (+ `.sha256`) | SiemCore apply shim, installed by `--executor filesystem`; bytes pinned by the checksum. |
 | `docs/RELAY-DEPLOYMENT.md` | Full cascade deployment guide. |
 | `docs/UPDATER-GUIDELINES.md` | Operating model and safety requirements. |
+| `docs/UPDATE-ENTRYPOINT-CONTRACT.md` | How the updater calls `apply` / `first_install` / `rollback`. |
 
 ## Install
 
@@ -84,17 +87,72 @@ persisted in the state file automatically. If the state file is lost, the
 relay operator may need to clear the stale enrollment before the node can
 re-enroll under the same instance id.
 
+## Fresh install in one command
+
+A brand-new SiemCore server is installed the way a fresh MySoc server is: one
+line from the updates server enrols the updater at `0.0.0`, and the release
+installs itself through its `first_install` phase.
+
+```bash
+curl -fsSL https://updates.mysoc.ai/install/siemcore-enroll.sh | sudo bash -s -- \
+  --license-key <credential> --config /root/server.conf
+```
+
+`server.conf` is a root-only `KEY=value` file (SiemCore's counterpart of
+`/etc/mysoc/install-seed.env`). `siemcore-enroll.sh` copies it verbatim to
+`/etc/siemcore/install-seed.env` and reads only the enrolment keys from it:
+
+| Key | Meaning |
+| --- | ------- |
+| `UPDATES_PARENT_URL` | parent MySoc relay child-facing address (`https://…:18443`) |
+| `UPDATES_PARENT_ID` | instance id of the parent MySoc node |
+| `CUSTOMER_ID`, `CUSTOMER_NAME` | end customer (groups the fleet view) |
+| `UPDATES_SIGNING_KEY` | pinned fleet signing key (64 hex); else fetched from the parent (TOFU) or `--signing-key` |
+| `UPDATES_RELAY_CA_FILE` | relay `cert.pem` to pin (omit for a publicly trusted relay) |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | copied to `/etc/ssl/siemcore/` |
+| `INSTANCE_ID` | optional; else a stable id is generated and persisted to `/etc/siemcore/instance-id` |
+| `UPDATE_GROUP` | advisory only — the installer cannot set the ring (see below) |
+
+The instance id is **never derived from the domain** and is persisted, so a
+re-run never creates a second identity.
+
 ## Enabling real installs
 
-The default executor is a no-op (download, verify, report — no host changes).
-The commented `executor: filesystem` block in `config.yaml` is a **v3
-compose-contract draft** — confirm the deploy and health commands with the
-siemcore team before enabling it, then widen the systemd sandbox:
+The one-command path above passes `--executor filesystem`, which enables the
+executor and installs everything it needs outside the config:
 
+```bash
+sudo ./install.sh --clean --executor filesystem \
+  --license-key <credential> --parent-url https://relay.op.example:18443 \
+  --instance-id siemcore-acme-01 --parent-id mysoc-op-01 \
+  --customer-id acme --customer-name "Acme Corp" --signing-key <hex>
 ```
-# /etc/systemd/system/siemcore-cascade-updater.service
-ReadWritePaths=/var/lib/siemcore-cascade-updater /opt/siemcore
-```
+
+`--executor filesystem` uncomments the `executor: filesystem` block in
+`config.yaml` and installs the SiemCore apply shim to
+`/usr/local/sbin/siemcore-apply-update`, its single NOPASSWD sudoers entry, a
+unit drop-in (`NoNewPrivileges=no`, `ProtectSystem=no`), and the `/opt/siemcore`
+staging root. The shim ships in the kit with a pinned SHA-256; the installer
+refuses to install it if the bytes do not match. The apply shim and the
+`first_install` entrypoint are SiemCore-owned (canonical copies under the
+siemcore repo `deploy/cascade/`).
+
+## Re-enrolment (reinstalling an existing server)
+
+Use `--clean` to re-enrol a host that already carries updater state. Unlike a
+fresh host, a siemcore node is a relay child: the parent MySoc relay bound its
+`instance_id` to a `relay_token` at first contact. `--clean` therefore does
+**not** delete the state file; it rewrites it to reset the product version to
+`0.0.0` (so `first_install` re-runs) while **preserving** `instance_id`,
+`api_key` and `relay_token`, and saves the old state beside it as a
+`state.json.bak-<ts>`. Reuse the **same** `--instance-id` so the server row
+stays in its ring (a new id enrols in `stable`).
+
+If the `relay_token` is lost (state file deleted, or a from-scratch wipe), the
+parent relay will reject heartbeats (`401 relay_token_absent`) until its stale
+binding is cleared: have the parent `POST /api/v1/decommission` for that
+`instance_id`, or restart the parent relay — either lets the node re-bind its
+token on the next honest heartbeat.
 
 ## Self-update
 
