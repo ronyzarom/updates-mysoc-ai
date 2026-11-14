@@ -1,21 +1,27 @@
-  # SiemCore filesystem-executor block — spliced into config.yaml (under the
-  # top-level `simulation:` key, between the #BEGIN/#END-FS-EXECUTOR markers) by
-  # `install.sh --executor filesystem`. Authored at the 2-space indent it must
-  # sit at under `simulation:`.
-  #
-  # PLACEHOLDER (updates-mysoc version/1.18.1). The AUTHORITATIVE, first_install-
-  # capable block is SiemCore-owned (siemcore repo deploy/cascade/
-  # executor-block.yaml, from release/v3.3.198); updates-mysoc replaces this file
-  # and its pinned SHA-256 with SiemCore's bytes before publishing.
   executor: filesystem
   filesystem:
     install_root: /opt/siemcore-cascade
+    # Runs after the atomic symlink swap (and again after a rollback).
+    # Escalates via the single NOPASSWD sudoers entry; the root-owned wrapper
+    # resolves the current release itself and never trusts env or arguments.
     restart_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
-    # Version-matching health gate on :8443/health/live. Keep the bash -c form:
-    # every command receives the lifecycle phase as a trailing argument, which
-    # bash -c absorbs (it lands in $0); a bare curl would treat it as a second
-    # URL and fail.
-    health_command: ["bash", "-c", "curl -fsS http://127.0.0.1:8443/health/live"]
+    # Delegate health to the signed artifact. Its role-aware gate verifies an
+    # active app, a stopped standby processing plane, or witness services.
+    # The updater appends the lifecycle phase, yielding exactly one `health`
+    # argument at execution time.
+    health_command: ["sudo", "-n", "/usr/local/sbin/siemcore-apply-update"]
+    # update.sh does image load + recompose + Gate A; default 60s would
+    # false-fail every real update.
     command_timeout: 15m
-    first_install_timeout: 30m
     keep_releases: 3
+    # One-command fresh-host bring-up (the MySoc model). On a host enrolled at
+    # 0.0.0 the executor invokes the SAME wrapper with the "first_install"
+    # phase instead of "apply". That phase provisions the whole host
+    # (read-only preflight → layer-1/2 prerequisites → render the machine-bound
+    # policy from /etc/siemcore/install-seed.env → greenfield Installer) and is
+    # NOT rolled back on failure — the updater backs off (5m/15m/60m) and
+    # resumes, because every step is idempotent. It needs a longer budget than
+    # an update (image builds + schema bootstrap): allow at least 30m.
+    first_install_phase: first_install
+    first_install_timeout: 30m
+    first_install_rollback: false

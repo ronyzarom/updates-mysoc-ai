@@ -90,7 +90,8 @@ RELAY_CA_FILE="$(conf_get UPDATES_RELAY_CA_FILE)"
 TLS_CERT_FILE="$(conf_get TLS_CERT_FILE)"
 TLS_KEY_FILE="$(conf_get TLS_KEY_FILE)"
 UPDATE_GROUP="$(conf_get UPDATE_GROUP)"
-ARCHIVE_CREDENTIALS_FILE="$(conf_get ARCHIVE_CREDENTIALS_FILE)"
+# SiemCore server.conf / server_config.py name this key in the SINGULAR.
+ARCHIVE_CREDENTIAL_FILE="$(conf_get ARCHIVE_CREDENTIAL_FILE)"
 DOMAIN="$(conf_get DOMAIN)"
 # SiemCore's key for the updater identity is UPDATER_INSTANCE_ID (not INSTANCE_ID,
 # which is a different SiemCore concept). Precedence: --instance-id flag > conf
@@ -158,11 +159,11 @@ fi
 # /root or /home. Copy the GCS archiver credential named in server.conf out to
 # /etc/siemcore/provisioning/ (0600), the same pattern as the TLS material, so
 # the app can read it during first_install regardless of where it was staged.
-if [[ -n "$ARCHIVE_CREDENTIALS_FILE" ]]; then
-    [[ -f "$ARCHIVE_CREDENTIALS_FILE" ]] || die "ARCHIVE_CREDENTIALS_FILE not found: $ARCHIVE_CREDENTIALS_FILE"
+if [[ -n "$ARCHIVE_CREDENTIAL_FILE" ]]; then
+    [[ -f "$ARCHIVE_CREDENTIAL_FILE" ]] || die "ARCHIVE_CREDENTIAL_FILE not found: $ARCHIVE_CREDENTIAL_FILE"
     install -d -m 0700 /etc/siemcore/provisioning
-    install -m 0600 -o root -g root "$ARCHIVE_CREDENTIALS_FILE" \
-        "/etc/siemcore/provisioning/$(basename "$ARCHIVE_CREDENTIALS_FILE")"
+    install -m 0600 -o root -g root "$ARCHIVE_CREDENTIAL_FILE" \
+        "/etc/siemcore/provisioning/$(basename "$ARCHIVE_CREDENTIAL_FILE")"
     log "    copied archive credential to /etc/siemcore/provisioning/ (0600)"
 fi
 

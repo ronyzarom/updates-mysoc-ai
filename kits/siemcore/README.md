@@ -111,7 +111,7 @@ curl -fsSL https://updates.mysoc.ai/install/siemcore-enroll.sh | sudo bash -s --
 | `UPDATES_SIGNING_KEY` | pinned fleet signing key (64 hex); else fetched from the parent (TOFU) or `--signing-key` |
 | `UPDATES_RELAY_CA_FILE` | relay `cert.pem` to pin (omit for a publicly trusted relay) |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | copied to `/etc/ssl/siemcore/` |
-| `ARCHIVE_CREDENTIALS_FILE` | GCS archiver credential; copied out of `/root` to `/etc/siemcore/provisioning/` (the unit has `ProtectHome=yes`) |
+| `ARCHIVE_CREDENTIAL_FILE` | GCS archiver credential; copied out of `/root` to `/etc/siemcore/provisioning/` (the unit has `ProtectHome=yes`) |
 | `DOMAIN` | the server's address; printed on success |
 | `UPDATER_INSTANCE_ID` | optional; else a stable id is generated and persisted to `/etc/siemcore/instance-id` |
 | `UPDATE_GROUP` | advisory only — the installer cannot set the ring (see below) |

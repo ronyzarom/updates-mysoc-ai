@@ -142,7 +142,7 @@ curl -fsSL https://updates.mysoc.ai/install/siemcore-enroll.sh | sudo bash -s --
 `/etc/siemcore/install-seed.env` and reads only the enrolment keys
 (`UPDATES_PARENT_URL`, `UPDATES_PARENT_ID`, `CUSTOMER_ID`, `CUSTOMER_NAME`,
 `UPDATES_SIGNING_KEY`, optional `UPDATES_RELAY_CA_FILE`, `TLS_CERT_FILE`,
-`TLS_KEY_FILE`, `ARCHIVE_CREDENTIALS_FILE`, `DOMAIN`, `UPDATER_INSTANCE_ID`). It
+`TLS_KEY_FILE`, `ARCHIVE_CREDENTIAL_FILE`, `DOMAIN`, `UPDATER_INSTANCE_ID`). It
 copies the TLS material to `/etc/ssl/siemcore` and any GCS archiver credential
 out of `/root` into `/etc/siemcore/provisioning/` (the unit runs
 `ProtectHome=yes`), installs the kit with `--executor filesystem` (which lays

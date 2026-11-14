@@ -11,13 +11,13 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.18.1 — SiemCore one-command fresh install (kit + bootstrap only)
 
-**Build:** 1.18.1.2 · commit _pending_ · tag _pending_ · branch `version/1.18.1`.
-**Status:** built and validated locally; **not published, not deployed, no ring
-change.** Per SiemCore's own request, publishing/merging/tagging waits until
-SiemCore hands over their authoritative host-file bytes and all six branch
-corrections are in. `1.18.1.2` folds in SiemCore's six corrections to `.1`
-(staging path, pinned host files, key name, archive credential, applied-and-
-verified gate, ring documentation — see below).
+**Build:** 1.18.1.3 · commit _pending_ · tag `v1.18.1.3` · branch `version/1.18.1`.
+**Status:** **published** to `https://updates.mysoc.ai/install/` (siemcore tier)
+on Rony's explicit go (hub `20261114T184422Z-e4d016`). Build history: `.1` first
+cut; `.2` folded in SiemCore's six branch corrections (placeholders); `.3` swaps
+in SiemCore's four **authoritative** first_install-capable host files from
+release/v3.3.198 (verified byte-for-byte against their handover SHA-256) and
+reconciles the archive-credential key name to the singular form.
 
 **Scope:** kit and bootstrap only — **no updater-binary logic change and no
 releases-API change.** Gives SiemCore the MySoc fresh-install model one tier
@@ -32,9 +32,9 @@ down (answer to siemcore hub task `20261113T194332Z-9b2cdc`, for their 3.3.198):
   (correction #5). The updater identity key is **`UPDATER_INSTANCE_ID`**
   (correction #3). Persists a generated instance id to `/etc/siemcore/instance-id`
   so a re-run never makes a second identity (never derived from the domain — the
-  DR-lab lesson). Copies any `ARCHIVE_CREDENTIALS_FILE` (GCS archiver credential)
-  out of `/root` to `/etc/siemcore/provisioning/` because the unit has
-  `ProtectHome=yes` (correction #4).
+  DR-lab lesson). Copies any `ARCHIVE_CREDENTIAL_FILE` (GCS archiver credential,
+  SiemCore's singular key name) out of `/root` to `/etc/siemcore/provisioning/`
+  because the unit has `ProtectHome=yes` (correction #4).
 - `kits/siemcore/install.sh` gains `--executor filesystem` (ported from the
   mysoc kit): installs the SiemCore host files and the `/opt/siemcore-cascade`
   staging root (the fleet path — **not** `/opt/siemcore`, which is the dashboard
@@ -50,9 +50,15 @@ down (answer to siemcore hub task `20261113T194332Z-9b2cdc`, for their 3.3.198):
   (correction #2). The kit bundles them under
   [`deploy/siemcore-cascade/`](../deploy/siemcore-cascade/) with a **pinned
   `siemcore-host-files.sha256`**; `build-kits.sh` and `install.sh` both refuse
-  bytes that do not match the pin. The committed files are faithful
-  **placeholders** until SiemCore hands over their authoritative
-  first_install-capable bytes + checksums (from release/v3.3.198).
+  bytes that do not match the pin. **As of `.3` these are SiemCore's
+  authoritative bytes** — extracted from the `siemcore-universal-3.3.198.1`
+  artifact's `cascade/` dir (committed `d64deb82` on release/v3.3.198) and
+  verified byte-for-byte against the handover SHA-256. Their executor block
+  also sets `first_install_phase`/`first_install_rollback=false`; the config
+  loader ignores those two unknown keys and the updater's built-in fresh-install
+  behaviour already matches them (first_install phase at `0.0.0`, no rollback,
+  back off/resume). The sudoers grants the one wrapper bare +
+  `apply`/`rollback`/`health`/`first_install`, no `SETENV`.
 - `install.sh --clean` on siemcore now **preserves the relay identity**: it
   rewrites `state.json` to reset the product version to `0.0.0` while keeping
   `instance_id`, `api_key` and `relay_token` (a relay child that lost its token
@@ -75,17 +81,18 @@ so the parent must clear each pod's binding (`POST /api/v1/decommission` per id,
 or restart the parent relay). Offering a group *at* enrolment remains a pending
 design decision for Rony.
 
-**Open on SiemCore:** the handover of the four authoritative, first_install-
-capable `deploy/cascade/` files + SHA-256 (apply shim, sudoers, `override.conf`,
-`executor-block.yaml`) from release/v3.3.198 — a separate hub message after
-their build. Confirmed by SiemCore: seed path `/etc/siemcore/install-seed.env`;
-exit codes 17 (hardware below strict target) and 18 (forbidden port open), not
-emitted by 3.3.198.1 but by later 3.3.198 builds; the current `deploy/cascade/`
-bytes are intentionally narrow (no `SETENV`), the first_install-capable bytes add
-the `first_install` invocation + `SETENV`/`env_keep`. Registry/pull-through and
-ready-made base images were declined as Updates scope (3.3.198.1 builds etcd and
-Patroni on the server from release build files; the signed-artifact image path is
-a later infra call for Rony).
+**Handover received (`.3`):** SiemCore's four authoritative first_install-capable
+`deploy/cascade/` files + SHA-256 (hub `20261114T184220Z-dba925`), now in the
+kit. Confirmed by SiemCore: seed path `/etc/siemcore/install-seed.env`; exit
+codes 17 (hardware below strict target) and 18 (forbidden port open), not emitted
+by 3.3.198.1 but by later 3.3.198 builds. 3.3.198.1 is live on alpha, so a fresh
+host enrolled in alpha pulls the first_install-capable release. Registry/pull-
+through and ready-made base images were declined as Updates scope (3.3.198.1
+builds etcd and Patroni on the server from release build files; the signed-
+artifact image path is a later infra call for Rony).
+
+**Still held (separate, on Rony's word):** tearing down the two Bezeq pod servers
+to customer state for the end-to-end one-line test — they are a live pod now.
 
 ## 1.18.0.3 — Updater self-install / deadlock / relay survivability hotfix
 

@@ -1,48 +1,132 @@
 #!/usr/bin/env bash
-# siemcore-apply-update — root-side apply step for the siemcore cascade updater.
+# siemcore-apply-update — root-side apply hook for the cascade updater.
 #
-# PLACEHOLDER (updates-mysoc version/1.18.1). The AUTHORITATIVE shim is
-# SiemCore-owned and lives in the siemcore repo under deploy/cascade/. SiemCore
-# hands over the exact bytes plus their SHA-256; updates-mysoc then replaces
-# this file and its pinned checksum (siemcore-apply-update.sh.sha256) and only
-# publishes the kit once the two match. Until then the kit builds and installs,
-# but with THIS faithful stand-in, which implements the contract's envelope and
-# delegates all real work to the release's own updater/apply entrypoint.
+# Invoked via sudo by the unprivileged siemcore-cascade-updater service after
+# it has downloaded, signature-verified, and staged a siemcore bundle and
+# flipped the "current" symlink.
 #
-# Contract (docs/UPDATE-ENTRYPOINT-CONTRACT.md): the updater's filesystem
-# executor runs this command with the lifecycle phase both as $1 and as
-# UPDATER_PHASE ("apply", "rollback", or "first_install"); context arrives in
-# CURRENT_DIR (the activated release symlink), VERSION, FROM_VERSION, PRODUCT,
-# INSTALL_ROOT (and ARTIFACT_KIND / ARTIFACT_SHA256 / DEPENDENCY_VALIDATION).
-# The health gate is a SEPARATE health_command the executor runs after this
-# returns, so this script never sees a "health" phase.
+# Phase argument (UPDATE-ENTRYPOINT-CONTRACT v1, updater >= 1.9.1): the
+# updater appends the lifecycle phase as a trailing positional argument
+# ("apply" or "rollback"). Pre-1.9.1 updaters pass no argument; we default to
+# "apply" behavior. The phase is the ONLY caller input we honor — everything
+# else (release dir, version) is resolved and validated locally: we never
+# trust caller environment (sudo strips it anyway; no SETENV granted) and we
+# derive the version from the staged bundle's own MANIFEST.json, which is
+# correct on both apply and rollback by construction (the contract's
+# "re-read the release dir, not the VERSION env var" rule).
 #
-# A siemcore release provisions and runs itself through a compose-based
-# entrypoint it ships at updater/apply inside the artifact; this stand-in
-# delegates to it and never tries to invent compose/database logic of its own.
+# Sudoers grants the updater user exactly this command with no argument,
+# "apply", or "rollback" — nothing else.
 set -euo pipefail
 
-log() { echo "[siemcore-apply-update] $*"; }
+CURRENT_LINK="/opt/siemcore-cascade/siemcore/current"
+RELEASES_ROOT="/opt/siemcore-cascade/siemcore/releases"
+INSTALL_DIR="/opt/siemcore-app-app-a"
+UPDATER_USER="siemcore-cascade-updater"
+LOG_TAG="siemcore-apply-update"
 
-CUR="${CURRENT_DIR:?CURRENT_DIR environment variable is required}"
-PHASE="${1:-${UPDATER_PHASE:-apply}}"
+log() { logger -t "$LOG_TAG" -- "$*" || true; echo "[$LOG_TAG] $*"; }
+die() { log "FATAL: $*"; exit 1; }
 
-[[ -e "$CUR" ]] || { log "release dir missing: $CUR"; exit 1; }
-RELDIR="$(readlink -f "$CUR")"
-[[ -f "$RELDIR/VERSION" ]] || { log "release has no VERSION file"; exit 1; }
-RELVER="$(tr -d '[:space:]' < "$RELDIR/VERSION")"
+[ "$(id -u)" -eq 0 ] || die "must run as root"
+[ $# -le 1 ] || die "at most one argument (the phase) is accepted"
+PHASE="${1:-apply}"
+case "$PHASE" in
+    apply|rollback|health|first_install) ;;
+    *) die "unsupported phase '$PHASE' (expected apply, rollback, health or first_install)" ;;
+esac
 
-# Delegation: a siemcore release owns its whole apply (provision/migrate/
-# restart/health) through its bundled entrypoint. Exit status flows through; on
-# rollback the previous release's own entrypoint runs instead.
-if [[ -x "$RELDIR/updater/apply" ]]; then
-    log "delegating $PHASE of $RELVER to artifact entrypoint"
-    exec "$RELDIR/updater/apply" "$PHASE"
+# Missing symlink is phase-dependent:
+#  - rollback: the executor removes the symlink on a FRESH-install rollback
+#    (the first-ever cascade apply failed). The pre-existing app was installed
+#    outside the cascade, so there is nothing to re-apply — but the failed
+#    update.sh may have left the app down (its contract leaves rollback
+#    material for the operator rather than auto-restoring). Per the
+#    entrypoint contract, exit 0 only if the previous version is actually
+#    live; otherwise exit non-zero so the failure report flags that the host
+#    needs manual attention.
+#  - apply: the symlink must exist (the executor flips it before invoking us);
+#    its absence means something is broken — fail loudly.
+if [ ! -L "$CURRENT_LINK" ]; then
+    [ "$PHASE" != "health" ] || die "phase=health but no current symlink at $CURRENT_LINK"
+    # apply and first_install both require the staged release the executor
+    # flips into place before invoking us; its absence is a hard failure.
+    [ "$PHASE" = "rollback" ] || die "phase=$PHASE but no current symlink at $CURRENT_LINK"
+    for _ in 1 2 3 4 5 6; do
+        if health="$(curl -fsS --max-time 10 http://127.0.0.1:8443/health/live 2>/dev/null)"; then
+            log "fresh-install rollback: no staged release to restore; running app is alive ($health)"
+            exit 0
+        fi
+        sleep 5
+    done
+    die "fresh-install rollback and the app is NOT responding on :8443 — manual attention required (update.sh rollback material is preserved in $INSTALL_DIR)"
 fi
 
-# No entrypoint in the artifact: this stand-in cannot provision a siemcore host
-# (compose, database, secrets, TLS). Refuse rather than report a success that
-# did not happen; the updater clears the staging and backs off.
-log "release $RELVER ships no updater/apply entrypoint; the SiemCore apply shim"
-log "must be provided by SiemCore (deploy/cascade/) — refusing $PHASE"
-exit 1
+RELEASE_DIR="$(readlink -f "$CURRENT_LINK")"
+[ -d "$RELEASE_DIR" ] || die "current symlink target $RELEASE_DIR is not a directory"
+
+case "$RELEASE_DIR" in
+    "$RELEASES_ROOT"/*) ;;
+    *) die "release dir $RELEASE_DIR escapes $RELEASES_ROOT" ;;
+esac
+
+owner="$(stat -c %U "$RELEASE_DIR")"
+[ "$owner" = "$UPDATER_USER" ] || die "release dir owned by '$owner', expected '$UPDATER_USER'"
+
+META="$RELEASE_DIR/.updater-release.json"
+[ -f "$META" ] || die "missing release metadata $META"
+product="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["product"])' "$META")"
+version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$META")"
+[ "$product" = "siemcore" ] || die "unexpected product '$product'"
+[ -n "$version" ] || die "empty version in $META"
+
+# The universal bundle extracts into a nested siemcore-universal-<version>/ dir.
+BUNDLE_DIR="$RELEASE_DIR/siemcore-universal-$version"
+[ -d "$BUNDLE_DIR" ] || die "bundle dir $BUNDLE_DIR not found in staged release"
+
+manifest_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$BUNDLE_DIR/MANIFEST.json")"
+[ "$manifest_version" = "$version" ] || die "MANIFEST.json version '$manifest_version' != staged metadata '$version'"
+
+# Integrity: re-verify every bundle file against the bundle's own checksums.
+# (The updater already verified the artifact's ed25519 signature + SHA-256
+# before extraction; this catches post-extraction tampering in the staging
+# tree, which is writable by the unprivileged updater user.)
+( cd "$BUNDLE_DIR" && sha256sum --quiet -c checksums.txt ) || die "bundle checksum verification failed"
+
+# --accept-update-sh-change: the ed25519 release signature already
+# authenticates the bundle contents including update.sh itself; interactive
+# consent is replaced by that signature in the cascade path.
+log "phase=$PHASE: applying siemcore $version from $BUNDLE_DIR (install dir $INSTALL_DIR)"
+cd "$BUNDLE_DIR"
+
+# Delegation ordering (Update Entrypoint Contract v1.2): the shim enforces
+# UNIVERSAL host policy first (tree containment, ownership, manifest
+# cross-check, checksums — all done above), THEN delegates to the artifact's
+# own entrypoint when present. The shim's fallback preconditions (expected
+# layout, the unapplied-migration guard) apply ONLY to entrypoint-less
+# releases — they must never gate an entrypoint-bearing release, otherwise a
+# release that ships migrations together with the installer meant to run them
+# would be refused before that installer executes. The entrypoint OWNS the
+# whole apply (migrate → sync → restart → health) for both phases.
+if [ -x "$BUNDLE_DIR/updater/apply" ]; then
+    log "delegating to in-artifact entrypoint updater/apply (phase=$PHASE)"
+    # Export the contract environment. sudo strips env by default; the
+    # sudoers env_keep list preserves these for the shim, and we re-export
+    # so the entrypoint (and the update.sh it calls) see them regardless.
+    FROM_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("installed_version",""))' "$INSTALL_DIR/.node.json" 2>/dev/null || echo "")"
+    export UPDATER_PHASE="$PHASE" \
+           PRODUCT="siemcore" \
+           VERSION="$version" \
+           FROM_VERSION="$FROM_VERSION" \
+           CURRENT_DIR="$RELEASE_DIR" \
+           INSTALL_ROOT="/opt/siemcore-cascade" \
+           SIEMCORE_INSTALL_DIR="$INSTALL_DIR"
+    ./updater/apply "$PHASE"
+    log "siemcore $version phase=$PHASE via entrypoint completed"
+else
+    # Fallback: entrypoint-less release (pre-3.3.135). Preserve the historical
+    # behavior — bring the staged release live via the app role's update.sh.
+    log "no updater/apply entrypoint in bundle; using shim fallback (phase=$PHASE)"
+    ./roles/app/update.sh --version "$version" --install-dir "$INSTALL_DIR" --yes --accept-update-sh-change
+    log "siemcore $version applied successfully"
+fi
