@@ -37,7 +37,8 @@ mysoc relay  ◀── heartbeat + rollup ── THIS NODE (siemcore-cascade-upd
 | `siemcore-cascade-updater.service` | Hardened systemd unit. |
 | `siemcore-cascade-updater-restore.service` / `-self-restore.sh` | Self-update restore backstop (invariant 4). |
 | `install.sh` | Installs binary, user, config, and unit (`--executor filesystem` also wires real installs). |
-| `siemcore-apply-update.sh` (+ `.sha256`) | SiemCore apply shim, installed by `--executor filesystem`; bytes pinned by the checksum. |
+| `siemcore-apply-update.sh`, `siemcore-cascade-updater.sudoers`, `override.conf`, `executor-block.yaml` | The four SiemCore-owned host files, installed/spliced byte-for-byte by `--executor filesystem`. |
+| `siemcore-host-files.sha256` | Pins the four host files above; the installer refuses to install any whose bytes drift. |
 | `docs/RELAY-DEPLOYMENT.md` | Full cascade deployment guide. |
 | `docs/UPDATER-GUIDELINES.md` | Operating model and safety requirements. |
 | `docs/UPDATE-ENTRYPOINT-CONTRACT.md` | How the updater calls `apply` / `first_install` / `rollback`. |
@@ -110,7 +111,9 @@ curl -fsSL https://updates.mysoc.ai/install/siemcore-enroll.sh | sudo bash -s --
 | `UPDATES_SIGNING_KEY` | pinned fleet signing key (64 hex); else fetched from the parent (TOFU) or `--signing-key` |
 | `UPDATES_RELAY_CA_FILE` | relay `cert.pem` to pin (omit for a publicly trusted relay) |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | copied to `/etc/ssl/siemcore/` |
-| `INSTANCE_ID` | optional; else a stable id is generated and persisted to `/etc/siemcore/instance-id` |
+| `ARCHIVE_CREDENTIALS_FILE` | GCS archiver credential; copied out of `/root` to `/etc/siemcore/provisioning/` (the unit has `ProtectHome=yes`) |
+| `DOMAIN` | the server's address; printed on success |
+| `UPDATER_INSTANCE_ID` | optional; else a stable id is generated and persisted to `/etc/siemcore/instance-id` |
 | `UPDATE_GROUP` | advisory only — the installer cannot set the ring (see below) |
 
 The instance id is **never derived from the domain** and is persisted, so a
@@ -128,14 +131,24 @@ sudo ./install.sh --clean --executor filesystem \
   --customer-id acme --customer-name "Acme Corp" --signing-key <hex>
 ```
 
-`--executor filesystem` uncomments the `executor: filesystem` block in
-`config.yaml` and installs the SiemCore apply shim to
-`/usr/local/sbin/siemcore-apply-update`, its single NOPASSWD sudoers entry, a
-unit drop-in (`NoNewPrivileges=no`, `ProtectSystem=no`), and the `/opt/siemcore`
-staging root. The shim ships in the kit with a pinned SHA-256; the installer
-refuses to install it if the bytes do not match. The apply shim and the
-`first_install` entrypoint are SiemCore-owned (canonical copies under the
-siemcore repo `deploy/cascade/`).
+`--executor filesystem` installs the four SiemCore-owned host files
+**byte-for-byte** from the kit (updates-mysoc never hand-writes their contents):
+
+- the apply shim → `/usr/local/sbin/siemcore-apply-update`,
+- the sudoers entry → `/etc/sudoers.d/siemcore-cascade-updater` (NOPASSWD only
+  for the lifecycle invocations, no `SETENV` in the CURRENT bytes; the
+  first_install-capable bytes from release/v3.3.198 add `SETENV` + `env_keep` of
+  the contract vars),
+- the unit drop-in → `/etc/systemd/system/siemcore-cascade-updater.service.d/override.conf`
+  (`NoNewPrivileges=false`, `ProtectSystem=no`, `ReadWritePaths=/opt/siemcore-cascade`),
+- the filesystem-executor block → spliced from `executor-block.yaml` into the
+  `#BEGIN/#END-FS-EXECUTOR` region of `config.yaml` (`first_install_timeout: 30m`),
+
+plus the `/opt/siemcore-cascade` staging root (the fleet path — `/opt/siemcore`
+is the dashboard folder). All four files ship with a pinned SHA-256 in
+`siemcore-host-files.sha256`; the installer refuses to install any whose bytes
+do not match. These files are SiemCore-owned (canonical copies under the
+siemcore repo `deploy/cascade/`); the kit carries the authoritative bytes.
 
 ## Re-enrolment (reinstalling an existing server)
 
@@ -146,13 +159,22 @@ fresh host, a siemcore node is a relay child: the parent MySoc relay bound its
 `0.0.0` (so `first_install` re-runs) while **preserving** `instance_id`,
 `api_key` and `relay_token`, and saves the old state beside it as a
 `state.json.bak-<ts>`. Reuse the **same** `--instance-id` so the server row
-stays in its ring (a new id enrols in `stable`).
+stays in its ring. This is how the test pods (`bezeq-pod-test-a` / `-b`) keep
+their identities — and therefore their **alpha** ring — across a reinstall.
+
+**Ring at enrolment.** A *new* instance id always enrols in `stable` (the
+installer cannot set the ring, hence the `UPDATE_GROUP` warning). Reusing an
+existing id keeps whatever ring that row already has. Offering a group at
+enrolment (so a from-scratch host could land directly in, say, `alpha` with no
+`first_install`) is a pending design decision for Rony, not something this kit
+does today.
 
 If the `relay_token` is lost (state file deleted, or a from-scratch wipe), the
 parent relay will reject heartbeats (`401 relay_token_absent`) until its stale
-binding is cleared: have the parent `POST /api/v1/decommission` for that
-`instance_id`, or restart the parent relay — either lets the node re-bind its
-token on the next honest heartbeat.
+binding is cleared. Each siemcore node is one binding at the parent, so wiping
+both test pods means clearing **both** bindings: have the parent
+`POST /api/v1/decommission` for each `instance_id`, or restart the parent relay
+— either lets a node re-bind its token on the next honest heartbeat.
 
 ## Self-update
 

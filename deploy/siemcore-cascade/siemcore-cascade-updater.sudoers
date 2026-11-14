@@ -1,0 +1,14 @@
+# siemcore-cascade-updater sudoers drop-in — installed to
+# /etc/sudoers.d/siemcore-cascade-updater by `install.sh --executor filesystem`.
+#
+# PLACEHOLDER (updates-mysoc version/1.18.1). The AUTHORITATIVE entry is
+# SiemCore-owned (siemcore repo deploy/cascade/); updates-mysoc replaces this
+# file and its pinned SHA-256 with SiemCore's bytes before publishing.
+#
+# Narrower than a blanket grant: the updater only ever calls the shim with one
+# of the three lifecycle phases, so only those invocations are permitted, and
+# SETENV is NOT granted (sudo resets the environment; env_keep below passes
+# through exactly the phase-context variables the updater sets — see
+# UPDATE-ENTRYPOINT-CONTRACT.md).
+Defaults!/usr/local/sbin/siemcore-apply-update env_keep += "UPDATER_PHASE CURRENT_DIR VERSION FROM_VERSION PRODUCT INSTALL_ROOT ARTIFACT_KIND ARTIFACT_SHA256 DEPENDENCY_VALIDATION"
+siemcore-cascade-updater ALL=(root) NOPASSWD: /usr/local/sbin/siemcore-apply-update apply, /usr/local/sbin/siemcore-apply-update rollback, /usr/local/sbin/siemcore-apply-update first_install

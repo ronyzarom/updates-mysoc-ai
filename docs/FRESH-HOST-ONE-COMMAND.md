@@ -142,11 +142,18 @@ curl -fsSL https://updates.mysoc.ai/install/siemcore-enroll.sh | sudo bash -s --
 `/etc/siemcore/install-seed.env` and reads only the enrolment keys
 (`UPDATES_PARENT_URL`, `UPDATES_PARENT_ID`, `CUSTOMER_ID`, `CUSTOMER_NAME`,
 `UPDATES_SIGNING_KEY`, optional `UPDATES_RELAY_CA_FILE`, `TLS_CERT_FILE`,
-`TLS_KEY_FILE`). It installs the kit with `--executor filesystem` (which lays
-down the SiemCore apply shim + sudoers + unit drop-in), enrols the updater at
-`0.0.0`, and waits for health on `http://127.0.0.1:8443/health/live`. The
-release provisions itself through its `first_install` phase (30-minute budget),
-with the same read-only preflight, refuse-and-back-off, and resume behaviour
-described above. See [`../kits/siemcore/README.md`](../kits/siemcore/README.md)
-for `server.conf` keys, re-enrolment, and the ring note (a new SiemCore instance
-enrols in `stable`; set its ring on the updates server afterward).
+`TLS_KEY_FILE`, `ARCHIVE_CREDENTIALS_FILE`, `DOMAIN`, `UPDATER_INSTANCE_ID`). It
+copies the TLS material to `/etc/ssl/siemcore` and any GCS archiver credential
+out of `/root` into `/etc/siemcore/provisioning/` (the unit runs
+`ProtectHome=yes`), installs the kit with `--executor filesystem` (which lays
+down the four SiemCore-owned host files — apply shim, sudoers, `override.conf`
+unit drop-in, and `executor-block.yaml` spliced into the config — byte-for-byte
+from pinned bytes, plus the `/opt/siemcore-cascade` staging root), enrols the
+updater at `0.0.0`, and then
+waits for the updater's own `update applied and verified` line — not the first
+`:8443/health/live` answer — before printing the address + version. The release
+provisions itself through its `first_install` phase (30-minute budget), with the
+same read-only preflight, refuse-and-back-off, and resume behaviour described
+above. See [`../kits/siemcore/README.md`](../kits/siemcore/README.md) for
+`server.conf` keys, re-enrolment, and the ring note (a new SiemCore instance
+enrols in `stable`; the test pods keep their alpha ring by reusing their ids).

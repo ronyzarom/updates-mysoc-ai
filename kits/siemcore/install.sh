@@ -24,11 +24,12 @@ Modes (enable flag-driven config rendering):
   --update               siemcore already installed: enrolls at its version
 
 Options:
-  --executor filesystem  wire real installs: enable the filesystem executor in
-                         the config and install the bundled apply shim, the
-                         NOPASSWD sudoers entry, the unit drop-in, and the
-                         /opt/siemcore staging root. Required for a fresh host
-                         that self-installs siemcore via the cascade.
+  --executor filesystem  wire real installs: install the four bundled,
+                         SHA-256-pinned SiemCore host files (apply shim, sudoers
+                         entry, override.conf unit drop-in, and executor-block.yaml
+                         spliced into the config) plus the /opt/siemcore-cascade
+                         staging root. Required for a fresh host that self-installs
+                         siemcore via the cascade.
   --license-key KEY      enrollment credential agreed with your operator
   --instance-id ID       stable unique id, e.g. siemcore-acme-01
   --parent-url URL       the mysoc relay's child-facing address,
@@ -156,78 +157,85 @@ render_config() {
     echo "    config rendered: instance=$INSTANCE_ID parent=$PARENT_URL version=$CURRENT_VERSION mode=$MODE"
 }
 
-# enable_fs_executor_block uncomments the #BEGIN/#END-FS-EXECUTOR block in the
-# installed config (the markers and leading '#' are stripped so the YAML nests
-# correctly under simulation:). Idempotent: already-enabled configs are a no-op.
-enable_fs_executor_block() {
-    local target="$1" tmp
+# splice_executor_block replaces whatever sits between the #BEGIN/#END-FS-EXECUTOR
+# markers in the installed config with the SiemCore-owned executor-block.yaml
+# (verbatim — the block is NOT hand-written here). The markers are kept so the
+# splice is idempotent: re-running simply re-replaces the region.
+splice_executor_block() {
+    local target="$1" block="$2" tmp
     tmp=$(mktemp)
-    awk '
-        /^#BEGIN-FS-EXECUTOR$/ { inblk=1; next }
-        /^#END-FS-EXECUTOR$/   { inblk=0; next }
-        inblk && /^#/ { sub(/^#/, ""); print; next }
+    awk -v blockfile="$block" '
+        /^#BEGIN-FS-EXECUTOR$/ { print; while ((getline line < blockfile) > 0) print line; close(blockfile); skip=1; next }
+        /^#END-FS-EXECUTOR$/   { skip=0; print; next }
+        skip { next }
         { print }
     ' "$target" > "$tmp"
     install -m 0640 -o root -g "$NAME" "$tmp" "$target"
     rm -f "$tmp"
 }
 
-# wire_filesystem_executor installs everything the filesystem executor needs that
-# lives OUTSIDE the config: the siemcore apply shim, the single NOPASSWD sudoers
-# entry, the unit drop-in (sudo needs NoNewPrivileges=no + ProtectSystem=no), and
-# the staging root. All steps are idempotent. The shim is SiemCore-owned; the kit
-# bundles it beside this script with a pinned SHA-256, and this function REFUSES
-# to install a shim whose bytes do not match that pin (supply-chain gate).
+# verify_pinned FILE SUMS — FILE's sha256 must equal its entry (matched by
+# basename) in the SUMS file; refuse otherwise. Supply-chain gate for the
+# SiemCore-owned host files the kit bundles.
+verify_pinned() {
+    local file="$1" sums="$2" base want have
+    base="$(basename "$file")"
+    [[ -f "$file" ]] || { echo "    missing host file: $base — refusing" >&2; exit 1; }
+    want="$(awk -v b="$base" '$2==b || $2=="*"b {print $1; exit}' "$sums")"
+    if command -v sha256sum >/dev/null 2>&1; then
+        have="$(sha256sum "$file" | awk '{print $1}')"
+    else
+        have="$(shasum -a 256 "$file" | awk '{print $1}')"
+    fi
+    [[ -n "$want" && "$want" == "$have" ]] || {
+        echo "    host file $base failed its pinned checksum (pin ${want:-none}, got $have) — refusing" >&2
+        exit 1
+    }
+}
+
+# wire_filesystem_executor installs the four SiemCore-owned host files
+# byte-for-byte and the staging root. All steps are idempotent. The kit bundles
+# the four files beside this script with a pinned siemcore-host-files.sha256, and
+# this function REFUSES to install any file whose bytes do not match that pin
+# (supply-chain gate). The files are SiemCore's; updates-mysoc never hand-writes
+# their contents.
 wire_filesystem_executor() {
     local shim_src="$PWD/siemcore-apply-update.sh"
-    local shim_sum="$PWD/siemcore-apply-update.sh.sha256"
-    [[ -f "$shim_src" ]] || { echo "--executor filesystem: kit is missing siemcore-apply-update.sh" >&2; exit 1; }
-    [[ -f "$shim_sum" ]] || { echo "--executor filesystem: kit is missing siemcore-apply-update.sh.sha256" >&2; exit 1; }
+    local sudoers_src="$PWD/siemcore-cascade-updater.sudoers"
+    local dropin_src="$PWD/override.conf"
+    local block_src="$PWD/executor-block.yaml"
+    local sums="$PWD/siemcore-host-files.sha256"
+    [[ -f "$sums" ]] || { echo "--executor filesystem: kit is missing siemcore-host-files.sha256 for the host files" >&2; exit 1; }
 
-    echo "    verifying apply shim against pinned SHA-256"
-    local want have
-    want="$(awk '{print $1}' "$shim_sum" | head -1)"
-    if command -v sha256sum >/dev/null 2>&1; then
-        have="$(sha256sum "$shim_src" | awk '{print $1}')"
-    else
-        have="$(shasum -a 256 "$shim_src" | awk '{print $1}')"
-    fi
-    if [[ -z "$want" || "$want" != "$have" ]]; then
-        echo "    apply shim checksum mismatch (pinned $want, got $have) — refusing to install" >&2
-        exit 1
-    fi
+    echo "    verifying SiemCore host files against pinned SHA-256"
+    verify_pinned "$shim_src"    "$sums"
+    verify_pinned "$sudoers_src" "$sums"
+    verify_pinned "$dropin_src"  "$sums"
+    verify_pinned "$block_src"   "$sums"
 
-    echo "    enabling filesystem executor in /etc/$NAME/config.yaml"
-    enable_fs_executor_block /etc/$NAME/config.yaml
+    echo "    splicing executor-block.yaml into /etc/$NAME/config.yaml"
+    splice_executor_block /etc/$NAME/config.yaml "$block_src"
 
     echo "    installing apply shim /usr/local/sbin/siemcore-apply-update"
     install -m 0755 -o root -g root "$shim_src" /usr/local/sbin/siemcore-apply-update
 
     echo "    installing sudoers drop-in /etc/sudoers.d/$NAME"
-    # sudo strips the environment; env_keep passes through every variable the
-    # updater sets on the apply call (see UPDATE-ENTRYPOINT-CONTRACT.md) so the
-    # shim and any artifact entrypoint see the full phase context.
-    cat > /etc/sudoers.d/$NAME <<EOF
-Defaults!/usr/local/sbin/siemcore-apply-update env_keep += "UPDATER_PHASE CURRENT_DIR VERSION FROM_VERSION PRODUCT INSTALL_ROOT ARTIFACT_KIND ARTIFACT_SHA256 DEPENDENCY_VALIDATION"
-$NAME ALL=(root) NOPASSWD: SETENV: /usr/local/sbin/siemcore-apply-update
-EOF
-    chmod 0440 /etc/sudoers.d/$NAME
+    install -m 0440 -o root -g root "$sudoers_src" /etc/sudoers.d/$NAME
     visudo -c -f /etc/sudoers.d/$NAME >/dev/null
 
-    echo "    installing unit drop-in (NoNewPrivileges=no, ProtectSystem=no)"
+    echo "    installing unit drop-in /etc/systemd/system/$NAME.service.d/override.conf"
     mkdir -p /etc/systemd/system/$NAME.service.d
-    cat > /etc/systemd/system/$NAME.service.d/executor.conf <<'EOF'
-[Service]
-NoNewPrivileges=no
-ProtectSystem=no
-EOF
+    install -m 0644 -o root -g root "$dropin_src" /etc/systemd/system/$NAME.service.d/override.conf
 
-    echo "    creating staging root /opt/siemcore"
+    echo "    creating staging root /opt/siemcore-cascade"
     # Matches simulation.filesystem.install_root in config.yaml. The executor
     # stages releases + the current symlink here as the updater service user.
-    mkdir -p /opt/siemcore
-    chown "$NAME:$NAME" /opt/siemcore
-    chmod 0755 /opt/siemcore
+    # NOTE /opt/siemcore-cascade, NOT /opt/siemcore: the fleet (and the SiemCore
+    # wrapper + Disaster Recovery code) use the -cascade path, while /opt/siemcore
+    # holds the SiemCore dashboard on installed hosts.
+    mkdir -p /opt/siemcore-cascade
+    chown "$NAME:$NAME" /opt/siemcore-cascade
+    chmod 0755 /opt/siemcore-cascade
 }
 
 # json_string VAR KEY FILE — read a top-level JSON string value without jq.

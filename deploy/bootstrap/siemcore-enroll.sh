@@ -10,11 +10,13 @@
 # This THIN bootstrap does only what the updater/artifact cannot do for itself:
 #   1. ensure rsync + curl exist,
 #   2. fetch + checksum-verify the siemcore updater kit from updates.mysoc.ai,
-#   3. place SiemCore's server.conf where its first_install reads it, and the
-#      TLS material under /etc/ssl/siemcore,
+#   3. place SiemCore's server.conf where its first_install reads it, the TLS
+#      material under /etc/ssl/siemcore, and any archive credential out of /root
+#      into /etc/siemcore (the updater unit runs with ProtectHome=yes),
 #   4. install + enrol the cascade updater (kit install.sh --clean --executor
 #      filesystem) against the parent MySoc relay, at version 0.0.0,
-#   5. start the updater and wait for siemcore health on :8443.
+#   5. start the updater and wait for the updater's own "update applied and
+#      verified" line, then print the address + version.
 #
 # Everything else — Docker compose, the database, secrets, TLS wiring, the app
 # itself — is installed by the release's updater/apply "first_install" phase,
@@ -88,7 +90,12 @@ RELAY_CA_FILE="$(conf_get UPDATES_RELAY_CA_FILE)"
 TLS_CERT_FILE="$(conf_get TLS_CERT_FILE)"
 TLS_KEY_FILE="$(conf_get TLS_KEY_FILE)"
 UPDATE_GROUP="$(conf_get UPDATE_GROUP)"
-[[ -z "$INSTANCE_ID" ]] && INSTANCE_ID="$(conf_get INSTANCE_ID)"
+ARCHIVE_CREDENTIALS_FILE="$(conf_get ARCHIVE_CREDENTIALS_FILE)"
+DOMAIN="$(conf_get DOMAIN)"
+# SiemCore's key for the updater identity is UPDATER_INSTANCE_ID (not INSTANCE_ID,
+# which is a different SiemCore concept). Precedence: --instance-id flag > conf
+# UPDATER_INSTANCE_ID > persisted file > freshly generated id.
+[[ -z "$INSTANCE_ID" ]] && INSTANCE_ID="$(conf_get UPDATER_INSTANCE_ID)"
 [[ -z "$SIGNING_KEY" ]] && SIGNING_KEY="$(conf_get UPDATES_SIGNING_KEY)"
 
 [[ -n "$PARENT_URL" ]]    || die "server.conf is missing UPDATES_PARENT_URL (the parent MySoc relay address)"
@@ -147,6 +154,18 @@ if [[ -n "$TLS_CERT_FILE" || -n "$TLS_KEY_FILE" ]]; then
     [[ -n "$TLS_KEY_FILE" ]]  && { [[ -f "$TLS_KEY_FILE"  ]] || die "TLS_KEY_FILE not found: $TLS_KEY_FILE";  install -m 0600 "$TLS_KEY_FILE"  /etc/ssl/siemcore/privkey.pem; }
 fi
 
+# Archive credential: first_install runs with ProtectHome=yes and so cannot read
+# /root or /home. Copy the GCS archiver credential named in server.conf out to
+# /etc/siemcore/provisioning/ (0600), the same pattern as the TLS material, so
+# the app can read it during first_install regardless of where it was staged.
+if [[ -n "$ARCHIVE_CREDENTIALS_FILE" ]]; then
+    [[ -f "$ARCHIVE_CREDENTIALS_FILE" ]] || die "ARCHIVE_CREDENTIALS_FILE not found: $ARCHIVE_CREDENTIALS_FILE"
+    install -d -m 0700 /etc/siemcore/provisioning
+    install -m 0600 -o root -g root "$ARCHIVE_CREDENTIALS_FILE" \
+        "/etc/siemcore/provisioning/$(basename "$ARCHIVE_CREDENTIALS_FILE")"
+    log "    copied archive credential to /etc/siemcore/provisioning/ (0600)"
+fi
+
 # Resolve the relay CA path for the kit (pin only when the relay serves a
 # private certificate). If the conf gave one, make sure it exists.
 CA_ARGS=()
@@ -167,7 +186,7 @@ if [[ -z "$INSTANCE_ID" && -f "$INSTANCE_ID_FILE" ]]; then
 fi
 if [[ -z "$INSTANCE_ID" ]]; then
     if command -v uuidgen >/dev/null 2>&1; then
-        INSTANCE_ID="siemcore-$(uuidgen | tr 'A-Z' 'a-z')"
+        INSTANCE_ID="siemcore-$(uuidgen | tr '[:upper:]' '[:lower:]')"
     elif [[ -r /proc/sys/kernel/random/uuid ]]; then
         INSTANCE_ID="siemcore-$(cat /proc/sys/kernel/random/uuid)"
     else
@@ -204,16 +223,44 @@ install_args=(--clean --executor filesystem
 ( cd "$KIT_DIR" && bash ./install.sh "${install_args[@]}" )
 
 # ---------------------------------------------------------------------------
-# 5. Start the updater and wait for siemcore to come up.
+# 5. Start the updater and wait for the install to be APPLIED AND VERIFIED.
+#
+# The authoritative signal is the updater's own success line for this product,
+# "update applied and verified", NOT the first time :8443 answers a health
+# probe — a health endpoint can answer before the first_install completes (old
+# container, partial bring-up). We wait on the log line, read the version it
+# reports, then confirm health and print the address + version.
 # ---------------------------------------------------------------------------
 log "step 5/5: starting updater; waiting up to ${WAIT_SECONDS}s for first_install"
 systemctl restart siemcore-cascade-updater
 
+# The applied-and-verified line for the siemcore product (slog; tolerate both the
+# text handler "to_version=X" and a JSON handler "to_version":"X").
+applied_line() {
+    journalctl -u siemcore-cascade-updater --since "-${WAIT_SECONDS}s" --no-pager 2>/dev/null \
+        | grep "update applied and verified" | grep -i siemcore | tail -1
+}
+applied_version() {
+    printf '%s' "$1" | grep -oE 'to_version["=:[:space:]]+"?[0-9][0-9.]+' \
+        | grep -oE '[0-9][0-9.]+' | tail -1
+}
+ADDRESS="${DOMAIN:+https://$DOMAIN}"
+
 deadline=$((SECONDS + WAIT_SECONDS))
 while (( SECONDS < deadline )); do
-    if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then
+    line="$(applied_line)"
+    if [[ -n "$line" ]]; then
+        version="$(applied_version "$line")"
+        # Best-effort health confirmation (do not fail the install on a flaky probe).
+        if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then
+            health="healthy at $HEALTH_URL"
+        else
+            health="applied (health probe $HEALTH_URL not yet answering)"
+        fi
         echo
-        log "DONE  siemcore healthy at $HEALTH_URL  instance=$INSTANCE_ID"
+        log "DONE  siemcore ${version:+version $version }$health"
+        log "      address:  ${ADDRESS:-<set DOMAIN in server.conf>}"
+        log "      instance: $INSTANCE_ID"
         log "If this is a new server, set its update ring on the updates server (defaults to 'stable')."
         exit 0
     fi
@@ -228,6 +275,6 @@ while (( SECONDS < deadline )); do
 done
 
 echo
-warn "timed out after ${WAIT_SECONDS}s waiting for $HEALTH_URL. Recent updater log:"
+warn "timed out after ${WAIT_SECONDS}s waiting for 'update applied and verified'. Recent updater log:"
 journalctl -u siemcore-cascade-updater --no-pager -n 25 2>/dev/null | sed 's/^/    /' >&2
-die "install not confirmed healthy yet; check 'journalctl -u siemcore-cascade-updater -f'"
+die "install not confirmed applied yet; check 'journalctl -u siemcore-cascade-updater -f'"

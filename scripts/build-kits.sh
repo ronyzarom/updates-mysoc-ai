@@ -75,20 +75,25 @@ for tier in "${TIERS[@]}"; do
         cp deploy/mysoc-apply-update.sh "$OUT/mysoc-apply-update.sh"
         chmod +x "$OUT/mysoc-apply-update.sh"
     elif [[ "$tier" == siemcore ]]; then
-        # The siemcore shim is SiemCore-owned; we bundle it with a pinned
-        # SHA-256 and verify the bytes match the pin before shipping, so a
-        # drifted or tampered shim fails the build (and later install).
-        echo "==> $tier: bundling apply shim (siemcore-apply-update.sh) + verifying pin"
-        cp deploy/siemcore-cascade/siemcore-apply-update.sh "$OUT/siemcore-apply-update.sh"
-        cp deploy/siemcore-cascade/siemcore-apply-update.sh.sha256 "$OUT/siemcore-apply-update.sh.sha256"
+        # The four siemcore host files (apply shim, sudoers entry, override.conf
+        # unit drop-in, executor-block.yaml) are SiemCore-owned; we bundle them
+        # with a pinned siemcore-host-files.sha256 and verify the bytes match the
+        # pin before shipping, so a drifted or tampered file fails the build (and
+        # later the install).
+        echo "==> $tier: bundling SiemCore host files + verifying pins"
+        for hf in siemcore-apply-update.sh siemcore-cascade-updater.sudoers override.conf executor-block.yaml siemcore-host-files.sha256; do
+            cp "deploy/siemcore-cascade/$hf" "$OUT/$hf"
+        done
         chmod +x "$OUT/siemcore-apply-update.sh"
-        want="$(awk '{print $1}' "$OUT/siemcore-apply-update.sh.sha256" | head -1)"
-        have="$(SHA "$OUT/siemcore-apply-update.sh" | awk '{print $1}')"
-        if [[ -z "$want" || "$want" != "$have" ]]; then
-            echo "ERROR: siemcore apply shim does not match its pinned SHA-256 (pin $want, got $have)." >&2
-            echo "       Update deploy/siemcore-cascade/siemcore-apply-update.sh.sha256 after a deliberate change." >&2
-            exit 1
-        fi
+        for hf in siemcore-apply-update.sh siemcore-cascade-updater.sudoers override.conf executor-block.yaml; do
+            want="$(awk -v b="$hf" '$2==b || $2=="*"b {print $1; exit}' "$OUT/siemcore-host-files.sha256")"
+            have="$(SHA "$OUT/$hf" | awk '{print $1}')"
+            if [[ -z "$want" || "$want" != "$have" ]]; then
+                echo "ERROR: siemcore host file $hf does not match its pin (pin ${want:-none}, got $have)." >&2
+                echo "       Regenerate deploy/siemcore-cascade/siemcore-host-files.sha256 after a deliberate change." >&2
+                exit 1
+            fi
+        done
     fi
 
     echo "==> $tier: bundling docs (stamped)"
@@ -104,7 +109,7 @@ for tier in "${TIERS[@]}"; do
         cd "$OUT"
         files=(bin/* config.yaml install.sh ./*.service)
         [[ -f mysoc-apply-update.sh ]] && files+=(mysoc-apply-update.sh)
-        [[ -f siemcore-apply-update.sh ]] && files+=(siemcore-apply-update.sh siemcore-apply-update.sh.sha256)
+        [[ -f siemcore-apply-update.sh ]] && files+=(siemcore-apply-update.sh siemcore-cascade-updater.sudoers override.conf executor-block.yaml siemcore-host-files.sha256)
         for restore in ./*-self-restore.sh; do
             [[ -f "$restore" ]] && files+=("$restore")
         done
