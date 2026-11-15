@@ -11,7 +11,7 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.18.1 — SiemCore one-command fresh install (kit + bootstrap only)
 
-**Build:** 1.18.1.4 · commit _pending_ · tag `v1.18.1.4` · branch `version/1.18.1`.
+**Build:** 1.18.1.5 · commit _pending_ · tag `v1.18.1.5` · branch `version/1.18.1`.
 **Status:** **published** to `https://updates.mysoc.ai/install/` (siemcore tier)
 on Rony's explicit go. Build history: `.1` first
 cut; `.2` folded in SiemCore's six branch corrections (placeholders); `.3` swaps
@@ -19,7 +19,34 @@ in SiemCore's four **authoritative** first_install-capable host files from
 release/v3.3.198 (verified byte-for-byte against their handover SHA-256) and
 reconciles the archive-credential key name to the singular form; `.4` fixes four
 enrol-script findings SiemCore reported from pod a's first run (below) and
-carries SiemCore's **3.3.198.2** apply wrapper.
+carries SiemCore's **3.3.198.2** apply wrapper; `.5` fixes a fifth finding —
+`install.sh --clean` run a second time on a host that already has updater state
+exited `1` silently (below).
+
+**`.5` fix (finding 5 — second `--clean` run exits 1 silently in step 4):**
+
+- **Root cause (same class as `.4`'s #4).** `install.sh` runs under
+  `set -euo pipefail`. On a re-run, `reset_clean_state` calls `json_string` to
+  read `instance_id`, `api_key`, `relay_token` out of the existing
+  `/var/lib/siemcore-cascade-updater/state.json`. `json_string`'s pipeline ends
+  in a `grep` for the key; when the key is **absent** the `grep` exits 1,
+  `pipefail` propagates it through the command substitution, and `set -e`
+  aborts the whole script with a bare `exit 1` at "creating service user and
+  directories". SiemCore's pod a carried `relay_token` (and version/attempt
+  fields) but **no** `instance_id`/`api_key`, so the very first `json_string`
+  call killed the script. Fix: the `json_string` pipeline now ends in
+  `|| true`, so a missing key yields an empty string (treated as absent)
+  instead of a fatal error.
+- **Don't rebuild an empty `instance_id`.** `reset_clean_state` previously wrote
+  `"instance_id"` unconditionally, so an absent id became `"instance_id": ""`.
+  It now rebuilds `state.json` from only the identity fields that were actually
+  present (correct JSON for any subset), and the status line reports exactly
+  which were preserved. A re-run on pod a's state now keeps `relay_token` and
+  writes no empty id.
+- **Scope:** `kits/siemcore/install.sh` only — no updater-binary, host-file, or
+  releases-API change. (SiemCore's companion design proposal — when the app
+  already answers on `/health/live`, keep the running version instead of
+  resetting to `0.0.0` — is **not** in this build; tracked separately.)
 
 **`.4` fixes (pod a first-run findings, enrol-script + host-file only):**
 

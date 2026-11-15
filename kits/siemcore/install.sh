@@ -244,8 +244,13 @@ wire_filesystem_executor() {
 # token) never contain quotes, so this is safe.
 json_string() {
     local __var="$1" __key="$2" __file="$3" __val
+    # A missing key means grep matches nothing and exits 1; under
+    # `set -euo pipefail` that 1 propagates through the pipe and the command
+    # substitution, aborting the whole script with a bare `exit 1` (finding 5,
+    # same class as the enroll-script finding 4). `|| true` makes a no-match an
+    # empty string instead of a fatal error; the caller treats empty as absent.
     __val="$(grep -oE "\"$__key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$__file" | head -1 \
-        | sed -E "s/.*:[[:space:]]*\"([^\"]*)\"\$/\1/")"
+        | sed -E "s/.*:[[:space:]]*\"([^\"]*)\"\$/\1/" || true)"
     printf -v "$__var" '%s' "$__val"
 }
 
@@ -269,17 +274,27 @@ reset_clean_state() {
     json_string rtok relay_token "$state"
     backup="$state.bak-$(date -u +%Y%m%d-%H%M%S)"
     cp -p "$state" "$backup"
+    # Write ONLY the identity fields that were actually present. An absent field
+    # (e.g. pod a's state.json carried relay_token but no instance_id/api_key)
+    # must not be rebuilt as an empty "instance_id": "" — an empty id is worse
+    # than an absent one for the next enrolment. `sep` tracks the inter-field
+    # separator so the JSON stays valid regardless of which fields are present.
     {
-        printf '{\n'
-        printf '  "instance_id": "%s"' "$iid"
-        [[ -n "$akey" ]] && printf ',\n  "api_key": "%s"' "$akey"
-        [[ -n "$rtok" ]] && printf ',\n  "relay_token": "%s"' "$rtok"
+        local sep=$'\n'
+        printf '{'
+        if [[ -n "$iid"  ]]; then printf '%s  "instance_id": "%s"' "$sep" "$iid";  sep=$',\n'; fi
+        if [[ -n "$akey" ]]; then printf '%s  "api_key": "%s"'     "$sep" "$akey"; sep=$',\n'; fi
+        if [[ -n "$rtok" ]]; then printf '%s  "relay_token": "%s"' "$sep" "$rtok"; sep=$',\n'; fi
         printf '\n}\n'
     } > "$state"
     chmod 0600 "$state"
     chown "$NAME:$NAME" "$state" 2>/dev/null || true
+    local preserved=""
+    [[ -n "$iid"  ]] && preserved="${preserved:+$preserved, }instance_id"
+    [[ -n "$akey" ]] && preserved="${preserved:+$preserved, }api_key"
+    [[ -n "$rtok" ]] && preserved="${preserved:+$preserved, }relay_token"
     echo "    --clean: reset product version to 0.0.0, preserved relay identity" \
-         "(instance_id${rtok:+, relay_token}); previous state saved to $(basename "$backup")"
+         "(${preserved:-none present}); previous state saved to $(basename "$backup")"
 }
 
 echo "==> creating service user and directories"
