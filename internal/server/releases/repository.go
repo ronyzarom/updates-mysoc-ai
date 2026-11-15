@@ -153,45 +153,40 @@ func (r *Repository) existsExact(ctx context.Context, product, version, kind str
 	return exists, err
 }
 
-// GetAllByProductAndChannel retrieves all releases for a product and channel
-func (r *Repository) GetAllByProductAndChannel(ctx context.Context, product, channel string) ([]types.Release, error) {
+// GetAllByProduct retrieves all releases for a product, across every channel.
+// Release selection is by target group (the ring) only; channel is no longer a
+// selection axis. The legacy channel column is still stored and echoed on the
+// wire for deployed-fleet compatibility, but it never narrows what a node is
+// offered (see RELEASE-NOTES 1.19.0).
+func (r *Repository) GetAllByProduct(ctx context.Context, product string) ([]types.Release, error) {
 	return r.queryReleases(ctx, `
 		SELECT `+releaseColumns+`
 		FROM releases
-		WHERE product_name = $1 AND channel = $2
-	`, product, channel)
+		WHERE product_name = $1
+	`, product)
 }
 
-// GetAllByProductChannelAndGroup retrieves all releases for a product, channel, and target group
+// GetAllByProductAndGroup retrieves all releases for a product in a target
+// group (the ring). This is the sole gate for the normal update offer:
+// channel is intentionally not part of the predicate.
+func (r *Repository) GetAllByProductAndGroup(ctx context.Context, product, targetGroup string) ([]types.Release, error) {
+	return r.queryReleases(ctx, `
+		SELECT `+releaseColumns+`
+		FROM releases
+		WHERE product_name = $1 AND $2 = ANY(target_groups)
+	`, product, targetGroup)
+}
+
+// GetAllByProductChannelAndGroup retrieves all releases for a product, channel,
+// and target group. This remains channel-scoped ONLY for the alpha-gated
+// independent-artifact qualification path (IndependentOffer), where the
+// dual-alpha-<product> channel is an internal artifact namespace, not a ring.
+// Normal update selection must use GetAllByProductAndGroup instead.
 func (r *Repository) GetAllByProductChannelAndGroup(ctx context.Context, product, channel, targetGroup string) ([]types.Release, error) {
 	return r.queryReleases(ctx, `
 		SELECT `+releaseColumns+`
 		FROM releases
 		WHERE product_name = $1 AND channel = $2 AND $3 = ANY(target_groups)
-	`, product, channel, targetGroup)
-}
-
-// GetLatestByProduct retrieves the latest release for a product and channel (by released_at)
-// Note: For proper semantic version comparison, use GetAllByProductAndChannel and compare in service layer
-func (r *Repository) GetLatestByProduct(ctx context.Context, product, channel string) (*types.Release, error) {
-	return r.queryRelease(ctx, `
-		SELECT `+releaseColumns+`
-		FROM releases
-		WHERE product_name = $1 AND channel = $2
-		ORDER BY released_at DESC
-		LIMIT 1
-	`, product, channel)
-}
-
-// GetLatestByProductForGroup retrieves the latest release for a product, channel, and target group
-// Note: For proper semantic version comparison, use GetAllByProductChannelAndGroup and compare in service layer
-func (r *Repository) GetLatestByProductForGroup(ctx context.Context, product, channel, targetGroup string) (*types.Release, error) {
-	return r.queryRelease(ctx, `
-		SELECT `+releaseColumns+`
-		FROM releases
-		WHERE product_name = $1 AND channel = $2 AND $3 = ANY(target_groups)
-		ORDER BY released_at DESC
-		LIMIT 1
 	`, product, channel, targetGroup)
 }
 

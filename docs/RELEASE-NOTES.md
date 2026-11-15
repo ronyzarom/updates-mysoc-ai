@@ -9,16 +9,48 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
-## 1.19.0 — Self-service rings: enrol-into-a-ring + scoped ring key
+## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.1 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Build:** 1.19.0.2 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
 **Status:** **built + validated locally; NOT deployed.** Server deploy and the
 SiemCore self-service key issuance are separate gates awaiting Rony's explicit
 go. The migration (020) and the new auth surface change the **server**, so this
-needs a server deploy before either feature is live.
+needs a server deploy before either feature is live. Build history: `.1`
+enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
+update selector (#4, below).
 
-Two features that let an operator stop hand-moving new nodes between rings — the
-pain behind SiemCore's pod-a "new id landed in stable, move it to alpha" step.
+Features that let an operator stop hand-moving new nodes between rings — the
+pain behind SiemCore's pod-a "new id landed in stable, move it to alpha" step —
+and that collapse the confusing channel/ring duplication down to one concept.
+
+### #4 Target groups are the only update selector (`channel` is now inert)
+
+Per Rony's directive "we use only target groups, not channel." The normal update
+offer is now chosen by **product + target group (the ring) + highest version**,
+full stop. The `channel` column/field is no longer part of release selection.
+
+- **Server selection:** `HighestReleaseForGroup` (the authoritative check-plane
+  offer) and `GetLatestRelease` (the `/latest` endpoint + heartbeat hint) drop
+  the `channel = $?` predicate — they now query by product (+ ring) only via the
+  new `GetAllByProduct` / `GetAllByProductAndGroup`. The dead channel-only query
+  helpers were removed.
+- **`channel` kept inert on the wire.** The field still exists on the heartbeat,
+  check, and release records and is echoed in the check response; the
+  child-facing (`:18443`) golden contract is **unchanged** (byte-for-byte), so
+  every deployed mysoc/siemcore/swf node keeps working. Deployed fleets may
+  still send `channel`; the server simply ignores it for selection.
+- **Exception (unchanged):** the alpha-gated independent-artifact qualification
+  path (`IndependentOffer`, `dual-alpha-<product>`) still uses channel as an
+  internal artifact *namespace* — that is a qualification scope, not a ring, and
+  is invisible to normal clients. Removing it there is separate, out-of-scope
+  work.
+- **Backward compatible:** every product already runs a single channel
+  (`stable`), so collapsing the predicate changes no live offer; the ring
+  (`target_groups`) was already doing the real gating.
+
+**Follow-on (not in this build):** stop emitting `channel` in new kit/config
+templates and docs (keep accepting it inbound); a later, cross-project phased
+removal of `channel` from the wire contract once no deployed fleet relies on it.
 
 ### #2 Enrolment can request a ring (server + updater + relay + contract)
 
@@ -73,7 +105,11 @@ rides the upward rollup, which older servers ignore. No minimum hop version.
 tests (scope allow/normalize incl. update-group; `normalizeRequestedUpdateGroup`;
 relay `childReport` forwarding); DB-gated enrolment test extended for
 request-a-ring across all three paths (run against Postgres 15); migration 020
-up/down exercised against Postgres 15.
+up/down exercised against Postgres 15. For #4: the full `go test ./...` DB-gated
+run (incl. the dual-publication integration test that exercises the normal vs.
+independent-artifact offer paths) and the untouched child-contract golden test
+both pass against Postgres 15, confirming selection is target-group-only and the
+wire is unchanged.
 
 **Follow-on (not in this build):** wiring the siemcore/mysoc enrol scripts to
 render `instance.update_group` from `server.conf` so the one-liner itself can

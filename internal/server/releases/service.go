@@ -328,10 +328,13 @@ func findHighestVersion(releases []types.Release) *types.Release {
 	return highest
 }
 
-// GetLatestRelease retrieves the highest version release for a product
+// GetLatestRelease retrieves the highest version release for a product across
+// all rings. This is the ungated "latest" used by the public /latest endpoint
+// and the heartbeat hint. The channel argument is accepted for wire/signature
+// compatibility but is inert: target groups are the only selection axis.
 func (s *Service) GetLatestRelease(ctx context.Context, product, channel, currentVersion string) (*types.ReleaseInfo, error) {
 	// Fetch all releases and find the highest version
-	releases, err := s.repo.GetAllByProductAndChannel(ctx, product, channel)
+	releases, err := s.repo.GetAllByProduct(ctx, product)
 	if err != nil {
 		return nil, err
 	}
@@ -353,38 +356,14 @@ func (s *Service) GetLatestRelease(ctx context.Context, product, channel, curren
 	return releaseInfo(release, currentVersion, updateAvailable), nil
 }
 
-// GetLatestReleaseForGroup retrieves the highest version release for a product and target group
-func (s *Service) GetLatestReleaseForGroup(ctx context.Context, product, channel, currentVersion, targetGroup string) (*types.ReleaseInfo, error) {
-	// Fetch all releases for the group and find the highest version
-	releases, err := s.repo.GetAllByProductChannelAndGroup(ctx, product, channel, targetGroup)
-	if err != nil {
-		return nil, err
-	}
-
-	compatible := releases[:0]
-	for _, r := range releases {
-		if r.Manifest.ArtifactKind == "" {
-			compatible = append(compatible, r)
-		}
-	}
-	release := findHighestVersion(compatible)
-	if release == nil {
-		return nil, nil
-	}
-
-	// Only mark as update available if the server version is actually higher
-	updateAvailable := isNewerVersion(currentVersion, release.Version)
-
-	return releaseInfo(release, currentVersion, updateAvailable), nil
-}
-
-// HighestReleaseForGroup returns the highest-version release for a product,
-// channel, and target group (nil when none) without comparing against a
-// caller version. This is the DB-touching part of the update check and is
-// safe to memoize per (product, channel, group) — the version comparison is
-// applied separately by ReleaseInfoFor.
+// HighestReleaseForGroup returns the highest-version release for a product in a
+// target group (the ring), nil when none, without comparing against a caller
+// version. This is the DB-touching part of the normal update check and is safe
+// to memoize per (product, group) — the version comparison is applied
+// separately by ReleaseInfoFor. The channel argument is inert (kept for
+// wire/signature compatibility); target group is the sole selector.
 func (s *Service) HighestReleaseForGroup(ctx context.Context, product, channel, targetGroup string) (*types.Release, error) {
-	all, err := s.repo.GetAllByProductChannelAndGroup(ctx, product, channel, targetGroup)
+	all, err := s.repo.GetAllByProductAndGroup(ctx, product, targetGroup)
 	if err != nil {
 		return nil, err
 	}

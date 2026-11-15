@@ -155,7 +155,11 @@ func TestDualPublicationDatabase(t *testing.T) {
 			if r, _ := svc.GetRelease(ctx, product, version); r != nil {
 				t.Fatal("legacy lookup exposed independent release")
 			}
-			if r, _ := svc.HighestReleaseForGroup(ctx, product, channel, "alpha"); r != nil {
+			// The normal offer path is target-group-only (channel is inert);
+			// the independent-artifact release stays hidden to it via the
+			// artifact-kind filter, regardless of channel. A legacy release in
+			// alpha (1.0.1, promoted above) may legitimately be returned.
+			if r, _ := svc.HighestReleaseForGroup(ctx, product, channel, "alpha"); r != nil && r.Version == version {
 				t.Fatal("old client sees independent artifact")
 			}
 			e := artifactprotocol.Evidence{Lifecycle: "empty"}
