@@ -34,6 +34,19 @@ func ValidateUpdateGroup(group string) error {
 	return nil
 }
 
+// normalizeRequestedUpdateGroup maps a node's self-requested enrolment ring to
+// a valid group, falling back to "stable" when empty or invalid. It is applied
+// ONLY when the server first creates an instance row (first enrolment); it
+// never changes an existing row's ring (see the upsert ON CONFLICT clauses),
+// so a node cannot self-promote its ring after enrolment.
+func normalizeRequestedUpdateGroup(requested string) string {
+	g := strings.ToLower(strings.TrimSpace(requested))
+	if ValidUpdateGroups[g] {
+		return g
+	}
+	return "stable"
+}
+
 // SQL column lists - explicitly different to prevent scan mismatches
 const (
 	// derivedStatusCol computes liveness at read time for directly-heartbeating
@@ -1098,12 +1111,17 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 		customerNamePtr = &customerName
 	}
 
+	// Ring requested at enrolment: honored only on INSERT (a new instance_id);
+	// the ON CONFLICT clauses below deliberately omit update_group so a node
+	// can never self-promote its ring on a later heartbeat.
+	requestedGroup := normalizeRequestedUpdateGroup(heartbeat.RequestedUpdateGroup)
+
 	// Base UPSERT query with IP tracking
 	query := `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash, 
 		                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at, 
-		                       product_tier, parent_instance_id, customer_id, customer_name, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $9, $9)
+		                       product_tier, parent_instance_id, customer_id, customer_name, update_group, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $14, $9, $9)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			hostname = EXCLUDED.hostname,
 			license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
@@ -1120,7 +1138,7 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			reported_at = NULL,
 			updated_at = EXCLUDED.updated_at
 	`
-	args := []interface{}{id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr, customerIDPtr, customerNamePtr}
+	args := []interface{}{id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr, customerIDPtr, customerNamePtr, requestedGroup}
 
 	// If heartbeat contains update attempt, include those columns
 	if heartbeat.LastUpdateAttempt != nil {
@@ -1130,8 +1148,8 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 			                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at,
 			                       last_update_from_version, last_update_target_version, last_update_success,
 			                       last_update_error, last_update_at, product_tier, parent_instance_id,
-			                       customer_id, customer_name, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $9, $9)
+			                       customer_id, customer_name, update_group, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $9, $9)
 			ON CONFLICT (instance_id) DO UPDATE SET
 				hostname = EXCLUDED.hostname,
 				license_id = COALESCE(EXCLUDED.license_id, instances.license_id),
@@ -1156,7 +1174,7 @@ func (r *InstanceRepository) UpsertFromHeartbeat(ctx context.Context, instanceID
 		args = []interface{}{
 			id, instanceID, instanceType, heartbeat.Hostname, licenseIDPtr, now, heartbeatData, clientIP, now,
 			attempt.FromVersion, attempt.TargetVersion, attempt.Success, attempt.Error, attempt.Timestamp,
-			productTierPtr, parentInstanceIDPtr, customerIDPtr, customerNamePtr,
+			productTierPtr, parentInstanceIDPtr, customerIDPtr, customerNamePtr, requestedGroup,
 		}
 	}
 
@@ -1284,11 +1302,17 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 	// ON CONFLICT deliberately preserves explicit maintenance/safety holds.
 	autoUpdate := true
 
+	// Honor the requested enrolment ring if a check is the first thing the
+	// server sees from a brand-new node (otherwise this skeleton row would pin
+	// it to the stable default and the later heartbeat's requested group — which
+	// ON CONFLICT preserves — would be ignored). First-create only.
+	requestedGroup := normalizeRequestedUpdateGroup(heartbeat.RequestedUpdateGroup)
+
 	_, err = r.db.Pool.Exec(ctx, `
 		INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
 		                       last_heartbeat, last_heartbeat_data, status, last_ip_address, last_ip_seen_at,
-		                       product_tier, parent_instance_id, auto_update_enabled, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $9, $9)
+		                       product_tier, parent_instance_id, auto_update_enabled, update_group, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, '', $6, $7, 'online', $8, $9, $10, $11, $12, $13, $9, $9)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			license_id = COALESCE(instances.license_id, EXCLUDED.license_id),
 			-- For relay-reported (cascade) nodes the check arrives from the
@@ -1305,7 +1329,7 @@ func (r *InstanceRepository) TouchFromCheck(ctx context.Context, instanceID stri
 			hostname = COALESCE(NULLIF(instances.hostname, ''), EXCLUDED.hostname),
 			updated_at = EXCLUDED.updated_at
 	`, uuid.New().String(), instanceID, instanceType, heartbeat.Hostname, licenseIDPtr,
-		now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr, autoUpdate)
+		now, heartbeatData, clientIP, now, productTierPtr, parentInstanceIDPtr, autoUpdate, requestedGroup)
 	return err
 }
 
@@ -1339,11 +1363,11 @@ type reportedNode struct {
 const upsertReportedNodeSQL = `
 	INSERT INTO instances (id, instance_id, instance_type, hostname, license_id, api_key_hash,
 	                       last_heartbeat, last_heartbeat_data, status, product_tier, parent_instance_id,
-	                       customer_id, customer_name, reported_via, reported_at,
+	                       customer_id, customer_name, update_group, reported_via, reported_at,
 	                       last_update_from_version, last_update_target_version, last_update_success,
 	                       last_update_error, last_update_at, last_ip_address, last_ip_seen_at,
 	                       auto_update_enabled, created_at, updated_at)
-	VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+	VALUES ($1, $2, $3, $4, $5, '', $6, $7, $8, $9, $10, $11, $12, $22, $13, $14, $15, $16, $17, $18, $19, $20,
 	        CASE WHEN $20::text IS NULL THEN NULL ELSE $14::timestamptz END, TRUE, $14, $14)
 	ON CONFLICT (instance_id) DO UPDATE SET
 		hostname = COALESCE(NULLIF(EXCLUDED.hostname, ''), instances.hostname),
@@ -1588,5 +1612,8 @@ func reportedNodeUpsertArgs(reporterID, parentID, licenseID string, child *types
 		lastSeen, heartbeatData, status, child.ProductTier, parentID,
 		child.CustomerID, child.CustomerName, reporterID, now,
 		attemptFrom, attemptTarget, attemptSuccess, attemptError, attemptAt, sourceIP, !child.LastSeen.IsZero(),
+		// $22: ring requested at enrolment, honored only on first create (the
+		// ON CONFLICT clause omits update_group), falling back to stable.
+		normalizeRequestedUpdateGroup(child.RequestedUpdateGroup),
 	}, nil
 }

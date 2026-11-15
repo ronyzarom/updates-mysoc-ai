@@ -1503,6 +1503,29 @@ func (s *Server) handleSetUpdateGroup(w http.ResponseWriter, r *http.Request) {
 
 	repo := licensing.NewInstanceRepository(s.db)
 
+	// Tier-bound self-service: a managed key with a ProductTier binding (e.g.
+	// SiemCore's update-group key) may only move instances of its own tier.
+	// The static master key and admin JWTs carry no binding and are unrestricted.
+	if key := apiKeyFromContext(r.Context()); key != nil && key.ProductTier != "" {
+		inst, err := repo.GetByID(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, licensing.ErrInstanceNotFound) {
+				writeError(w, http.StatusNotFound, "instance not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if inst == nil {
+			writeError(w, http.StatusNotFound, "instance not found")
+			return
+		}
+		if !strings.EqualFold(strings.TrimSpace(inst.ProductTier), key.ProductTier) {
+			writeError(w, http.StatusForbidden, "api key is not authorized for this instance's product tier")
+			return
+		}
+	}
+
 	// SetUpdateGroup is now a thin wrapper around UpdateInstance (validation in repo)
 	if err := repo.SetUpdateGroup(r.Context(), id, req.Group); err != nil {
 		if errors.Is(err, licensing.ErrInstanceNotFound) {

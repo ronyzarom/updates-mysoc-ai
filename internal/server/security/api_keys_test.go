@@ -62,6 +62,8 @@ func TestNormalizeScope(t *testing.T) {
 		{"  Releases ", ScopeReleases, false},
 		{"admin", ScopeAdmin, false},
 		{"ADMIN", ScopeAdmin, false},
+		{"update-group", ScopeUpdateGroup, false},
+		{"  Update-Group ", ScopeUpdateGroup, false},
 		{"root", "", true},
 		{"write", "", true},
 	}
@@ -88,10 +90,15 @@ func TestScopeAllows(t *testing.T) {
 		required string
 		want     bool
 	}{
-		{ScopeAdmin, ScopeReleases, true}, // admin covers everything
-		{ScopeAdmin, ScopeAdmin, true},    // admin covers admin
+		{ScopeAdmin, ScopeReleases, true},    // admin covers everything
+		{ScopeAdmin, ScopeAdmin, true},       // admin covers admin
+		{ScopeAdmin, ScopeUpdateGroup, true}, // admin covers update-group
 		{ScopeReleases, ScopeReleases, true},
-		{ScopeReleases, ScopeAdmin, false}, // releases cannot do admin
+		{ScopeReleases, ScopeAdmin, false},       // releases cannot do admin
+		{ScopeReleases, ScopeUpdateGroup, false}, // releases cannot set rings
+		{ScopeUpdateGroup, ScopeUpdateGroup, true},
+		{ScopeUpdateGroup, ScopeReleases, false}, // update-group cannot do releases
+		{ScopeUpdateGroup, ScopeAdmin, false},    // update-group cannot do admin
 	}
 	for _, c := range cases {
 		if got := ScopeAllows(c.keyScope, c.required); got != c.want {

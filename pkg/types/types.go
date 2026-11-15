@@ -172,20 +172,28 @@ type UpdateAttempt struct {
 
 // Heartbeat is the payload sent by updaters
 type Heartbeat struct {
-	InstanceID       string          `json:"instance_id"`
-	InstanceType     string          `json:"instance_type"`
-	ProductTier      string          `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
-	ParentInstanceID string          `json:"parent_instance_id,omitempty"` // parent node's instance_id (self-reported)
-	CustomerID       string          `json:"customer_id,omitempty"`        // end customer this node serves
-	CustomerName     string          `json:"customer_name,omitempty"`      // human-friendly customer label
-	Hostname         string          `json:"hostname"`
-	UpdaterVersion   string          `json:"updater_version"`
-	ConfigHash       string          `json:"config_hash"`
-	License          LicenseStatus   `json:"license"`
-	Products         []ProductStatus `json:"products"`
-	System           SystemMetrics   `json:"system"`
-	Security         SecurityStatus  `json:"security,omitempty"`
-	Timestamp        time.Time       `json:"timestamp"`
+	InstanceID       string `json:"instance_id"`
+	InstanceType     string `json:"instance_type"`
+	ProductTier      string `json:"product_tier,omitempty"`       // canonical tier: mysoc, siemcore, swf
+	ParentInstanceID string `json:"parent_instance_id,omitempty"` // parent node's instance_id (self-reported)
+	CustomerID       string `json:"customer_id,omitempty"`        // end customer this node serves
+	CustomerName     string `json:"customer_name,omitempty"`      // human-friendly customer label
+	// RequestedUpdateGroup is the ring the node asks to enrol into (from its
+	// config). It is honored ONLY when the server first CREATES this instance
+	// row (a brand-new instance_id); every later heartbeat ignores it, so a
+	// node can never self-promote its ring after enrolment — only an admin or a
+	// scoped update-group key moves it thereafter. Empty/invalid -> "stable".
+	// Additive: older servers ignore it and new instances keep defaulting to
+	// stable. See docs and migration 020.
+	RequestedUpdateGroup string          `json:"requested_update_group,omitempty"`
+	Hostname             string          `json:"hostname"`
+	UpdaterVersion       string          `json:"updater_version"`
+	ConfigHash           string          `json:"config_hash"`
+	License              LicenseStatus   `json:"license"`
+	Products             []ProductStatus `json:"products"`
+	System               SystemMetrics   `json:"system"`
+	Security             SecurityStatus  `json:"security,omitempty"`
+	Timestamp            time.Time       `json:"timestamp"`
 
 	// Last update attempt (included in next heartbeat after install)
 	LastUpdateAttempt *UpdateAttempt `json:"last_update_attempt,omitempty"`
@@ -297,12 +305,17 @@ type ChildReport struct {
 	// leaves it empty (parentage is implied by nesting), but the flat delta
 	// inventory stream carries it so the server can reconstruct the tree
 	// without nesting.
-	ParentInstanceID string          `json:"parent_instance_id,omitempty"`
-	CustomerID       string          `json:"customer_id,omitempty"`
-	CustomerName     string          `json:"customer_name,omitempty"`
-	Hostname         string          `json:"hostname,omitempty"`
-	UpdaterVersion   string          `json:"updater_version,omitempty"`
-	Products         []ProductStatus `json:"products,omitempty"`
+	ParentInstanceID string `json:"parent_instance_id,omitempty"`
+	CustomerID       string `json:"customer_id,omitempty"`
+	CustomerName     string `json:"customer_name,omitempty"`
+	// RequestedUpdateGroup rolls up a cascade child's desired enrolment ring so
+	// the server can honor it when it first creates the child's row (relays
+	// forward it from the child's heartbeat). Same first-create-only semantics
+	// as Heartbeat.RequestedUpdateGroup. Additive.
+	RequestedUpdateGroup string          `json:"requested_update_group,omitempty"`
+	Hostname             string          `json:"hostname,omitempty"`
+	UpdaterVersion       string          `json:"updater_version,omitempty"`
+	Products             []ProductStatus `json:"products,omitempty"`
 	// System carries the child's host identity and measurements so cascaded
 	// nodes render OS/arch/uptime/metrics on the dashboard like direct ones.
 	System            *SystemMetrics `json:"system,omitempty"`

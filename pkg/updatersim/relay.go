@@ -551,20 +551,23 @@ func attemptChanged(prev, next *platformtypes.UpdateAttempt) bool {
 func childReport(hb platformtypes.Heartbeat, status string, lastSeen time.Time, sourceIP string) platformtypes.ChildReport {
 	system := hb.System
 	return platformtypes.ChildReport{
-		InstanceID:        hb.InstanceID,
-		InstanceType:      hb.InstanceType,
-		ProductTier:       hb.ProductTier,
-		ParentInstanceID:  hb.ParentInstanceID,
-		CustomerID:        hb.CustomerID,
-		CustomerName:      hb.CustomerName,
-		Hostname:          hb.Hostname,
-		UpdaterVersion:    hb.UpdaterVersion,
-		Products:          hb.Products,
-		System:            &system,
-		Status:            status,
-		LastSeen:          lastSeen,
-		LastUpdateAttempt: hb.LastUpdateAttempt,
-		SourceIP:          sourceIP,
+		InstanceID:       hb.InstanceID,
+		InstanceType:     hb.InstanceType,
+		ProductTier:      hb.ProductTier,
+		ParentInstanceID: hb.ParentInstanceID,
+		CustomerID:       hb.CustomerID,
+		CustomerName:     hb.CustomerName,
+		// Forward the child's requested enrolment ring so the server can honor
+		// it when it first creates the child's row (first-create only upstream).
+		RequestedUpdateGroup: hb.RequestedUpdateGroup,
+		Hostname:             hb.Hostname,
+		UpdaterVersion:       hb.UpdaterVersion,
+		Products:             hb.Products,
+		System:               &system,
+		Status:               status,
+		LastSeen:             lastSeen,
+		LastUpdateAttempt:    hb.LastUpdateAttempt,
+		SourceIP:             sourceIP,
 	}
 }
 

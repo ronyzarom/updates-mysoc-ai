@@ -22,6 +22,11 @@ const (
 	// ScopeAdmin authorizes the full admin surface, equivalent to the static
 	// ADMIN_API_KEY environment credential.
 	ScopeAdmin = "admin"
+	// ScopeUpdateGroup authorizes moving instances between update rings
+	// (PUT /instances/{id}/update-group) and nothing else. Combined with a
+	// ProductTier binding it lets an operator self-service only their own
+	// tier's rings without any wider admin power.
+	ScopeUpdateGroup = "update-group"
 )
 
 // apiKeyPrefix is prepended to every generated key so credentials are easy to
@@ -34,15 +39,18 @@ var ErrAPIKeyNotFound = fmt.Errorf("api key not found")
 // APIKey is the non-sensitive metadata for a managed credential. The plaintext
 // key is never stored or returned by reads — only at creation time.
 type APIKey struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	KeyPrefix  string     `json:"key_prefix"`
-	Scope      string     `json:"scope"`
-	CreatedBy  string     `json:"created_by,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	KeyPrefix string `json:"key_prefix"`
+	Scope     string `json:"scope"`
+	// ProductTier, when non-empty, binds the key to a single tier: actions it
+	// authorizes may only touch instances of that tier (see ScopeUpdateGroup).
+	ProductTier string     `json:"product_tier,omitempty"`
+	CreatedBy   string     `json:"created_by,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
 	// Status is a derived convenience field: active | expired | revoked.
 	Status string `json:"status"`
 }
@@ -65,8 +73,10 @@ func NormalizeScope(scope string) (string, error) {
 		return ScopeReleases, nil
 	case ScopeAdmin:
 		return ScopeAdmin, nil
+	case ScopeUpdateGroup:
+		return ScopeUpdateGroup, nil
 	default:
-		return "", fmt.Errorf("invalid scope %q (must be %q or %q)", scope, ScopeReleases, ScopeAdmin)
+		return "", fmt.Errorf("invalid scope %q (must be %q, %q, or %q)", scope, ScopeReleases, ScopeAdmin, ScopeUpdateGroup)
 	}
 }
 
@@ -102,7 +112,7 @@ func HashAPIKey(full string) string {
 
 // Create generates and stores a new API key. It returns the plaintext key
 // (shown once) alongside its stored metadata.
-func (r *APIKeyRepository) Create(ctx context.Context, name, scope, createdBy string, expiresAt *time.Time) (fullKey string, meta *APIKey, err error) {
+func (r *APIKeyRepository) Create(ctx context.Context, name, scope, productTier, createdBy string, expiresAt *time.Time) (fullKey string, meta *APIKey, err error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", nil, fmt.Errorf("name is required")
@@ -110,6 +120,11 @@ func (r *APIKeyRepository) Create(ctx context.Context, name, scope, createdBy st
 	normalizedScope, err := NormalizeScope(scope)
 	if err != nil {
 		return "", nil, err
+	}
+	productTier = strings.ToLower(strings.TrimSpace(productTier))
+	var productTierPtr *string
+	if productTier != "" {
+		productTierPtr = &productTier
 	}
 	if expiresAt != nil && !expiresAt.After(time.Now()) {
 		return "", nil, fmt.Errorf("expiry must be in the future")
@@ -128,22 +143,23 @@ func (r *APIKeyRepository) Create(ctx context.Context, name, scope, createdBy st
 	}
 
 	_, err = r.db.Pool.Exec(ctx, `
-		INSERT INTO api_keys (id, name, key_hash, key_prefix, scope, created_by, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, id, name, hash, prefix, normalizedScope, createdByPtr, now, expiresAt)
+		INSERT INTO api_keys (id, name, key_hash, key_prefix, scope, product_tier, created_by, created_at, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, id, name, hash, prefix, normalizedScope, productTierPtr, createdByPtr, now, expiresAt)
 	if err != nil {
 		return "", nil, fmt.Errorf("create api key: %w", err)
 	}
 
 	meta = &APIKey{
-		ID:        id,
-		Name:      name,
-		KeyPrefix: prefix,
-		Scope:     normalizedScope,
-		CreatedBy: strings.TrimSpace(createdBy),
-		CreatedAt: now,
-		ExpiresAt: expiresAt,
-		Status:    "active",
+		ID:          id,
+		Name:        name,
+		KeyPrefix:   prefix,
+		Scope:       normalizedScope,
+		ProductTier: productTier,
+		CreatedBy:   strings.TrimSpace(createdBy),
+		CreatedAt:   now,
+		ExpiresAt:   expiresAt,
+		Status:      "active",
 	}
 	return full, meta, nil
 }
@@ -151,7 +167,7 @@ func (r *APIKeyRepository) Create(ctx context.Context, name, scope, createdBy st
 // List returns all API keys, newest first, with a derived status.
 func (r *APIKeyRepository) List(ctx context.Context) ([]APIKey, error) {
 	rows, err := r.db.Pool.Query(ctx, `
-		SELECT id, name, key_prefix, scope, created_by, created_at, expires_at, last_used_at, revoked_at
+		SELECT id, name, key_prefix, scope, product_tier, created_by, created_at, expires_at, last_used_at, revoked_at
 		FROM api_keys
 		ORDER BY created_at DESC
 	`)
@@ -163,13 +179,16 @@ func (r *APIKeyRepository) List(ctx context.Context) ([]APIKey, error) {
 	var keys []APIKey
 	for rows.Next() {
 		var k APIKey
-		var createdBy *string
-		if err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.Scope, &createdBy,
+		var createdBy, productTier *string
+		if err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.Scope, &productTier, &createdBy,
 			&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt); err != nil {
 			return nil, fmt.Errorf("scan api key: %w", err)
 		}
 		if createdBy != nil {
 			k.CreatedBy = *createdBy
+		}
+		if productTier != nil {
+			k.ProductTier = *productTier
 		}
 		k.Status = deriveStatus(k.ExpiresAt, k.RevokedAt)
 		keys = append(keys, k)
@@ -202,12 +221,12 @@ func (r *APIKeyRepository) Authenticate(ctx context.Context, presented string) (
 	hash := HashAPIKey(presented)
 
 	var k APIKey
-	var createdBy *string
+	var createdBy, productTier *string
 	err := r.db.Pool.QueryRow(ctx, `
-		SELECT id, name, key_prefix, scope, created_by, created_at, expires_at, last_used_at, revoked_at
+		SELECT id, name, key_prefix, scope, product_tier, created_by, created_at, expires_at, last_used_at, revoked_at
 		FROM api_keys
 		WHERE key_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())
-	`, hash).Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.Scope, &createdBy,
+	`, hash).Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.Scope, &productTier, &createdBy,
 		&k.CreatedAt, &k.ExpiresAt, &k.LastUsedAt, &k.RevokedAt)
 	if err != nil {
 		// pgx returns ErrNoRows when nothing matched; treat as "no match".
@@ -224,6 +243,9 @@ func (r *APIKeyRepository) Authenticate(ctx context.Context, presented string) (
 	}
 	if createdBy != nil {
 		k.CreatedBy = *createdBy
+	}
+	if productTier != nil {
+		k.ProductTier = *productTier
 	}
 	k.Status = "active"
 

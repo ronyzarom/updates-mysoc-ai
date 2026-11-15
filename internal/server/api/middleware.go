@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"net/http"
 	"strings"
@@ -8,6 +9,19 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/auth"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/security"
 )
+
+// ctxKeyAPIKey is the context key under which requireScope stashes the managed
+// API key that authenticated the request (nil for the static master key or an
+// admin JWT, which carry no per-tier binding). Handlers read it to enforce a
+// key's ProductTier binding — see apiKeyFromContext.
+type ctxKeyAPIKey struct{}
+
+// apiKeyFromContext returns the managed API key that authenticated the request,
+// or nil when the caller used the static master key, an admin JWT, or no key.
+func apiKeyFromContext(ctx context.Context) *security.APIKey {
+	key, _ := ctx.Value(ctxKeyAPIKey{}).(*security.APIKey)
+	return key
+}
 
 // adminAuth authorizes the full admin surface. It is a convenience alias for
 // requireScope(security.ScopeAdmin).
@@ -50,7 +64,10 @@ func (s *Server) requireScope(scope string) func(http.Handler) http.Handler {
 					}
 					if key != nil {
 						if security.ScopeAllows(key.Scope, scope) {
-							next.ServeHTTP(w, r)
+							// Stash the key so handlers can enforce a per-tier
+							// binding (e.g. a self-service update-group key).
+							ctx := context.WithValue(r.Context(), ctxKeyAPIKey{}, key)
+							next.ServeHTTP(w, r.WithContext(ctx))
 							return
 						}
 						writeError(w, http.StatusForbidden, "api key not authorized for this action")

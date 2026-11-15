@@ -98,6 +98,62 @@ func TestEnrollmentDefaultsPreserveExplicitHolds(t *testing.T) {
 			}
 		})
 	}
+	// A brand-new node may request its enrolment ring; the server honors it on
+	// first create, then the ring is sticky (a later heartbeat cannot move it).
+	for _, path := range []string{"check", "heartbeat", "rollup"} {
+		t.Run("requested-group/"+path, func(t *testing.T) {
+			id := "req-" + path
+			createWith := func(group string) error {
+				beat := &types.Heartbeat{InstanceID: id, ProductTier: "siemcore", ParentInstanceID: "relay", RequestedUpdateGroup: group}
+				switch path {
+				case "heartbeat":
+					return repo.UpsertFromHeartbeat(ctx, id, beat, "", "127.0.0.1")
+				case "rollup":
+					_, _, err := repo.UpsertReportedChildren(ctx, "relay", "", []types.ChildReport{{
+						InstanceID: id, ProductTier: "siemcore", Status: "online", LastSeen: time.Now(), RequestedUpdateGroup: group,
+					}})
+					return err
+				default:
+					return repo.TouchFromCheck(ctx, id, beat, "", "127.0.0.1")
+				}
+			}
+			// First enrol into alpha.
+			if err := createWith("alpha"); err != nil {
+				t.Fatal(err)
+			}
+			var group string
+			if err := pool.QueryRow(ctx, "SELECT update_group FROM instances WHERE instance_id=$1", id).Scan(&group); err != nil {
+				t.Fatal(err)
+			}
+			if group != "alpha" {
+				t.Fatalf("requested ring not honored on first enrol: got %q, want alpha", group)
+			}
+			// A later contact requesting beta must NOT move it (sticky).
+			if err := createWith("beta"); err != nil {
+				t.Fatal(err)
+			}
+			if err := pool.QueryRow(ctx, "SELECT update_group FROM instances WHERE instance_id=$1", id).Scan(&group); err != nil {
+				t.Fatal(err)
+			}
+			if group != "alpha" {
+				t.Fatalf("requested ring self-promoted after enrol: got %q, want alpha (sticky)", group)
+			}
+		})
+	}
+	t.Run("requested-group/empty-defaults-stable", func(t *testing.T) {
+		beat := &types.Heartbeat{InstanceID: "req-empty", ProductTier: "siemcore", ParentInstanceID: "relay"}
+		if err := repo.UpsertFromHeartbeat(ctx, "req-empty", beat, "", "127.0.0.1"); err != nil {
+			t.Fatal(err)
+		}
+		var group string
+		if err := pool.QueryRow(ctx, "SELECT update_group FROM instances WHERE instance_id='req-empty'").Scan(&group); err != nil {
+			t.Fatal(err)
+		}
+		if group != "stable" {
+			t.Fatalf("no requested ring must default to stable, got %q", group)
+		}
+	})
+
 	t.Run("dual status persists into compact fleet list", func(t *testing.T) {
 		attempt := &types.UpdateAttempt{FromVersion: "1.0.0", TargetVersion: "1.0.1", Success: true, Timestamp: time.Now(), SelectedArtifactKind: "update", DependencyValidation: "complete", ArtifactDigest: "fixture-digest"}
 		beat := &types.Heartbeat{InstanceID: "check-child", LastUpdateAttempt: attempt}

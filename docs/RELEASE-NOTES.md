@@ -9,12 +9,86 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
+## 1.19.0 — Self-service rings: enrol-into-a-ring + scoped ring key
+
+**Build:** 1.19.0.1 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Status:** **built + validated locally; NOT deployed.** Server deploy and the
+SiemCore self-service key issuance are separate gates awaiting Rony's explicit
+go. The migration (020) and the new auth surface change the **server**, so this
+needs a server deploy before either feature is live.
+
+Two features that let an operator stop hand-moving new nodes between rings — the
+pain behind SiemCore's pod-a "new id landed in stable, move it to alpha" step.
+
+### #2 Enrolment can request a ring (server + updater + relay + contract)
+
+A node may declare its desired ring in config (`instance.update_group`); the
+server honors it **only when it first creates that node's instance row** (a
+brand-new `instance_id`). Every later heartbeat ignores it, so a node can never
+self-promote its ring after enrolment — thereafter the ring is server-owned (an
+admin, or the new scoped key below, moves it). Empty/invalid → `stable` (the
+unchanged default), so this is fully backward compatible.
+
+- **Contract (additive):** `Heartbeat.RequestedUpdateGroup` and
+  `ChildReport.RequestedUpdateGroup` (`requested_update_group`). Older servers
+  ignore it; new instances still default to stable.
+- **Server honours it on first-create in all three enrolment paths** —
+  `UpsertFromHeartbeat` (direct nodes), `TouchFromCheck` (a check seen before
+  the first heartbeat), and the cascade rollup (`UpsertReportedChildren` /
+  `IngestDelta`). Each `ON CONFLICT` deliberately omits `update_group`, so the
+  ring stays sticky after first enrolment. Proven against real Postgres:
+  honored on first enrol, unchanged on a later request, empty→stable.
+- **Updater** sends `instance.update_group` from config on every heartbeat.
+- **Relay** forwards a child's requested ring up the cascade (`childReport`).
+  **Cross-project:** for SiemCore's *cascade* pods the real relay is mysoc-ai's;
+  it must run a build carrying this `ChildReport` field for the pod case to
+  work end-to-end (coordinated on the hub). Direct nodes work with this build
+  alone.
+
+### #3 Scoped self-service ring key (`update-group` scope + tier binding)
+
+A new least-privilege managed-key scope **`update-group`** authorizes ONLY
+`PUT /instances/{id}/update-group` (move a node between rings) and nothing else.
+A key may additionally be **bound to one product tier** (`product_tier`): it may
+then set the ring of only that tier's instances. So SiemCore can hold one key
+that moves only SiemCore nodes' rings, with no other admin power and no reach
+into another tier's fleet. This is the "SiemCore has a key and that's it" shape
+for ring control.
+
+- Migration **020**: adds `api_keys.product_tier` and widens the scope CHECK to
+  include `update-group`; the down migration refuses to roll back while any key
+  still uses the new scope or a tier binding (validated up + guarded down).
+- `requireScope` stashes the authenticating managed key in context;
+  `handleSetUpdateGroup` enforces the tier binding (403 across tiers; 404 for a
+  missing instance). The static master key and admin JWTs are unbound/unrestricted.
+- `POST /admin/api-keys` accepts `{"scope":"update-group","product_tier":"siemcore"}`.
+  The plaintext key is returned once — issuing SiemCore's key is a deploy-time
+  secret step (never in a hub message), gated on Rony.
+
+**Relay compatibility:** additive only. The child-facing (`:18443`) contract is
+unchanged (the child-contract golden test is untouched); `RequestedUpdateGroup`
+rides the upward rollup, which older servers ignore. No minimum hop version.
+
+**Validation (clean once committed):** gofmt/vet/build; `go test ./...`; new unit
+tests (scope allow/normalize incl. update-group; `normalizeRequestedUpdateGroup`;
+relay `childReport` forwarding); DB-gated enrolment test extended for
+request-a-ring across all three paths (run against Postgres 15); migration 020
+up/down exercised against Postgres 15.
+
+**Follow-on (not in this build):** wiring the siemcore/mysoc enrol scripts to
+render `instance.update_group` from `server.conf` so the one-liner itself can
+target a ring (operators can set it in `config.yaml` by hand today); mysoc-ai
+relay carrying the new `ChildReport` field for the cascade-pod case.
+
+---
+
 ## 1.18.2 — Availability measurement reflects actual outage, not apply wall-clock
 
-**Build:** 1.18.2.1 · commit _pending_ · tag _pending_ · branch `version/1.18.2`.
-**Status:** **validated locally, not deployed.** Awaiting an explicit deploy
-instruction. This is an updater-only change (`pkg/updatersim`); the server is
-unchanged.
+**Build:** 1.18.2.1 · commit `8a8bb96` · tag `v1.18.2.1` · branch `version/1.18.2`.
+**Status:** **published to alpha** (`updater-linux-amd64` sha256 `049b6340…`,
+`updater-linux-arm64` sha256 `9478cd3b…`) on Rony's explicit go, 2026-11-17.
+Soak on alpha pending; no widening without it plus a per-ring go. This is an
+updater-only change (`pkg/updatersim`); the server is unchanged (`1.18.0.2`).
 
 **Problem.** `unavailable_seconds` (invariant 7) was the restart command's full
 wall-clock duration. For a cascade apply whose wrapper keeps running validation

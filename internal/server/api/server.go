@@ -234,7 +234,10 @@ func (s *Server) setupRoutes() {
 			r.With(s.adminAuth).Get("/{id}/inactive-children", s.handleInactiveChildren)
 			r.With(s.adminAuth).Post("/{id}/cleanup-children", s.handleCleanupChildren)
 			r.With(s.adminAuth).Put("/{id}/auto-update", s.handleSetAutoUpdate)
-			r.With(s.adminAuth).Put("/{id}/update-group", s.handleSetUpdateGroup)
+			// update-group accepts the dedicated least-privilege scope (or a
+			// full-admin key / admin JWT). A scoped key may additionally be
+			// bound to one product tier — enforced in handleSetUpdateGroup.
+			r.With(s.requireScope(security.ScopeUpdateGroup)).Put("/{id}/update-group", s.handleSetUpdateGroup)
 		})
 
 		// =====================

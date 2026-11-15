@@ -16,6 +16,10 @@ type CreateAPIKeyRequest struct {
 	Name string `json:"name"`
 	// Scope defaults to "releases" (least privilege) when empty.
 	Scope string `json:"scope,omitempty"`
+	// ProductTier optionally binds the key to a single tier (e.g. "siemcore"):
+	// actions it authorizes may then only touch instances of that tier. Most
+	// useful with scope="update-group" for operator self-service ring control.
+	ProductTier string `json:"product_tier,omitempty"`
 	// ExpiresInDays optionally sets an expiry; 0 or omitted means never expires.
 	ExpiresInDays int `json:"expires_in_days,omitempty"`
 }
@@ -50,7 +54,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		createdBy = user.Email
 	}
 
-	fullKey, meta, err := s.apiKeys.Create(r.Context(), req.Name, req.Scope, createdBy, expiresAt)
+	fullKey, meta, err := s.apiKeys.Create(r.Context(), req.Name, req.Scope, req.ProductTier, createdBy, expiresAt)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

@@ -1005,15 +1005,16 @@ func (s *Simulator) buildHeartbeat() platformtypes.Heartbeat {
 	}
 
 	return platformtypes.Heartbeat{
-		InstanceID:       s.config.Instance.ID,
-		InstanceType:     s.config.Instance.Type,
-		ProductTier:      s.config.Instance.ProductTier,
-		ParentInstanceID: s.config.Instance.ParentID,
-		CustomerID:       s.config.Instance.CustomerID,
-		CustomerName:     s.config.Instance.CustomerName,
-		Hostname:         s.config.Instance.Hostname,
-		UpdaterVersion:   s.config.Instance.UpdaterVersion,
-		ConfigHash:       s.configHash(),
+		InstanceID:           s.config.Instance.ID,
+		InstanceType:         s.config.Instance.Type,
+		ProductTier:          s.config.Instance.ProductTier,
+		ParentInstanceID:     s.config.Instance.ParentID,
+		CustomerID:           s.config.Instance.CustomerID,
+		CustomerName:         s.config.Instance.CustomerName,
+		RequestedUpdateGroup: s.config.Instance.UpdateGroup,
+		Hostname:             s.config.Instance.Hostname,
+		UpdaterVersion:       s.config.Instance.UpdaterVersion,
+		ConfigHash:           s.configHash(),
 		License: platformtypes.LicenseStatus{
 			Valid:     s.config.Server.LicenseKey != "",
 			LastCheck: time.Now().UTC(),

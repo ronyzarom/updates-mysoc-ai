@@ -306,6 +306,14 @@ type InstanceConfig struct {
 	CustomerID string `yaml:"customer_id,omitempty"`
 	// CustomerName is the human-friendly customer label.
 	CustomerName string `yaml:"customer_name,omitempty"`
+	// UpdateGroup is the ring this node asks to enrol into (alpha/beta/stable/
+	// production). It is sent on every heartbeat but the server honors it ONLY
+	// when it first creates this node's instance row; thereafter the ring is
+	// server-owned (an admin or a scoped update-group key moves it). Empty or
+	// invalid -> the server defaults a new node to stable. Lets an operator run
+	// the one-line install straight into a ring (e.g. alpha) with no manual
+	// server-side move afterward.
+	UpdateGroup string `yaml:"update_group,omitempty"`
 }
 
 // HeartbeatConfig controls the simulator loop.
