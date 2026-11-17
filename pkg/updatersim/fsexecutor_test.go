@@ -222,15 +222,23 @@ func TestFilesystemExecutorPhaseArgumentAndEnv(t *testing.T) {
 	}
 }
 
-// TestFilesystemExecutorMeasuresRestartWindow proves the executor records the
-// restart window (invariant 7) and flags a violation when it exceeds the budget
-// WITHOUT aborting the apply — the install still completes.
+// TestFilesystemExecutorMeasuresRestartWindow proves the executor measures the
+// actual outage — the window the health command did not pass — and NOT the
+// restart command's wall-clock duration. This is the invariant-7 measurement
+// fix: a cascade apply that is down briefly and then keeps running validation
+// long after the app is back must report only the brief down window. The budget
+// breach flags a violation WITHOUT aborting the apply.
 func TestFilesystemExecutorMeasuresRestartWindow(t *testing.T) {
 	root := t.TempDir()
-	// A restart command that takes ~1s with a 0s... use a tiny budget so the
-	// ~1s restart is a violation, and confirm the apply still succeeds.
-	script := filepath.Join(t.TempDir(), "slow-restart.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 1\n"), 0o755); err != nil {
+	// The health command is healthy unless a marker file exists. The restart
+	// command drops health (marker present) for ~3s, then stays HEALTHY for a
+	// further ~5s while it "validates" — mimicking a cascade apply whose wrapper
+	// keeps working after the app is back. The measured window must reflect the
+	// ~3s outage, not the ~8s command.
+	down := filepath.Join(t.TempDir(), "DOWN")
+	restart := filepath.Join(t.TempDir(), "restart.sh")
+	restartBody := "#!/bin/sh\ntouch " + down + "\nsleep 3\nrm -f " + down + "\nsleep 5\n"
+	if err := os.WriteFile(restart, []byte(restartBody), 0o755); err != nil {
 		t.Fatalf("write restart script: %v", err)
 	}
 	artifact := filepath.Join(t.TempDir(), "siemcore-v1.0.0.artifact")
@@ -238,21 +246,29 @@ func TestFilesystemExecutorMeasuresRestartWindow(t *testing.T) {
 
 	e := NewFilesystemExecutor(FilesystemConfig{
 		InstallRoot:           root,
-		RestartCommand:        []string{script},
+		RestartCommand:        []string{restart},
+		HealthCommand:         []string{"sh", "-c", "test ! -f " + down},
 		CommandTimeout:        Duration{Duration: defaultCommandTimeout},
-		MaxUnavailableSeconds: 1, // tiny budget; the ~1s restart may breach it
+		MaxUnavailableSeconds: 1, // tiny budget; the ~3s outage breaches it
 	}, nil)
 	update := Update{Product: "siemcore", FromVersion: "v0.9.0", ToVersion: "v1.0.0", ArtifactPath: artifact}
 
 	if err := e.Apply(context.Background(), update); err != nil {
 		t.Fatalf("apply must complete even when the window is exceeded: %v", err)
 	}
-	seconds, _ := e.LastUnavailable()
+	seconds, violation := e.LastUnavailable()
 	if seconds < 1 {
-		t.Fatalf("restart window = %ds, want >= 1s", seconds)
+		t.Fatalf("restart window = %ds, want >= 1s (the measured outage)", seconds)
+	}
+	if seconds > 5 {
+		t.Fatalf("restart window = %ds, want << 8s command: the post-recovery validation must not be counted", seconds)
+	}
+	if !violation {
+		t.Fatalf("a %ds outage over a 1s budget must flag a violation", seconds)
 	}
 
-	// A fast restart with a generous budget is not a violation.
+	// A restart whose health never drops is zero-downtime: no window, no
+	// violation, even with a tiny budget.
 	fast := filepath.Join(t.TempDir(), "fast-restart.sh")
 	if err := os.WriteFile(fast, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write fast restart: %v", err)
@@ -260,14 +276,15 @@ func TestFilesystemExecutorMeasuresRestartWindow(t *testing.T) {
 	e2 := NewFilesystemExecutor(FilesystemConfig{
 		InstallRoot:           t.TempDir(),
 		RestartCommand:        []string{fast},
+		HealthCommand:         []string{"sh", "-c", "exit 0"}, // always healthy
 		CommandTimeout:        Duration{Duration: defaultCommandTimeout},
-		MaxUnavailableSeconds: 120,
+		MaxUnavailableSeconds: 1,
 	}, nil)
 	if err := e2.Apply(context.Background(), update); err != nil {
 		t.Fatalf("fast apply: %v", err)
 	}
-	if _, violation := e2.LastUnavailable(); violation {
-		t.Fatalf("a fast restart must not flag an availability violation")
+	if s, violation := e2.LastUnavailable(); violation || s != 0 {
+		t.Fatalf("a zero-downtime restart must not flag a violation (got %ds/%v)", s, violation)
 	}
 }
 

@@ -9,6 +9,40 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
+## 1.18.2 — Availability measurement reflects actual outage, not apply wall-clock
+
+**Build:** 1.18.2.1 · commit _pending_ · tag _pending_ · branch `version/1.18.2`.
+**Status:** **validated locally, not deployed.** Awaiting an explicit deploy
+instruction. This is an updater-only change (`pkg/updatersim`); the server is
+unchanged.
+
+**Problem.** `unavailable_seconds` (invariant 7) was the restart command's full
+wall-clock duration. For a cascade apply whose wrapper keeps running validation
+long after the app is back up, that counted ~2 minutes of "up" time as downtime,
+producing a false `availability_violation` and WARN "restart window exceeded
+availability budget". SiemCore saw ~133s reported for a real outage of ~17–30s.
+
+**Fix.** `FilesystemExecutor.restartAndMeasure` no longer times the command. While
+the restart runs, it polls the configured `health_command` once per second and
+counts only the contiguous window during which health did not pass (first
+down→first up-after-down). Behaviour:
+
+- Health that never drops (zero-downtime restart) → window `0`, no violation.
+- No `health_command` configured → nothing to probe → window `0` (matches the
+  `FilesystemConfig.max_unavailable_seconds` doc: a health command is required to
+  measure anything).
+- `first_install` is still never measured (whole-host provisioning).
+- A real outage over `max_unavailable_seconds` still flags the violation, still
+  **never aborts** the in-flight change.
+
+**Relay compatibility.** None. `unavailable_seconds`/`availability_violation`
+wire fields are unchanged; only the value computed for `unavailable_seconds`
+changes (now smaller and accurate). Older/newer hops interoperate freely.
+
+**Note for the promotion gate.** This must land before the server-side widening
+gate is wired to actually *consume* violations — otherwise a legitimate ~2-min
+cascade apply would falsely 409 at beta on today's overcounted signal.
+
 ## 1.18.1 — SiemCore one-command fresh install (kit + bootstrap only)
 
 **Build:** 1.18.1.5 · commit _pending_ · tag `v1.18.1.5` · branch `version/1.18.1`.

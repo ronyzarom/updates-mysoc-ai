@@ -249,27 +249,119 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 	return nil
 }
 
+// healthProbeInterval is how often restartAndMeasure samples the health command
+// while the restart runs; healthProbeTimeout bounds each sample so a refused
+// connection during the outage returns promptly.
+const (
+	healthProbeInterval = 1 * time.Second
+	healthProbeTimeout  = 5 * time.Second
+)
+
 // restartAndMeasure runs the restart command for a phase and records the
-// restart window as the restart command's wall-clock duration. The restart
-// command runs the product entrypoint for the phase, which performs the restart
-// and its own readiness gating, so its duration is the user-visible outage
-// (invariant 7). A window longer than MaxUnavailableSeconds sets
-// lastAvailabilityViolation but never aborts the in-flight change — aborting
-// would only lengthen the outage. Validate remains the authoritative health gate
-// run immediately after, so this adds no extra health probes.
+// restart window — the time the product was actually unavailable (invariant 7),
+// NOT the restart command's wall-clock duration. The restart command runs the
+// product entrypoint, which performs the swap, its own readiness gating, AND
+// (for a cascade apply) a long validation that continues long after the app is
+// back up; timing the whole command therefore massively overcounted a slow
+// apply as downtime. Instead, while the command runs, we poll the configured
+// health command and count only the contiguous window during which it did not
+// pass. Health that never drops (zero-downtime) yields 0; the post-recovery
+// validation time is "up" and is not counted. A window longer than
+// MaxUnavailableSeconds flags lastAvailabilityViolation but never aborts the
+// in-flight change — aborting would only lengthen the outage.
 func (e *FilesystemExecutor) restartAndMeasure(ctx context.Context, phase string, update Update) error {
-	start := time.Now()
-	err := e.runCommand(ctx, "restart", phase, e.RestartCommand, update)
 	// first_install is whole-host provisioning, not a steady-state restart
-	// window: measuring it would mark every fresh host as a violation. The
+	// window: measuring it would mark every fresh host as a violation. With no
+	// health command there is nothing to probe, so nothing is measured either
+	// (documented on FilesystemConfig.MaxUnavailableSeconds). In both cases the
 	// window stays at its reset value (0, no violation).
-	if phase != firstInstallPhase {
-		e.recordUnavailable(time.Since(start))
+	if phase == firstInstallPhase || len(e.HealthCommand) == 0 {
+		return e.runCommand(ctx, "restart", phase, e.RestartCommand, update)
 	}
+
+	cmdErr := make(chan error, 1)
+	go func() { cmdErr <- e.runCommand(ctx, "restart", phase, e.RestartCommand, update) }()
+	window, err := e.measureUnavailable(ctx, update, cmdErr)
+	e.recordUnavailable(window)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// measureUnavailable polls the health command while the restart command runs and
+// returns the restart window — from the first probe that found the product
+// unavailable to the first probe that found it healthy again — together with the
+// restart command's exit error. Probing is read-only and quiet, so it is safe to
+// run alongside the restart. If health never drops, or the command finishes
+// before a drop is observed, the window is zero.
+func (e *FilesystemExecutor) measureUnavailable(ctx context.Context, update Update, cmdErr <-chan error) (time.Duration, error) {
+	ticker := time.NewTicker(healthProbeInterval)
+	defer ticker.Stop()
+
+	var downStart time.Time
+	var window time.Duration
+	recovered := false
+	for {
+		select {
+		case err := <-cmdErr:
+			// Restart finished. If the product went down and never came back
+			// within the command, count the outage up to now.
+			if !downStart.IsZero() && !recovered {
+				window = time.Since(downStart)
+			}
+			return window, err
+		case <-ticker.C:
+			if recovered {
+				continue // the restart window is the first down→up cycle
+			}
+			if e.probeHealthy(ctx, update) {
+				if !downStart.IsZero() {
+					window = time.Since(downStart)
+					recovered = true
+				}
+				continue
+			}
+			if downStart.IsZero() {
+				downStart = time.Now()
+			}
+		}
+	}
+}
+
+// probeHealthy runs the configured health command once, with a short timeout,
+// and reports whether it passed (exit 0). It mirrors how Validate invokes the
+// health command (same phase, env, and hardening) but is quiet and bounded so it
+// can be polled repeatedly during a restart.
+func (e *FilesystemExecutor) probeHealthy(ctx context.Context, update Update) bool {
+	if len(e.HealthCommand) == 0 {
+		return true
+	}
+	timeout := healthProbeTimeout
+	if e.CommandTimeout > 0 && e.CommandTimeout < timeout {
+		timeout = e.CommandTimeout
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	args := append(append([]string{}, e.HealthCommand[1:]...), "health")
+	cmd := exec.CommandContext(runCtx, e.HealthCommand[0], args...)
+	cmd.Env = append(os.Environ(),
+		"PRODUCT="+update.Product,
+		"VERSION="+update.ToVersion,
+		"FROM_VERSION="+update.FromVersion,
+		"CURRENT_DIR="+e.currentLink(update.Product),
+		"INSTALL_ROOT="+e.InstallRoot,
+		"UPDATER_PHASE=health",
+		"ARTIFACT_KIND="+update.SelectedArtifactKind,
+		"DEPENDENCY_VALIDATION="+update.DependencyValidation,
+		"ARTIFACT_SHA256="+update.ArtifactSHA256,
+	)
+	hardenCommand(cmd, commandWaitDelay)
+	out := &boundedOutput{}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	return cmd.Run() == nil
 }
 
 // resetUnavailable clears the measured window before a new Apply so a failure
