@@ -45,8 +45,9 @@ type FilesystemExecutor struct {
 	// HealthCommand, when set, is executed by Validate to confirm the new
 	// version is healthy. A non-zero exit fails validation and triggers rollback.
 	HealthCommand []string
-	// KeepReleases bounds retained version directories (0 = keep all). The
-	// current and previous targets are always kept.
+	// KeepReleases bounds retained version directories (0 = keep all): the
+	// current and previous targets are always kept, plus KeepReleases-1 other
+	// recent ones.
 	KeepReleases int
 	// CommandTimeout bounds restart/health command execution.
 	CommandTimeout time.Duration

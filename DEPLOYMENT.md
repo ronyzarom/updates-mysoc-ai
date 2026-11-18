@@ -52,7 +52,23 @@ export DB_SSL_MODE=disable
 export STORAGE_TYPE=local
 export STORAGE_LOCAL_PATH=./artifacts
 export ADMIN_API_KEY=your-secret-admin-key
+
+# Release retention (optional; these are the defaults)
+export RELEASE_RETENTION_PRODUCTION_KEEP=5   # 0 turns retention off
+export RELEASE_RETENTION_INTERVAL=24h
+export RELEASE_RETENTION_MIN_AGE=168h
 ```
+
+Release retention runs inside the server: 10 minutes after start and then every
+`RELEASE_RETENTION_INTERVAL`. Per product it keeps the newest
+`RELEASE_RETENTION_PRODUCTION_KEEP` releases that reached the `production` ring
+and everything newer than the production head. It deletes older production
+releases and releases that were superseded before reaching production, with
+their files. A release currently offered to any ring, a version any device
+reports, an upload younger than `RELEASE_RETENTION_MIN_AGE`, and dual-artifact
+qualification releases are never deleted. A pass deletes nothing if no device
+is known, and at most 100 releases. Each deletion is logged as
+`release-retention: deleted <product> <version> (<reason>)`.
 
 ### 4. Run
 

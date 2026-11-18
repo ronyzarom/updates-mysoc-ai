@@ -357,7 +357,8 @@ type FilesystemConfig struct {
 	RestartCommand []string `yaml:"restart_command,omitempty"`
 	// HealthCommand runs during validation; a non-zero exit triggers rollback.
 	HealthCommand []string `yaml:"health_command,omitempty"`
-	// KeepReleases bounds retained version directories (0 = keep all).
+	// KeepReleases bounds retained version directories (0 = keep all): the
+	// current and previous targets plus KeepReleases-1 other recent ones.
 	KeepReleases int `yaml:"keep_releases,omitempty"`
 	// CommandTimeout bounds restart/health command execution.
 	CommandTimeout Duration `yaml:"command_timeout,omitempty"`

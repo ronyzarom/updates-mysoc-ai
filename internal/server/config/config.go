@@ -8,10 +8,19 @@ import (
 
 // Config holds all configuration for the update server
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Storage  StorageConfig
-	Auth     AuthConfig
+	Server    ServerConfig
+	Database  DatabaseConfig
+	Storage   StorageConfig
+	Auth      AuthConfig
+	Retention RetentionConfig
+}
+
+// RetentionConfig controls automatic deletion of releases that no longer serve
+// the fleet. ProductionKeep <= 0 turns it off.
+type RetentionConfig struct {
+	ProductionKeep int
+	Interval       time.Duration
+	MinAge         time.Duration
 }
 
 // AuthConfig holds authentication configuration
@@ -94,6 +103,11 @@ func Load() (*Config, error) {
 		Auth: AuthConfig{
 			JWTSecret: getEnv("JWT_SECRET", "change-this-secret-in-production"),
 			Issuer:    getEnv("JWT_ISSUER", "updates.mysoc.ai"),
+		},
+		Retention: RetentionConfig{
+			ProductionKeep: getEnvInt("RELEASE_RETENTION_PRODUCTION_KEEP", 5),
+			Interval:       getEnvDuration("RELEASE_RETENTION_INTERVAL", 24*time.Hour),
+			MinAge:         getEnvDuration("RELEASE_RETENTION_MIN_AGE", 7*24*time.Hour),
 		},
 	}
 

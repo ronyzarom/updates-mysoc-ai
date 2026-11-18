@@ -13,6 +13,8 @@ import (
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/api"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/config"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing"
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/releases"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/storage"
 )
 
@@ -80,12 +82,31 @@ func main() {
 		}
 	}()
 
+	retentionCtx, stopRetention := context.WithCancel(context.Background())
+	go releases.NewService(db, store).RunRetention(retentionCtx, releases.RetentionPolicy{
+		ProductionKeep:      cfg.Retention.ProductionKeep,
+		MinAge:              cfg.Retention.MinAge,
+		MaxPerRun:           100,
+		QualificationPrefix: cfg.Server.DualArtifactChannelPrefix,
+	}, cfg.Retention.Interval, 10*time.Minute, func(ctx context.Context) (*releases.Installed, error) {
+		devices, versions, err := licensing.NewInstanceRepository(db).InstalledVersions(ctx)
+		if err != nil {
+			return nil, err
+		}
+		installed := releases.NewInstalled(devices)
+		for _, v := range versions {
+			installed.AddReported(v.Kind, v.Product, v.Version)
+		}
+		return installed, nil
+	})
+
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Println("Shutting down server...")
+	stopRetention()
 
 	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

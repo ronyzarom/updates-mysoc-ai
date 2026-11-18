@@ -351,8 +351,9 @@ Behavior:
   a trailing argument and as `UPDATER_PHASE` (contract v1.1). Wrap bare
   probes in `bash -c "..."` so the extra argument is absorbed into `$0` —
   a plain `curl` invocation would treat the phase token as a second URL.
-- `keep_releases` bounds retained version directories (current and previous are
-  always kept).
+- `keep_releases` bounds retained version directories: the current and previous
+  versions are always kept, plus `keep_releases - 1` other recent ones (so
+  `keep_releases: 3` keeps up to 4 directories). `0` keeps everything.
 
 ```yaml
 simulation:

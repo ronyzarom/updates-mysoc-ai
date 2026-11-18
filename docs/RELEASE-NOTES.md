@@ -11,7 +11,7 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.4 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Build:** 1.19.0.5 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
 **Status:** **built + validated locally; NOT deployed.** Server deploy and the
 SiemCore self-service key issuance are separate gates awaiting Rony's explicit
 go. The migration (020) and the new auth surface change the **server**, so this
@@ -21,12 +21,51 @@ enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
 dashboard, configs and docs (#5); `.4` makes deleting a release delete its
-files (#6).
+files (#6); `.5` adds automatic release retention (#7).
 
 **Open deploy blocker:** with the channel filter gone, a legacy release parked on
 a `dual-alpha-<product>` channel (today `swf 2.3.0.4`, published to all four
 groups) is a candidate on the normal offer path. It loses only on version today.
 The normal offer path must exclude `dual-alpha-*` releases before this deploys.
+
+### #7 Automatic release retention
+
+Nothing ever retired old releases on the server; they piled up until someone
+deleted them by hand. The server now runs a retention pass 10 minutes after
+start and then daily. Per product:
+
+- The newest 5 releases that reached the `production` ring are kept; older
+  production releases are deleted (`old-production`).
+- Releases that never reached production and are older than the production
+  head are deleted (`never-reached-production`). Anything newer than the
+  production head is still rolling out and is kept.
+- A product with no production release loses nothing.
+
+Always kept: the release each ring is currently offered (same rule as the
+update check), any version a device reports (heartbeat products, including
+relay-reported nodes; the updater's own version for `updater-*` products; last
+update from/target versions for every product), uploads younger than 7 days,
+versions that do not parse, and dual-artifact qualification releases
+(`dual-alpha-*` channel, an artifact kind, or paired variants). A pass deletes
+nothing when no device is known, and at most 100 releases. Deletion goes
+through `DeleteRelease`, so files go too (#6). "Reached production" is the
+current `target_groups`; the server keeps no ring history, so a release later
+narrowed off production counts as never having reached it.
+
+Config: `RELEASE_RETENTION_PRODUCTION_KEEP` (default 5, `0` turns it off),
+`RELEASE_RETENTION_INTERVAL` (24h), `RELEASE_RETENTION_MIN_AGE` (168h).
+
+Production preview (2026-11-18, read-only export, same selection code): 37
+releases and 37 devices. The first pass would delete 10 releases, about 505 MB:
+mysoc 1.3.51.7, 1.3.52.2, 1.3.53.3, 1.3.54.20 and 1.3.55.3; siemcore 3.3.183.1,
+3.3.184.2, 3.3.184.3 and 3.3.191.1 (all `old-production`); and
+updater-linux-arm64 1.17.1.1 (`never-reached-production`). The SWF products
+and updater-windows-amd64 lose nothing.
+
+Also corrected the device-side `keep_releases` wording: it keeps the current
+and previous versions plus `keep_releases - 1` others (code unchanged).
+
+**Relay compatibility (#7):** none; server-internal.
 
 ### #6 Deleting a release deletes its files
 
