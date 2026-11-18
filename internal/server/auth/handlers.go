@@ -469,6 +469,19 @@ func (h *Handlers) HandleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Like self-delete, an admin may not demote or deactivate their own
+	// account: it is the easiest way to lock the last admin out.
+	if currentUser := GetUserFromContext(r.Context()); currentUser != nil && currentUser.ID == id {
+		if req.Role != "" && req.Role != currentUser.Role {
+			writeError(w, http.StatusBadRequest, "cannot change your own role")
+			return
+		}
+		if req.IsActive != nil && !*req.IsActive {
+			writeError(w, http.StatusBadRequest, "cannot deactivate your own account")
+			return
+		}
+	}
+
 	user, err := h.service.UpdateUser(r.Context(), id, req.Name, req.Role, req.IsActive)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {

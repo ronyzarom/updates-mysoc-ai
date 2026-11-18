@@ -15,6 +15,7 @@ import {
   FileCheck,
 } from "lucide-react";
 import { ErrorState } from "@/components/ui";
+import Link from "next/link";
 
 const PAGE_SIZE = 100;
 const ROW_HEIGHT = 56;
@@ -43,6 +44,9 @@ export default function SecurityPage() {
   } = useInfiniteQuery({
     queryKey: ["security-list"],
     initialPageParam: 0,
+    // Infinite list: no background refetch (the global 30s interval would
+    // re-pull every loaded page and reorder rows under the user).
+    refetchInterval: false,
     queryFn: ({ pageParam }) => api.getSecurityPaged(PAGE_SIZE, pageParam as number),
     getNextPageParam: (last: SecurityPagedResponse) => {
       const loaded = last.offset + last.items.length;
@@ -175,7 +179,7 @@ export default function SecurityPage() {
 
         {isLoading ? (
           <div className="text-slate-400">Loading…</div>
-        ) : isError ? (
+        ) : isError && rows.length === 0 ? (
           <ErrorState
             title="Failed to load security data"
             error={error}
@@ -215,15 +219,27 @@ export default function SecurityPage() {
                   >
                     {isSentinel ? (
                       <span className="text-sm text-slate-500 mx-auto">
-                        {isFetchingNextPage ? "Loading more…" : "Scroll for more"}
+                        {isError ? (
+                          <button onClick={() => fetchNextPage()} className="text-red-400 hover:underline">
+                            Failed to load more — retry
+                          </button>
+                        ) : isFetchingNextPage ? (
+                          "Loading more…"
+                        ) : (
+                          "Scroll for more"
+                        )}
                       </span>
                     ) : (
                       <>
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <Shield className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span className="font-medium text-white truncate">
+                          <Link
+                            href={`/instances/${row.id}`}
+                            className="font-medium text-white truncate hover:text-cyan-300"
+                          >
                             {row.instance_id}
-                          </span>
+                          </Link>
+                          <StatusDot status={row.status} />
                         </div>
                         <div
                           className={`w-8 h-8 rounded-full ${getScoreBg(score)} flex items-center justify-center shrink-0`}
@@ -284,6 +300,23 @@ function PostureCard({
         </div>
       </div>
     </div>
+  );
+}
+
+function StatusDot({ status }: { status: string }) {
+  const color =
+    status === "online"
+      ? "bg-emerald-400"
+      : status === "degraded"
+      ? "bg-amber-400"
+      : status === "offline"
+      ? "bg-red-400"
+      : "bg-slate-500";
+  return (
+    <span
+      className={`inline-block w-2 h-2 rounded-full shrink-0 ${color}`}
+      title={status === "online" ? "online" : `${status} — posture may be stale`}
+    />
   );
 }
 

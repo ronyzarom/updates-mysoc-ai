@@ -23,14 +23,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { LoadingState, ErrorState, Modal } from "@/components/ui";
 import { RequireRole } from "@/lib/auth-context";
-import { InstanceTree } from "@/components/InstanceTree";
-
-const TIER_FILTERS = [
-  { value: "all", label: "All tiers" },
-  { value: "mysoc", label: "MySoc" },
-  { value: "siemcore", label: "SiemCore" },
-  { value: "swf", label: "SWF" },
-];
+import { FleetTree } from "@/components/FleetTree";
 
 // Drill-down for one operator: its single platform license and the whole
 // cascade it relays updates to.
@@ -43,12 +36,13 @@ export default function OperatorDetailPage() {
     queryKey: ["operators"],
     queryFn: () => api.getOperators(),
     retry: false,
+    refetchInterval: false,
   });
   const op = operators?.find((o) => o.id === operatorId);
 
-  const [tierFilter, setTierFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [showRotate, setShowRotate] = useState(false);
+  const [showDeactivate, setShowDeactivate] = useState(false);
   const [issuedKey, setIssuedKey] = useState<{
     licenseKey: string;
     expiresAt: string;
@@ -69,7 +63,10 @@ export default function OperatorDetailPage() {
   const toggleMutation = useMutation({
     mutationFn: (active: boolean) =>
       api.updateOperator(operatorId, { is_active: active }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["operators"] }),
+    onSuccess: () => {
+      setShowDeactivate(false);
+      queryClient.invalidateQueries({ queryKey: ["operators"] });
+    },
   });
 
   if (isLoading) return <LoadingState label="Loading operator..." />;
@@ -135,7 +132,12 @@ export default function OperatorDetailPage() {
               Rotate key
             </button>
             <button
-              onClick={() => toggleMutation.mutate(!op.is_active)}
+              onClick={() => {
+                toggleMutation.reset();
+                // Deactivating cuts off the whole cascade: confirm first.
+                if (op.is_active) setShowDeactivate(true);
+                else toggleMutation.mutate(true);
+              }}
               disabled={toggleMutation.isPending}
               className={`btn ${op.is_active ? "btn-danger" : "btn-primary"}`}
             >
@@ -145,6 +147,12 @@ export default function OperatorDetailPage() {
           </RequireRole>
         </div>
       </div>
+
+      {toggleMutation.isError && !showDeactivate && (
+        <div role="alert" className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+          Could not change operator status: {toggleMutation.error?.message}
+        </div>
+      )}
 
       {/* License + fleet stats */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -208,31 +216,16 @@ export default function OperatorDetailPage() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search instance, host, customer…"
+                placeholder="Search cascade roots…"
                 className="input py-2 pl-9 w-64"
-                aria-label="Search fleet"
+                aria-label="Search cascade roots"
               />
             </div>
-            <select
-              value={tierFilter}
-              onChange={(e) => setTierFilter(e.target.value)}
-              className="input py-2"
-              aria-label="Filter by product tier"
-            >
-              {TIER_FILTERS.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
-        <InstanceTree
-          tierFilter={tierFilter}
-          search={search}
-          operatorFilter={op.id}
-          hideOperatorHeader
-        />
+        {/* Paged, lazily-expanded tree scoped to this operator — never loads
+            the operator's whole cascade (with heartbeat blobs) at once. */}
+        <FleetTree operator={op.id} search={search} />
       </div>
 
       {/* Rotate confirmation */}
@@ -267,6 +260,39 @@ export default function OperatorDetailPage() {
                 className="btn btn-danger flex-1"
               >
                 {rotateMutation.isPending ? "Rotating..." : "Rotate key"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Deactivate confirmation */}
+      {showDeactivate && (
+        <Modal title="Deactivate operator" onClose={() => setShowDeactivate(false)}>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 rounded bg-red-500/10 border border-red-500/40">
+              <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-200">
+                Deactivating <span className="font-semibold">{op.name}</span> revokes its platform
+                key. Its mysoc — and every siemcore and swf node it relays to — stops receiving
+                updates until the operator is reactivated.
+              </p>
+            </div>
+            {toggleMutation.isError && (
+              <p role="alert" className="text-sm text-red-400">
+                {toggleMutation.error?.message || "Failed to deactivate operator"}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeactivate(false)} className="btn btn-secondary flex-1">
+                Cancel
+              </button>
+              <button
+                onClick={() => toggleMutation.mutate(false)}
+                disabled={toggleMutation.isPending}
+                className="btn btn-danger flex-1"
+              >
+                {toggleMutation.isPending ? "Deactivating…" : "Deactivate"}
               </button>
             </div>
           </div>
@@ -326,15 +352,24 @@ function RevealKeyModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
+  // navigator.clipboard is undefined on plain-HTTP origins; fall back to
+  // manual selection instead of throwing.
   const copyKey = async () => {
-    await navigator.clipboard.writeText(licenseKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(licenseKey);
+      setCopyFailed(false);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyFailed(true);
+    }
   };
 
   return (
-    <Modal title="Platform key rotated" onClose={onClose}>
+    <Modal title="Platform key rotated" onClose={onClose} dismissible={false}>
       <div className="space-y-4">
         <p className="text-sm text-slate-400">
           New platform key for{" "}
@@ -343,13 +378,18 @@ function RevealKeyModal({
           the mysoc updater&apos;s <code>license_key</code>.
         </p>
         <div className="flex items-center gap-2 p-3 rounded bg-slate-800 border border-slate-700">
-          <code className="flex-1 text-cyan-400 font-mono text-sm break-all">
+          <code className="flex-1 text-cyan-400 font-mono text-sm break-all select-all">
             {licenseKey}
           </code>
           <button onClick={copyKey} className="btn btn-secondary btn-sm shrink-0" title="Copy key">
             {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
+        {copyFailed && (
+          <p role="alert" className="text-xs text-amber-400">
+            Could not copy automatically — select the key above and copy it manually.
+          </p>
+        )}
         <div className="flex items-start gap-3 p-3 rounded bg-amber-500/10 border border-amber-500/40">
           <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
           <p className="text-sm text-amber-200">
@@ -360,7 +400,7 @@ function RevealKeyModal({
           Expires {format(new Date(expiresAt), "MMM d, yyyy")}
         </p>
         <button onClick={onClose} className="btn btn-primary w-full">
-          Done
+          I&apos;ve stored the key
         </button>
       </div>
     </Modal>

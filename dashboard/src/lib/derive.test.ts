@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { prefixThrough, promoteThroughOf } from "./derive";
 import {
   hasExpiry,
   isLicenseActive,
@@ -11,8 +12,26 @@ import {
   THIRTY_DAYS_MS,
   sealStatusOf,
   sealCoverage,
+  isNormalRelease,
+  ringHeads,
+  ringsHeadedBy,
+  compareVersionsDesc,
 } from "./derive";
-import type { Instance, HeartbeatData } from "./api";
+import type { Instance, HeartbeatData, Release } from "./api";
+
+function rel(id: string, version: string, groups: string[], manifest?: Release["manifest"]): Release {
+  return {
+    id,
+    product_name: "mysoc",
+    version,
+    channel: "stable",
+    artifact_size: 1,
+    checksum: "c",
+    released_at: "2026-01-01T00:00:00Z",
+    target_groups: groups,
+    manifest,
+  };
+}
 
 const NOW = new Date("2026-06-01T00:00:00Z").getTime();
 const inDays = (d: number) => new Date(NOW + d * 24 * 60 * 60 * 1000).toISOString();
@@ -238,5 +257,93 @@ describe("sealCoverage", () => {
 
   it("is empty with no releases", () => {
     expect(sealCoverage(undefined, NOW)).toEqual([]);
+  });
+
+  it("excludes qualification (non-normal) rows", () => {
+    const rows = sealCoverage(
+      [
+        { issuer: "swf", seal_status: "sealed", released_at: inDays(-1) },
+        { issuer: "swf", seal_status: "unsealed", released_at: inDays(-1), manifest: { artifact_kind: "qualification" } },
+      ],
+      NOW
+    );
+    expect(rows).toEqual([{ issuer: "swf", total: 1, sealed: 1, invalid: 0, percentSealed: 100 }]);
+  });
+});
+
+describe("isNormalRelease", () => {
+  it("treats empty/absent artifact_kind as normal", () => {
+    expect(isNormalRelease(rel("1", "1.0.0.1", ["alpha"]))).toBe(true);
+    expect(isNormalRelease(rel("2", "1.0.0.1", ["alpha"], {}))).toBe(true);
+    expect(isNormalRelease(rel("3", "1.0.0.1", ["alpha"], { artifact_kind: "" }))).toBe(true);
+  });
+  it("treats any non-empty artifact_kind as qualification/non-normal", () => {
+    expect(isNormalRelease(rel("4", "1.0.0.1", ["alpha"], { artifact_kind: "qualification" }))).toBe(false);
+    expect(isNormalRelease(rel("5", "1.0.0.1", ["alpha"], { artifact_kind: "bootstrap" }))).toBe(false);
+  });
+});
+
+describe("compareVersionsDesc", () => {
+  it("sorts newest first with unparsable versions last", () => {
+    const sorted = ["1.0.0.1", "weird", "2.0.0.1", "1.2.0.3"].sort(compareVersionsDesc);
+    expect(sorted).toEqual(["2.0.0.1", "1.2.0.3", "1.0.0.1", "weird"]);
+  });
+});
+
+describe("ringHeads / ringsHeadedBy", () => {
+  it("picks the highest normal version offered on each ring", () => {
+    const heads = ringHeads([
+      rel("a", "1.0.0.1", ["alpha", "beta", "stable", "production"]),
+      rel("b", "1.2.0.1", ["alpha", "beta"]),
+      rel("c", "1.1.0.1", ["alpha", "beta", "stable"]),
+    ]);
+    expect(heads.alpha?.version).toBe("1.2.0.1");
+    expect(heads.beta?.version).toBe("1.2.0.1");
+    expect(heads.stable?.version).toBe("1.1.0.1");
+    expect(heads.production?.version).toBe("1.0.0.1");
+  });
+
+  it("ignores qualification rows and leaves empty rings undefined", () => {
+    const heads = ringHeads([
+      rel("q", "9.9.9.9", ["alpha", "beta", "stable", "production"], { artifact_kind: "qualification" }),
+      rel("a", "1.0.0.1", ["alpha"]),
+    ]);
+    expect(heads.alpha?.version).toBe("1.0.0.1");
+    expect(heads.beta).toBeNull();
+    expect(heads.stable).toBeNull();
+    expect(heads.production).toBeNull();
+  });
+
+  it("ringsHeadedBy lists which rings a release currently heads", () => {
+    const list = [
+      rel("a", "1.0.0.1", ["alpha", "beta", "stable", "production"]),
+      rel("b", "1.2.0.1", ["alpha", "beta"]),
+    ];
+    expect(ringsHeadedBy(list[1]!, list)).toEqual(["alpha", "beta"]);
+    expect(ringsHeadedBy(list[0]!, list)).toEqual(["stable", "production"]);
+  });
+});
+
+describe("promote-through selector", () => {
+  it("is cumulative from alpha and never empty", () => {
+    expect(prefixThrough("alpha")).toEqual(["alpha"]);
+    expect(prefixThrough("beta")).toEqual(["alpha", "beta"]);
+    expect(prefixThrough("stable")).toEqual(["alpha", "beta", "stable"]);
+    expect(prefixThrough("production")).toEqual(["alpha", "beta", "stable", "production"]);
+  });
+
+  it("maps stored groups back to the furthest ring", () => {
+    expect(promoteThroughOf(["alpha", "beta", "stable"])).toBe("stable");
+    expect(promoteThroughOf(["stable", "alpha"])).toBe("stable");
+    expect(promoteThroughOf(["production"])).toBe("production");
+    expect(promoteThroughOf([])).toBe("alpha");
+    expect(promoteThroughOf(undefined)).toBe("alpha");
+    expect(promoteThroughOf(["dual-alpha-mysoc"])).toBe("alpha");
+  });
+
+  it("round-trips every selector value", () => {
+    for (const r of ["alpha", "beta", "stable", "production"] as const) {
+      expect(promoteThroughOf(prefixThrough(r))).toBe(r);
+    }
   });
 });

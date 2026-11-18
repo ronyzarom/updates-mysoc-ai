@@ -17,12 +17,14 @@ import {
   Eye,
   EyeOff,
   QrCode,
+  LogOut,
 } from "lucide-react";
 import { api, Session, AuditEvent, MFASetupResponse } from "@/lib/api";
 import { useAuth, RequireAuth } from "@/lib/auth-context";
+import { isCompleteMfaCode, normalizeMfaInput } from "@/lib/mfa";
 
 function ProfileContent() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -43,6 +45,7 @@ function ProfileContent() {
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [disableMfaPassword, setDisableMfaPassword] = useState("");
   const [disableMfaCode, setDisableMfaCode] = useState("");
+  const [disableWithBackup, setDisableWithBackup] = useState(false);
   const [showDisableMfa, setShowDisableMfa] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -78,9 +81,11 @@ function ProfileContent() {
       setConfirmPassword("");
       setMessage({ type: "success", text: "Password changed successfully. Redirecting to sign in..." });
       // The server revokes all sessions on password change, so the current
-      // tokens are now invalid. Clear them and send the user back to login.
-      api.clearTokens();
-      setTimeout(() => {
+      // tokens are now invalid. End the session through the auth context (so
+      // `user` is cleared too — clearing only the tokens left the app
+      // "authenticated" and bounced login straight back to a 401 dashboard).
+      setTimeout(async () => {
+        await logout();
         router.replace("/login");
       }, 1500);
     },
@@ -102,10 +107,12 @@ function ProfileContent() {
   const enableMfaMutation = useMutation({
     mutationFn: (code: string) => api.enableMFA(code),
     onSuccess: (data) => {
+      // Show the one-time backup codes and hold them on screen. refreshUser()
+      // is deliberately deferred to "I saved them": refreshing flips
+      // mfa_enabled, and the codes used to vanish with the setup branch.
       setBackupCodes(data.backup_codes);
       setMfaSetup(null);
       setMfaCode("");
-      refreshUser();
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
     onError: (error) => {
@@ -120,6 +127,7 @@ function ProfileContent() {
       setShowDisableMfa(false);
       setDisableMfaPassword("");
       setDisableMfaCode("");
+      setDisableWithBackup(false);
       refreshUser();
       setMessage({ type: "success", text: "MFA disabled successfully" });
     },
@@ -156,9 +164,35 @@ function ProfileContent() {
     disableMfaMutation.mutate({ password: disableMfaPassword, code: disableMfaCode });
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setMessage({ type: "success", text: "Copied to clipboard" });
+  const logoutAllMutation = useMutation({
+    mutationFn: () => api.logoutAll(),
+    onSuccess: async () => {
+      await logout();
+      router.replace("/login");
+    },
+    onError: (error) => {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? `Could not sign out other sessions: ${error.message}` : "Could not sign out other sessions",
+      });
+    },
+  });
+
+  // copyToClipboard reports what actually happened: navigator.clipboard is
+  // missing on plain-HTTP origins and writeText can be refused.
+  const copyToClipboard = async (text: string) => {
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      setMessage({ type: "success", text: "Copied to clipboard" });
+    } catch {
+      setMessage({ type: "error", text: "Could not copy automatically — select the text and copy it manually." });
+    }
+  };
+
+  const finishBackupCodes = () => {
+    setBackupCodes([]);
+    refreshUser();
   };
 
   const formatDate = (date: string) => {
@@ -340,7 +374,41 @@ function ProfileContent() {
             )}
           </div>
 
-          {!user?.mfa_enabled ? (
+          {backupCodes.length > 0 ? (
+            // One-time backup codes: shown until the user confirms they saved
+            // them, regardless of the (refreshed) mfa_enabled state.
+            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg" role="alert">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle className="w-5 h-5 text-amber-400" />
+                <h3 className="text-amber-400 font-medium">2FA is on — save your backup codes now</h3>
+              </div>
+              <p className="text-slate-400 text-sm mb-4">
+                These codes are shown only once. Each one signs you in a single time (or turns 2FA off)
+                if you lose your authenticator. Store them somewhere safe before continuing.
+              </p>
+              <div className="grid grid-cols-2 gap-2 select-all">
+                {backupCodes.map((code, i) => (
+                  <code key={i} className="px-3 py-2 bg-slate-800 rounded text-center font-mono text-sm text-white">
+                    {code}
+                  </code>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(backupCodes.join("\n"))}
+                  className="btn btn-secondary flex items-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy All Codes
+                </button>
+                <button type="button" onClick={finishBackupCodes} className="btn btn-primary flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  I saved them
+                </button>
+              </div>
+            </div>
+          ) : !user?.mfa_enabled ? (
             <div className="space-y-4">
               {!mfaSetup ? (
                 <div className="flex flex-col items-center gap-4 py-8">
@@ -441,33 +509,6 @@ function ProfileContent() {
                   </form>
                 </div>
               )}
-
-              {/* Backup codes display */}
-              {backupCodes.length > 0 && (
-                <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertCircle className="w-5 h-5 text-amber-400" />
-                    <h3 className="text-amber-400 font-medium">Save your backup codes!</h3>
-                  </div>
-                  <p className="text-slate-400 text-sm mb-4">
-                    Store these codes in a safe place. You can use them to access your account if you lose your phone.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {backupCodes.map((code, i) => (
-                      <code key={i} className="px-3 py-2 bg-slate-800 rounded text-center font-mono text-sm text-white">
-                        {code}
-                      </code>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => copyToClipboard(backupCodes.join("\n"))}
-                    className="mt-4 btn btn-secondary flex items-center gap-2"
-                  >
-                    <Copy className="w-4 h-4" />
-                    Copy All Codes
-                  </button>
-                </div>
-              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -497,19 +538,40 @@ function ProfileContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-slate-400 mb-2">2FA Code</label>
+                    <label className="block text-sm text-slate-400 mb-2">
+                      {disableWithBackup ? "Backup code (XXXX-XXXX)" : "2FA Code"}
+                    </label>
                     <input
                       type="text"
+                      key={disableWithBackup ? "backup" : "totp"}
+                      inputMode={disableWithBackup ? "text" : "numeric"}
+                      autoCapitalize={disableWithBackup ? "characters" : undefined}
+                      spellCheck={false}
                       className="w-full max-w-xs px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-center font-mono focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
                       value={disableMfaCode}
-                      onChange={(e) => setDisableMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      maxLength={6}
+                      onChange={(e) => setDisableMfaCode(normalizeMfaInput(e.target.value, disableWithBackup))}
+                      placeholder={disableWithBackup ? "XXXX-XXXX" : "000000"}
+                      maxLength={disableWithBackup ? 9 : 6}
                     />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDisableWithBackup((b) => !b);
+                        setDisableMfaCode("");
+                      }}
+                      className="block mt-2 text-xs text-cyan-400 hover:text-cyan-300"
+                    >
+                      {disableWithBackup ? "Use authenticator code instead" : "Use a backup code"}
+                    </button>
                   </div>
                   <div className="flex gap-3">
                     <button
                       type="submit"
-                      disabled={disableMfaMutation.isPending}
+                      disabled={
+                        disableMfaMutation.isPending ||
+                        !disableMfaPassword ||
+                        !isCompleteMfaCode(disableMfaCode, disableWithBackup)
+                      }
                       className="btn bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
                     >
                       {disableMfaMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -521,6 +583,7 @@ function ProfileContent() {
                         setShowDisableMfa(false);
                         setDisableMfaPassword("");
                         setDisableMfaCode("");
+                        setDisableWithBackup(false);
                       }}
                       className="btn btn-secondary"
                     >
@@ -540,6 +603,23 @@ function ProfileContent() {
               <Monitor className="w-5 h-5 text-emerald-400" />
             </div>
             <h2 className="text-lg font-semibold text-white">Active Sessions</h2>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Sign out every session, including this one? You will need to sign in again.")) {
+                  logoutAllMutation.mutate();
+                }
+              }}
+              disabled={logoutAllMutation.isPending}
+              className="ml-auto btn btn-secondary text-xs flex items-center gap-1.5 text-red-400 border-red-500/30 hover:bg-red-500/10"
+            >
+              {logoutAllMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <LogOut className="w-3.5 h-3.5" />
+              )}
+              Sign out all sessions
+            </button>
           </div>
 
           <div className="space-y-3">

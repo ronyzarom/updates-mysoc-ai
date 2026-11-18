@@ -48,11 +48,15 @@ func (s *Service) CreateDualRelease(ctx context.Context, req CreateReleaseReques
 	if err := validate(req.ProductName, req.Version, variants); err != nil {
 		return nil, err
 	}
-	existing, err := s.repo.GetByProductVersion(ctx, req.ProductName, req.Version, req.ArtifactKind)
+	// Match the exact artifact kind: a bootstrap/update qualification pair may
+	// coexist with a normal (kind-less) release of the same version, so the
+	// fallback GetByProductVersion (which also matches the legacy row) would
+	// wrongly reject it.
+	exists, err := s.repo.existsExact(ctx, req.ProductName, req.Version, req.ArtifactKind)
 	if err != nil {
 		return nil, err
 	}
-	if existing != nil {
+	if exists {
 		return nil, ErrReleaseExists
 	}
 	saved := []string{}

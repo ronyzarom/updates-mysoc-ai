@@ -12,7 +12,20 @@ export async function refreshFleetQueries(client: QueryClient, deletedId?: strin
     predicate: ({ queryKey }) => {
       if (deletedId && queryKey[1] === deletedId) return false;
       const name = queryKey[0];
-      return typeof name === "string" && (name.startsWith("instance") || name === "fleet-stats" || name === "inactive-children");
+      return typeof name === "string" && isFleetQueryKey(name);
     },
   });
+}
+
+// Every query key that reflects fleet state, so a single mutation refreshes the
+// detail, list, tree, customer-directory and security views together. Missing
+// one here leaves that view stale for up to the global refetch interval.
+function isFleetQueryKey(name: string): boolean {
+  return (
+    name.startsWith("instance") || // instance, instance-parents, instance-children, instance-tree, instances-list
+    name.startsWith("fleet-") || // fleet-stats, fleet-tree, fleet-tree-roots
+    name.startsWith("customer-") || // customer-directory, customer-children
+    name.startsWith("security-") || // security-stats, security-list
+    name === "inactive-children"
+  );
 }

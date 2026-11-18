@@ -15,11 +15,12 @@ import {
   X,
 } from "lucide-react";
 import { api, User } from "@/lib/api";
-import { RequireAuth, RequireRole } from "@/lib/auth-context";
+import { RequireAuth, RequireRole, useAuth } from "@/lib/auth-context";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui";
 
 function UsersContent() {
   const queryClient = useQueryClient();
+  const { user: me } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
@@ -30,6 +31,7 @@ function UsersContent() {
     password: "",
     name: "",
     role: "viewer",
+    is_active: true,
   });
 
   const { data: users, isLoading, isError, error, refetch } = useQuery({
@@ -39,7 +41,8 @@ function UsersContent() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof formData) => api.createUser(data),
+    mutationFn: (data: typeof formData) =>
+      api.createUser({ email: data.email, password: data.password, name: data.name, role: data.role }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setShowCreateModal(false);
@@ -65,8 +68,20 @@ function UsersContent() {
   });
 
   const resetForm = () => {
-    setFormData({ email: "", password: "", name: "", role: "viewer" });
+    setFormData({ email: "", password: "", name: "", role: "viewer", is_active: true });
   };
+
+  // Lock-out guards: an admin may not demote or deactivate themselves, and
+  // the last active admin may not be demoted or deactivated by anyone.
+  const activeAdmins = (users ?? []).filter((u) => u.role === "admin" && u.is_active).length;
+  const lockReason = (u: User | null): string | null => {
+    if (!u) return null;
+    if (me && u.id === me.id) return "You can't change your own role or status.";
+    if (u.role === "admin" && u.is_active && activeAdmins <= 1)
+      return "This is the last active admin; promote another admin first.";
+    return null;
+  };
+  const editLock = lockReason(editUser);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,8 +94,9 @@ function UsersContent() {
     updateMutation.mutate({
       id: editUser.id,
       name: formData.name,
-      role: formData.role,
-      is_active: editUser.is_active,
+      // A locked user keeps their current role and status whatever the form says.
+      role: editLock ? editUser.role : formData.role,
+      is_active: editLock ? editUser.is_active : formData.is_active,
     });
   };
 
@@ -226,24 +242,33 @@ function UsersContent() {
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => {
+                        updateMutation.reset();
                         setEditUser(user);
                         setFormData({
                           email: user.email,
                           password: "",
                           name: user.name,
                           role: user.role,
+                          is_active: user.is_active,
                         });
                       }}
+                      aria-label={`Edit ${user.name}`}
                       className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => setDeleteUser(user)}
-                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {me?.id !== user.id && (
+                      <button
+                        onClick={() => {
+                          deleteMutation.reset();
+                          setDeleteUser(user);
+                        }}
+                        aria-label={`Delete ${user.name}`}
+                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -401,14 +426,29 @@ function UsersContent() {
               <div>
                 <label className="block text-sm text-slate-400 mb-2">Role</label>
                 <select
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500"
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   value={formData.role}
+                  disabled={!!editLock}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 >
                   <option value="viewer">Viewer</option>
                   <option value="operator">Operator</option>
                   <option value="admin">Admin</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-2">Status</label>
+                <select
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={formData.is_active ? "active" : "inactive"}
+                  disabled={!!editLock}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.value === "active" })}
+                >
+                  <option value="active">Active — can sign in</option>
+                  <option value="inactive">Inactive — sign-in blocked</option>
+                </select>
+                {editLock && <p className="text-xs text-amber-400 mt-1">{editLock}</p>}
               </div>
 
               {updateMutation.error && (
@@ -462,6 +502,13 @@ function UsersContent() {
             <p className="text-slate-300 mb-6">
               Are you sure you want to delete <strong>{deleteUser.name}</strong> ({deleteUser.email})?
             </p>
+
+            {deleteMutation.error && (
+              <div role="alert" className="flex items-center gap-2 p-3 mb-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Failed to delete user"}
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button

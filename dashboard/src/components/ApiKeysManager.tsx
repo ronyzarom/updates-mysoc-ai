@@ -35,15 +35,41 @@ function formatDate(value?: string): string {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 }
 
+// Tiers an update-group key can be bound to (mirrors the server catalog).
+const TIER_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Any tier (unbound)" },
+  { value: "mysoc", label: "MySoc" },
+  { value: "siemcore", label: "SiemCore" },
+  { value: "swf", label: "SWF" },
+];
+
+// scopeLabel names each scope distinctly; an unknown future scope is shown
+// verbatim rather than mislabelled as a known one.
+function scopeLabel(scope: string): string {
+  switch (scope) {
+    case "admin":
+      return "Full admin";
+    case "releases":
+      return "Releases only";
+    case "update-group":
+      return "Update rings only";
+    default:
+      return scope;
+  }
+}
+
 function ScopeBadge({ scope }: { scope: ApiKeyScope }) {
   const styles =
     scope === "admin"
       ? "bg-rose-500/20 text-rose-300"
-      : "bg-amber-500/20 text-amber-300";
-  const label = scope === "admin" ? "Full admin" : "Releases only";
+      : scope === "update-group"
+        ? "bg-violet-500/20 text-violet-300"
+        : scope === "releases"
+          ? "bg-amber-500/20 text-amber-300"
+          : "bg-slate-600/40 text-slate-300";
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles}`}>
-      {label}
+      {scopeLabel(scope)}
     </span>
   );
 }
@@ -70,6 +96,7 @@ export function ApiKeysManager() {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [scope, setScope] = useState<ApiKeyScope>("releases");
+  const [tier, setTier] = useState("");
   const [expiryDays, setExpiryDays] = useState(90);
 
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
@@ -88,14 +115,19 @@ export function ApiKeysManager() {
       api.createApiKey({
         name: name.trim(),
         scope,
+        // Tier binding is only enforced for update-group keys; never send it
+        // with another scope (the server rejects that combination).
+        product_tier: scope === "update-group" && tier ? tier : undefined,
         expires_in_days: expiryDays > 0 ? expiryDays : undefined,
       }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       setCreated(res);
+      setCopied(false);
       setShowCreate(false);
       setName("");
       setScope("releases");
+      setTier("");
       setExpiryDays(90);
     },
   });
@@ -162,7 +194,7 @@ export function ApiKeysManager() {
               className={inputClass}
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label htmlFor="apikey-scope" className="block text-xs text-slate-400 mb-1">
                 Scope
@@ -170,11 +202,35 @@ export function ApiKeysManager() {
               <select
                 id="apikey-scope"
                 value={scope}
-                onChange={(e) => setScope(e.target.value as ApiKeyScope)}
+                onChange={(e) => {
+                  const next = e.target.value as ApiKeyScope;
+                  setScope(next);
+                  if (next !== "update-group") setTier("");
+                }}
                 className={inputClass}
               >
                 <option value="releases">Releases only (recommended)</option>
+                <option value="update-group">Update rings only</option>
                 <option value="admin">Full admin</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="apikey-tier" className="block text-xs text-slate-400 mb-1">
+                Product tier
+              </label>
+              <select
+                id="apikey-tier"
+                value={tier}
+                onChange={(e) => setTier(e.target.value)}
+                disabled={scope !== "update-group"}
+                title={scope !== "update-group" ? "Tier binding applies only to update-ring keys" : undefined}
+                className={`${inputClass} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {TIER_OPTIONS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -244,6 +300,7 @@ export function ApiKeysManager() {
                 <th className="py-2 pr-3 font-medium">Name</th>
                 <th className="py-2 pr-3 font-medium">Prefix</th>
                 <th className="py-2 pr-3 font-medium">Scope</th>
+                <th className="py-2 pr-3 font-medium">Tier</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 pr-3 font-medium">Last used</th>
                 <th className="py-2 pr-3 font-medium">Expires</th>
@@ -259,6 +316,15 @@ export function ApiKeysManager() {
                   </td>
                   <td className="py-2 pr-3">
                     <ScopeBadge scope={k.scope} />
+                  </td>
+                  <td className="py-2 pr-3 text-slate-300">
+                    {k.product_tier ? (
+                      <span className="capitalize">{k.product_tier}</span>
+                    ) : k.scope === "update-group" ? (
+                      <span className="text-slate-500">any</span>
+                    ) : (
+                      <span className="text-slate-600">—</span>
+                    )}
                   </td>
                   <td className="py-2 pr-3">
                     <StatusBadge status={k.status} />
@@ -288,7 +354,12 @@ export function ApiKeysManager() {
 
       {/* One-time reveal of the created key */}
       {created && (
-        <Modal title="API key created" onClose={() => setCreated(null)} maxWidth="max-w-lg">
+        <Modal
+          title="API key created"
+          onClose={() => setCreated(null)}
+          maxWidth="max-w-lg"
+          dismissible={false}
+        >
           <div className="space-y-4">
             <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
               <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
@@ -297,6 +368,9 @@ export function ApiKeysManager() {
             <div>
               <label htmlFor="apikey-created-value" className="block text-xs text-slate-400 mb-1">
                 {created.key.name} · <ScopeInline scope={created.key.scope} />
+                {created.key.product_tier && (
+                  <span className="text-slate-400"> · {created.key.product_tier} only</span>
+                )}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -322,7 +396,7 @@ export function ApiKeysManager() {
                 onClick={() => setCreated(null)}
                 className="btn btn-primary text-sm"
               >
-                Done
+                I&apos;ve stored the key
               </button>
             </div>
           </div>
@@ -375,9 +449,5 @@ export function ApiKeysManager() {
 }
 
 function ScopeInline({ scope }: { scope: ApiKeyScope }) {
-  return (
-    <span className="text-slate-400">
-      {scope === "admin" ? "Full admin" : "Releases only"}
-    </span>
-  );
+  return <span className="text-slate-400">{scopeLabel(scope)}</span>;
 }

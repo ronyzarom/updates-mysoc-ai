@@ -1,10 +1,122 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   api.clearTokens();
+  api.setAuthLostHandler(null);
+});
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+const authOf = (init?: RequestInit) =>
+  (init?.headers as Record<string, string> | undefined)?.["Authorization"];
+
+// fakeStorage stands in for the localStorage two tabs share. The client
+// checks `window` at call time, so stubbing it per test exercises the
+// browser-only multi-tab paths under the node test environment.
+function shareStorage(): Map<string, string> {
+  const m = new Map<string, string>();
+  vi.stubGlobal("window", { addEventListener: () => {} });
+  vi.stubGlobal("localStorage", {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+    removeItem: (k: string) => void m.delete(k),
+  });
+  return m;
+}
+
+describe("ApiError", () => {
+  it("carries the HTTP status and server message", async () => {
+    api.setTokens("tok", "ref");
+    vi.stubGlobal("fetch", vi.fn(async () => json({ error: "promotion refused" }, 409)));
+    const err = await api.getFleetStats().catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(409);
+    expect(err.message).toBe("promotion refused");
+  });
+});
+
+describe("session loss", () => {
+  it("signs out when the refresh token is refused", async () => {
+    api.setTokens("expired", "revoked");
+    const lost = vi.fn();
+    api.setAuthLostHandler(lost);
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) =>
+      String(url).endsWith("/api/v1/auth/refresh") ? json({ error: "invalid" }, 401) : json({ error: "unauthorized" }, 401)
+    ));
+    await expect(api.getFleetStats()).rejects.toMatchObject({ status: 401 });
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(api.isAuthenticated()).toBe(false);
+  });
+
+  it.each([
+    ["a 5xx from refresh", async () => json({ error: "db down" }, 503)],
+    ["a network failure", async () => { throw new TypeError("network"); }],
+  ])("keeps the session on %s", async (_label, refreshReply) => {
+    api.setTokens("expired", "still-good");
+    const lost = vi.fn();
+    api.setAuthLostHandler(lost);
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) =>
+      String(url).endsWith("/api/v1/auth/refresh") ? refreshReply() : json({ error: "unauthorized" }, 401)
+    ));
+    await expect(api.getFleetStats()).rejects.toBeInstanceOf(ApiError);
+    expect(lost).not.toHaveBeenCalled();
+    expect(api.isAuthenticated()).toBe(true);
+  });
+
+  it("logout never throws and always clears local tokens", async () => {
+    api.setTokens("tok", "ref");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
+    await expect(api.logout()).resolves.toBeUndefined();
+    expect(api.isAuthenticated()).toBe(false);
+  });
+
+  it("logoutAll reports failure and keeps the session", async () => {
+    api.setTokens("tok", "ref");
+    vi.stubGlobal("fetch", vi.fn(async () => json({ error: "boom" }, 500)));
+    await expect(api.logoutAll()).rejects.toMatchObject({ status: 500 });
+    expect(api.isAuthenticated()).toBe(true);
+  });
+});
+
+describe("multi-tab tokens", () => {
+  it("adopts a pair another tab already rotated instead of spending a revoked token", async () => {
+    const shared = shareStorage();
+    api.setTokens("old-access", "old-refresh");
+    // Another tab refreshes first and writes the new pair.
+    shared.set("access_token", "access-B");
+    shared.set("refresh_token", "refresh-B");
+    let refreshCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith("/api/v1/auth/refresh")) {
+        refreshCalls++;
+        return json({ error: "revoked" }, 401);
+      }
+      return authOf(init) === "Bearer access-B" ? json({ ok: true }) : json({ error: "unauthorized" }, 401);
+    }));
+    await expect(api.getFleetStats()).resolves.toEqual({ ok: true });
+    expect(refreshCalls).toBe(0);
+  });
+
+  it("does not wipe the shared session when it loses a concurrent rotation race", async () => {
+    const shared = shareStorage();
+    api.setTokens("old-access", "old-refresh");
+    const lost = vi.fn();
+    api.setAuthLostHandler(lost);
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith("/api/v1/auth/refresh")) {
+        // The other tab won with the same token while this request was in flight.
+        shared.set("access_token", "access-B");
+        shared.set("refresh_token", "refresh-B");
+        return json({ error: "revoked" }, 401);
+      }
+      return authOf(init) === "Bearer access-B" ? json({ ok: true }) : json({ error: "unauthorized" }, 401);
+    }));
+    await expect(api.getFleetStats()).resolves.toEqual({ ok: true });
+    expect(lost).not.toHaveBeenCalled();
+    expect(shared.get("refresh_token")).toBe("refresh-B");
+  });
 });
 
 describe("token refresh single-flight", () => {
@@ -31,7 +143,7 @@ describe("token refresh single-flight", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const [a, b] = await Promise.all([api.getInstances(), api.getInstances()]);
+    const [a, b] = await Promise.all([api.getFleetStats(), api.getFleetStats()]);
 
     expect(refreshCalls).toBe(1);
     expect(a).toEqual([{ id: "1" }]);

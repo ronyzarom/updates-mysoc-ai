@@ -163,8 +163,11 @@ export default function LicensesPage() {
                         </Link>
                       </td>
                       <td>
-                        <code className="text-cyan-400 font-mono text-sm">
-                          {license.license_key}
+                        {/* Masked like the Operators API: the list is not the
+                            place to read out full keys. The detail page has
+                            the key for admins who need it. */}
+                        <code className="text-cyan-400 font-mono text-sm" title="Open the license to view the full key">
+                          {maskKey(license.license_key)}
                         </code>
                       </td>
                       <td>
@@ -276,13 +279,19 @@ export default function LicensesPage() {
   );
 }
 
+// maskKey keeps a short recognizable prefix and suffix of a license key.
+function maskKey(key: string | undefined): string {
+  if (!key) return "—";
+  if (key.length <= 12) return `${key.slice(0, 4)}…`;
+  return `${key.slice(0, 8)}…${key.slice(-4)}`;
+}
+
 // A platform license marks a SOC operator (as opposed to a customer license).
 function isPlatformLicense(l: License): boolean {
   return l.type === "mysoc-cloud" || (!!l.operator_id && l.operator_id === l.customer_id);
 }
 
 const CUSTOMER_PRODUCTS = ["siemcore-api", "siemcore-collector", "siemcore-frontend", "swf"];
-const PLATFORM_PRODUCTS = ["mysoc-api", "mysoc-frontend"];
 
 function CreateLicenseModal({
   licenses,
@@ -315,7 +324,10 @@ function CreateLicenseModal({
     }))
     .filter((op, i, all) => all.findIndex((o) => o.id === op.id) === i);
 
-  const [scope, setScope] = useState<"customer" | "operator">("customer");
+  // Legacy licenses are customer licenses only. Operators (platform keys) are
+  // created on the Operators page: the old "SOC Operator" scope here minted a
+  // mysoc-cloud license with no operators row and no operator_ref, so it never
+  // appeared on the Operators page or in cascade grouping.
   const [formData, setFormData] = useState({
     customer_id: "",
     customer_name: "",
@@ -327,16 +339,7 @@ function CreateLicenseModal({
     expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   });
 
-  const productOptions = scope === "customer" ? CUSTOMER_PRODUCTS : PLATFORM_PRODUCTS;
-
-  const handleScopeChange = (next: "customer" | "operator") => {
-    setScope(next);
-    setFormData((prev) => ({
-      ...prev,
-      type: next === "customer" ? "siemcore" : "mysoc-cloud",
-      products: next === "customer" ? [...CUSTOMER_PRODUCTS] : [...PLATFORM_PRODUCTS],
-    }));
-  };
+  const productOptions = CUSTOMER_PRODUCTS;
 
   const handleProductToggle = (product: string) => {
     setFormData((prev) => ({
@@ -351,55 +354,24 @@ function CreateLicenseModal({
     e.preventDefault();
     onSubmit({
       ...formData,
-      // An operator's platform license belongs to itself; the server also
-      // enforces this default.
-      operator_id: scope === "operator" ? formData.customer_id : formData.operator_id,
-      reseller_id: scope === "operator" ? "" : formData.reseller_id,
-      reseller_name: scope === "operator" ? "" : formData.reseller_name,
       expires_at: new Date(formData.expires_at).toISOString(),
     });
   };
 
   return (
-    <Modal title="Create License" onClose={onClose}>
+    <Modal title="Create Legacy Customer License" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <span className="block text-sm font-medium text-slate-300 mb-1">
-            License Scope
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              aria-pressed={scope === "customer"}
-              onClick={() => handleScopeChange("customer")}
-              className={`px-3 py-2 rounded text-sm text-left transition-colors ${
-                scope === "customer"
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/50"
-                  : "bg-slate-700 text-slate-400 border border-slate-600"
-              }`}
-            >
-              <span className="font-medium block">Customer</span>
-              <span className="text-xs opacity-80">siemcore + swf</span>
-            </button>
-            <button
-              type="button"
-              aria-pressed={scope === "operator"}
-              onClick={() => handleScopeChange("operator")}
-              className={`px-3 py-2 rounded text-sm text-left transition-colors ${
-                scope === "operator"
-                  ? "bg-violet-500/20 text-violet-300 border border-violet-500/50"
-                  : "bg-slate-700 text-slate-400 border border-slate-600"
-              }`}
-            >
-              <span className="font-medium block">SOC Operator</span>
-              <span className="text-xs opacity-80">mysoc platform</span>
-            </button>
-          </div>
+        <div className="p-3 rounded bg-violet-500/10 border border-violet-500/30 text-sm text-violet-200">
+          Setting up a SOC operator (mysoc platform)? Create it on the{" "}
+          <Link href="/operators" className="text-cyan-400 hover:underline">
+            Operators
+          </Link>{" "}
+          page instead — that issues its platform key and its fleet updates through the cascade.
         </div>
 
         <div>
           <label htmlFor="lic-customer-id" className="block text-sm font-medium text-slate-300 mb-1">
-            {scope === "customer" ? "Customer ID" : "Operator ID"}
+            Customer ID
           </label>
           <input
             id="lic-customer-id"
@@ -409,14 +381,14 @@ function CreateLicenseModal({
               setFormData((prev) => ({ ...prev, customer_id: e.target.value }))
             }
             className="input w-full"
-            placeholder={scope === "customer" ? "e.g., acme-corp" : "e.g., cyfox-soc"}
+            placeholder="e.g., acme-corp"
             required
           />
         </div>
 
         <div>
           <label htmlFor="lic-customer-name" className="block text-sm font-medium text-slate-300 mb-1">
-            {scope === "customer" ? "Customer Name" : "Operator Name"}
+            Customer Name
           </label>
           <input
             id="lic-customer-name"
@@ -426,16 +398,14 @@ function CreateLicenseModal({
               setFormData((prev) => ({ ...prev, customer_name: e.target.value }))
             }
             className="input w-full"
-            placeholder={scope === "customer" ? "e.g., Acme Corporation" : "e.g., Cyfox SOC"}
+            placeholder="e.g., Acme Corporation"
             required
           />
         </div>
 
-        {scope === "customer" && (
-          <>
             <div>
               <label htmlFor="lic-operator" className="block text-sm font-medium text-slate-300 mb-1">
-                SOC Operator
+                Operator label <span className="text-slate-500">(legacy, informational)</span>
               </label>
               {operatorOptions.length > 0 ? (
                 <select
@@ -516,8 +486,6 @@ function CreateLicenseModal({
                 <option value="siemcore-lite">siemcore-lite</option>
               </select>
             </div>
-          </>
-        )}
 
         <div>
           <span className="block text-sm font-medium text-slate-300 mb-1">

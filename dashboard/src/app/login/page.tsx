@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Shield, Lock, Mail, KeyRound, AlertCircle, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { isCompleteMfaCode, normalizeMfaInput } from "@/lib/mfa";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +14,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
+  // useBackup switches the code field to a one-time XXXX-XXXX backup code for
+  // users who no longer have their authenticator.
+  const [useBackup, setUseBackup] = useState(false);
   const [mfaToken, setMfaToken] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -167,28 +171,46 @@ export default function LoginPage() {
                   Two-Factor Authentication
                 </h2>
                 <p className="text-slate-400 text-sm mt-2">
-                  Enter the 6-digit code from your authenticator app
+                  {useBackup
+                    ? "Enter one of your saved backup codes (XXXX-XXXX). Each code works once."
+                    : "Enter the 6-digit code from your authenticator app"}
                 </p>
               </div>
 
               <form onSubmit={handleMFAVerify} className="space-y-5">
                 <div>
                   <label htmlFor="login-totp" className="block text-sm font-medium text-slate-400 mb-2">
-                    Verification Code
+                    {useBackup ? "Backup Code" : "Verification Code"}
                   </label>
                   <input
                     id="login-totp"
+                    key={useBackup ? "backup" : "totp"}
                     type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
+                    inputMode={useBackup ? "text" : "numeric"}
+                    autoComplete={useBackup ? "off" : "one-time-code"}
+                    autoCapitalize={useBackup ? "characters" : undefined}
+                    spellCheck={false}
                     value={totpCode}
-                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white text-center text-2xl tracking-[0.5em] placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-mono"
-                    placeholder="000000"
-                    maxLength={6}
+                    onChange={(e) => setTotpCode(normalizeMfaInput(e.target.value, useBackup))}
+                    className={`w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white text-center text-2xl placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-mono ${
+                      useBackup ? "tracking-[0.2em]" : "tracking-[0.5em]"
+                    }`}
+                    placeholder={useBackup ? "XXXX-XXXX" : "000000"}
+                    maxLength={useBackup ? 9 : 6}
                     required
                     autoFocus
                   />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseBackup((b) => !b);
+                      setTotpCode("");
+                      setError("");
+                    }}
+                    className="mt-2 text-xs text-cyan-400 hover:text-cyan-300"
+                  >
+                    {useBackup ? "Use authenticator code instead" : "Lost your phone? Use a backup code"}
+                  </button>
                 </div>
 
                 {error && (
@@ -200,7 +222,7 @@ export default function LoginPage() {
 
                 <button
                   type="submit"
-                  disabled={isLoading || totpCode.length !== 6}
+                  disabled={isLoading || !isCompleteMfaCode(totpCode, useBackup)}
                   className="w-full py-3 bg-gradient-to-r from-cyan-500 to-violet-600 text-white font-medium rounded-xl hover:from-cyan-600 hover:to-violet-700 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                 >
                   {isLoading ? (
@@ -218,6 +240,7 @@ export default function LoginPage() {
                   onClick={() => {
                     setStep("login");
                     setTotpCode("");
+                    setUseBackup(false);
                     setMfaToken("");
                     setError("");
                   }}

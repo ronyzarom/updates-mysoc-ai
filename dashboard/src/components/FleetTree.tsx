@@ -35,15 +35,27 @@ function StatusDot({ status }: { status: string }) {
   return <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${color}`} title={status} />;
 }
 
-function LastSeen({ ts }: { ts?: string }) {
+function LastSeen({ ts, status, reportedVia }: { ts?: string; status?: string; reportedVia?: string }) {
   if (!ts) {
     return <span className="text-xs text-slate-600 whitespace-nowrap">never seen</span>;
   }
-  const age = Date.now() - new Date(ts).getTime();
-  const color =
-    age < FRESH_MS ? "text-emerald-400/80" : age < STALE_MS ? "text-amber-400/80" : "text-red-400/80";
+  // Relay-reported rows refresh only on change (delta reporting); the server
+  // exempts them from the time-based offline rule, so ageing them out would
+  // paint a healthy leaf red. Colour those by status instead.
+  let color: string;
+  if (reportedVia) {
+    color =
+      status === "online" ? "text-emerald-400/80" : status === "degraded" ? "text-amber-400/80" : "text-red-400/80";
+  } else {
+    const age = Date.now() - new Date(ts).getTime();
+    color = age < FRESH_MS ? "text-emerald-400/80" : age < STALE_MS ? "text-amber-400/80" : "text-red-400/80";
+  }
   return (
-    <span className={`text-xs whitespace-nowrap ${color}`}>
+    <span
+      className={`text-xs whitespace-nowrap ${color}`}
+      title={reportedVia ? `Last reported via ${reportedVia}` : undefined}
+    >
+      {reportedVia ? "via " : ""}
       {formatDistanceToNow(new Date(ts), { addSuffix: true })}
     </span>
   );
@@ -55,10 +67,10 @@ function LastSeen({ ts }: { ts?: string }) {
 // the "below" count so it matches what expanding actually shows.
 function SubtreeRollup({ node, showRetired }: { node: TreeChildRow; showRetired: boolean }) {
   const s = node.subtree;
-  // total includes the node itself; show how many sit beneath it.
-  const below = showRetired
-    ? Math.max(0, s.total - 1)
-    : Math.max(0, s.total - s.decommissioned - 1);
+  // Subtree counts are descendants only (the server excludes the node itself).
+  // When retired nodes are hidden, drop them from the "below" count so it
+  // matches what expanding actually shows.
+  const below = showRetired ? s.total : Math.max(0, s.total - s.decommissioned);
   if (below === 0) return null;
   return (
     <span className="flex items-center gap-2 text-[11px] whitespace-nowrap">
@@ -77,21 +89,20 @@ function SubtreeRollup({ node, showRetired }: { node: TreeChildRow; showRetired:
 
 // useLevel lazily loads one cascade level: the direct children of `parent`, or
 // the roots when parent is undefined. Paged so a relay with thousands of leaves
-// never floods the client.
-function useLevel(
-  parent: string | undefined,
-  tier: string,
-  showRetired: boolean,
-  enabled: boolean
-) {
+// never floods the client. The tree is NOT filtered by tier — roots are
+// parentless nodes, so a tier filter would empty it and block drilling into a
+// relay's differently-tiered children.
+function useLevel(parent: string | undefined, showRetired: boolean, enabled: boolean) {
   return useInfiniteQuery({
-    queryKey: ["fleet-tree", parent ?? "__roots__", tier, showRetired],
+    queryKey: ["fleet-tree", parent ?? "__roots__", showRetired],
     enabled,
     initialPageParam: 0,
+    // An infinite list must not auto-refetch: the global 30s interval re-pulls
+    // every loaded page and shifts rows under the user.
+    refetchInterval: false,
     queryFn: ({ pageParam }) =>
       api.getTreeChildren({
         parent,
-        tier: tier === "all" ? undefined : tier,
         includeDecommissioned: showRetired,
         limit: PAGE_SIZE,
         offset: pageParam as number,
@@ -106,17 +117,18 @@ function useLevel(
 function TreeNode({
   node,
   depth,
-  tier,
   showRetired,
 }: {
   node: TreeChildRow;
   depth: number;
-  tier: string;
   showRetired: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const isRelay = node.has_children;
   const retired = node.status === "decommissioned";
+  // A node that surfaces as a root but still declares a parent is an orphan:
+  // its parent is missing or retired. Only meaningful at the root level.
+  const orphan = depth === 0 && Boolean(node.parent_instance_id);
 
   return (
     <div>
@@ -172,16 +184,52 @@ function TreeNode({
             retired
           </span>
         )}
+        {orphan && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0"
+            title={`Orphan: declared parent ${node.parent_instance_id} is missing or retired`}
+          >
+            orphan
+          </span>
+        )}
+        {node.self_update_capable === false && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 shrink-0"
+            title="Cannot self-update — needs a kit reinstall"
+          >
+            no self-update
+          </span>
+        )}
+        {node.relay_listener_ok === false && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 shrink-0"
+            title="Relay listener down — dead cascade beneath this node"
+          >
+            listener down
+          </span>
+        )}
+        {node.last_update_success === false && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0"
+            title={node.last_update_error || "Last update failed"}
+          >
+            update failed
+          </span>
+        )}
         {node.subtree.offline > 0 && !open && (
           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-label="Offline nodes below" />
         )}
         <div className="ml-auto flex items-center gap-3 shrink-0">
           {!open && <SubtreeRollup node={node} showRetired={showRetired} />}
-          <LastSeen ts={node.last_heartbeat} />
+          <LastSeen
+            ts={node.reported_via ? node.reported_at : node.last_heartbeat}
+            status={node.status}
+            reportedVia={node.reported_via}
+          />
         </div>
       </div>
       {open && isRelay && (
-        <TreeLevel parent={node.instance_id} depth={depth + 1} tier={tier} showRetired={showRetired} />
+        <TreeLevel parent={node.instance_id} depth={depth + 1} showRetired={showRetired} />
       )}
     </div>
   );
@@ -190,36 +238,40 @@ function TreeNode({
 function TreeLevel({
   parent,
   depth,
-  tier,
   showRetired,
 }: {
   parent: string | undefined;
   depth: number;
-  tier: string;
   showRetired: boolean;
 }) {
-  const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useLevel(parent, tier, showRetired, true);
+  const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useLevel(parent, showRetired, true);
 
   const nodes = data?.pages.flatMap((p) => p.items) ?? [];
+  const indent = { marginLeft: depth * 18 + 8 };
 
   if (isLoading) {
     return (
-      <div className="text-xs text-slate-500 py-1.5" style={{ marginLeft: depth * 18 + 8 }}>
+      <div className="text-xs text-slate-500 py-1.5" style={indent}>
         Loading…
       </div>
     );
   }
-  if (isError) {
+  // Only blank the level when there is nothing loaded; a failed next page keeps
+  // the rows already shown and offers an inline retry below.
+  if (isError && nodes.length === 0) {
     return (
-      <div className="text-xs text-red-400 py-1.5" style={{ marginLeft: depth * 18 + 8 }}>
-        {error instanceof Error ? error.message : "Failed to load"}
+      <div className="text-xs text-red-400 py-1.5 flex items-center gap-2" style={indent}>
+        <span>{error instanceof Error ? error.message : "Failed to load"}</span>
+        <button onClick={() => refetch()} className="text-cyan-400 hover:underline">
+          Retry
+        </button>
       </div>
     );
   }
   if (nodes.length === 0) {
     return (
-      <div className="text-xs text-slate-500 py-1.5" style={{ marginLeft: depth * 18 + 8 }}>
+      <div className="text-xs text-slate-500 py-1.5" style={indent}>
         No nodes reported.
       </div>
     );
@@ -228,14 +280,19 @@ function TreeLevel({
   return (
     <div>
       {nodes.map((n) => (
-        <TreeNode key={n.id} node={n} depth={depth} tier={tier} showRetired={showRetired} />
+        <TreeNode key={n.id} node={n} depth={depth} showRetired={showRetired} />
       ))}
-      {hasNextPage && (
+      {isError && (
+        <button onClick={() => refetch()} className="text-xs text-red-400 hover:underline py-1" style={indent}>
+          Failed to load more — retry
+        </button>
+      )}
+      {hasNextPage && !isError && (
         <button
           onClick={() => fetchNextPage()}
           disabled={isFetchingNextPage}
           className="text-xs text-cyan-400 hover:underline py-1"
-          style={{ marginLeft: depth * 18 + 8 }}
+          style={indent}
         >
           {isFetchingNextPage ? "Loading…" : "Load more nodes"}
         </button>
@@ -247,16 +304,21 @@ function TreeLevel({
 // FleetTree renders the update cascade (mysoc > siemcore > swf) aggregate-by-
 // default: the roots load with a SQL rollup of everything beneath them, and each
 // relay expands one bounded level at a time. Never an O(fleet) render.
-export function FleetTree({ tier = "all", search = "" }: { tier?: string; search?: string }) {
+// The tier prop is accepted for call-site compatibility but intentionally not
+// used to filter: see useLevel. Tier narrowing belongs to the List view.
+// `operator` scopes the roots to one operator's cascade (the operator detail
+// page); child levels stay within that cascade because they load by parent.
+export function FleetTree({ search = "", operator }: { tier?: string; search?: string; operator?: string }) {
   const needle = search.trim();
   const [showRetired, setShowRetired] = useState(false);
-  const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: ["fleet-tree-roots", tier, needle, showRetired],
+      queryKey: ["fleet-tree-roots", operator ?? "", needle, showRetired],
       initialPageParam: 0,
+      refetchInterval: false,
       queryFn: ({ pageParam }) =>
         api.getTreeChildren({
-          tier: tier === "all" ? undefined : tier,
+          operator: operator || undefined,
           search: needle || undefined,
           includeDecommissioned: showRetired,
           limit: PAGE_SIZE,
@@ -298,13 +360,16 @@ export function FleetTree({ tier = "all", search = "" }: { tier?: string; search
   );
 
   let body: ReactNode;
-  if (isError) {
+  if (isError && roots.length === 0) {
     body = (
       <div className="card border-red-500/50 bg-red-900/20">
         <p className="text-red-400 font-medium">Failed to load fleet tree</p>
         <p className="text-sm text-slate-400 mt-1">
           {error instanceof Error ? error.message : "Unknown error"}
         </p>
+        <button onClick={() => refetch()} className="btn btn-secondary mt-3">
+          Retry
+        </button>
       </div>
     );
   } else if (isLoading) {
@@ -314,10 +379,10 @@ export function FleetTree({ tier = "all", search = "" }: { tier?: string; search
       <div className="card text-center py-16">
         <Network className="w-12 h-12 text-slate-600 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-white mb-2">
-          {needle || tier !== "all" ? "No cascade roots match" : "No cascade roots yet"}
+          {needle ? "No cascade roots match" : "No cascade roots yet"}
         </h3>
         <p className="text-slate-400">
-          {needle || tier !== "all"
+          {needle
             ? "Search matches roots here; use the List view to find nodes deep in the cascade."
             : "Roots appear as operators' mysoc platform nodes heartbeat and roll up their cascade."}
         </p>
@@ -328,10 +393,17 @@ export function FleetTree({ tier = "all", search = "" }: { tier?: string; search
       <div className="card">
         <div className="space-y-0.5">
           {roots.map((n) => (
-            <TreeNode key={n.id} node={n} depth={0} tier={tier} showRetired={showRetired} />
+            <TreeNode key={n.id} node={n} depth={0} showRetired={showRetired} />
           ))}
         </div>
-        {hasNextPage && (
+        {isError && (
+          <div className="pt-2">
+            <button onClick={() => refetch()} className="btn btn-secondary">
+              Failed to load more — retry
+            </button>
+          </div>
+        )}
+        {hasNextPage && !isError && (
           <div className="pt-2">
             <button
               onClick={() => fetchNextPage()}

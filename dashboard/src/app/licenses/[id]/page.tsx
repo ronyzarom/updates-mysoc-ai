@@ -258,7 +258,22 @@ function OwnershipCard({ license }: { license: License }) {
 
       {!editing ? (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <Detail label="SOC Operator" value={license.operator_id || "Unassigned"} />
+          {/* operator_ref is the real owner (drives the Operators page and the
+              cascade); operator_id is only a legacy free-text label. */}
+          <div>
+            <p className="text-sm text-slate-400">Operator (cascade owner)</p>
+            {license.operator_ref ? (
+              <Link
+                href={`/operators/${encodeURIComponent(license.operator_ref)}`}
+                className="text-cyan-400 hover:underline"
+              >
+                {license.operator_ref}
+              </Link>
+            ) : (
+              <p className="text-slate-400">None — legacy license</p>
+            )}
+          </div>
+          <Detail label="Operator label (legacy)" value={license.operator_id || "—"} />
           <Detail
             label="Sold Via"
             value={
@@ -279,7 +294,7 @@ function OwnershipCard({ license }: { license: License }) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label htmlFor="own-operator" className="block text-sm font-medium text-slate-300 mb-1">
-                Operator ID
+                Operator label <span className="text-slate-500">(legacy)</span>
               </label>
               <input
                 id="own-operator"

@@ -11,6 +11,18 @@ import { TrustedKeysManager } from "@/components/TrustedKeysManager";
 const DASHBOARD_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || "same origin";
 
+// backendLabel renders a backend kind reported by /health; it never guesses
+// (older servers don't report these).
+const BACKEND_LABELS: Record<string, string> = {
+  postgresql: "PostgreSQL",
+  local: "Local filesystem",
+  s3: "S3",
+};
+function backendLabel(kind?: string): string {
+  if (!kind) return "Not reported";
+  return BACKEND_LABELS[kind] ?? kind;
+}
+
 export default function SettingsPage() {
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -174,11 +186,11 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 rounded-lg bg-slate-800/50">
               <p className="text-xs text-slate-500 mb-1">Database</p>
-              <p className="text-white font-medium">PostgreSQL</p>
+              <p className="text-white font-medium">{backendLabel(health?.database)}</p>
             </div>
             <div className="p-4 rounded-lg bg-slate-800/50">
               <p className="text-xs text-slate-500 mb-1">Storage</p>
-              <p className="text-white font-medium">Local Filesystem</p>
+              <p className="text-white font-medium">{backendLabel(health?.storage)}</p>
             </div>
             <div className="p-4 rounded-lg bg-slate-800/50">
               <p className="text-xs text-slate-500 mb-1">Server Version</p>

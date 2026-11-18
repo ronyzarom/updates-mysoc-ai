@@ -1,21 +1,23 @@
 package api
 
 import (
+	"errors"
+	"net/http"
+
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/licensing"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"net/http"
 )
 
 func (s *Server) handleInactiveChildren(w http.ResponseWriter, r *http.Request) {
 	repo := licensing.NewInstanceRepository(s.db)
 	parent, err := repo.GetByID(r.Context(), chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, 500, "failed to load parent")
+	if errors.Is(err, licensing.ErrInstanceNotFound) || parent == nil {
+		writeError(w, 404, "parent not found")
 		return
 	}
-	if parent == nil {
-		writeError(w, 404, "parent not found")
+	if err != nil {
+		writeError(w, 500, "failed to load parent")
 		return
 	}
 	items, err := repo.InactiveChildren(r.Context(), parent.InstanceID)
@@ -41,12 +43,12 @@ func (s *Server) handleCleanupChildren(w http.ResponseWriter, r *http.Request) {
 	}
 	repo := licensing.NewInstanceRepository(s.db)
 	parent, err := repo.GetByID(r.Context(), chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, 500, "failed to load parent")
+	if errors.Is(err, licensing.ErrInstanceNotFound) || parent == nil {
+		writeError(w, 404, "parent not found")
 		return
 	}
-	if parent == nil {
-		writeError(w, 404, "parent not found")
+	if err != nil {
+		writeError(w, 500, "failed to load parent")
 		return
 	}
 	count, err := repo.CleanupChildren(r.Context(), parent.InstanceID, req.IDs)

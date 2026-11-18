@@ -18,7 +18,15 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { ErrorState } from "@/components/ui";
-import { sealCoverage } from "@/lib/derive";
+import { sealCoverage, ringHeads, isNormalRelease, RINGS, type Ring } from "@/lib/derive";
+import type { Release } from "@/lib/api";
+
+const RING_PILL: Record<string, string> = {
+  alpha: "bg-purple-500/20 text-purple-400",
+  beta: "bg-amber-500/20 text-amber-400",
+  stable: "bg-blue-500/20 text-blue-400",
+  production: "bg-emerald-500/20 text-emerald-400",
+};
 
 // The dashboard mirrors the licensing hierarchy: operators (one platform
 // key each) at the top, their cascaded fleet (mysoc > siemcore > swf) below.
@@ -37,13 +45,25 @@ export default function DashboardPage() {
     retry: false,
   });
 
-  const { data: releases } = useQuery({
+  const {
+    data: releases,
+    isLoading: releasesLoading,
+    isError: releasesError,
+    error: releasesErrorObj,
+    refetch: refetchReleases,
+  } = useQuery({
     queryKey: ["releases"],
     queryFn: () => api.getReleases(),
     retry: false,
   });
 
-  const { data: operators, isLoading: operatorsLoading } = useQuery({
+  const {
+    data: operators,
+    isLoading: operatorsLoading,
+    isError: operatorsError,
+    error: operatorsErrorObj,
+    refetch: refetchOperators,
+  } = useQuery({
     queryKey: ["operators"],
     queryFn: () => api.getOperators(),
     retry: false,
@@ -57,6 +77,18 @@ export default function DashboardPage() {
 
   const activeOperators = operators?.filter((o) => o.is_active).length || 0;
   const coverage = sealCoverage(releases);
+  const normalReleaseCount = (releases || []).filter(isNormalRelease).length;
+
+  // Ring heads per product, and which products have no stable release (which
+  // breaks fresh installs, since new servers enrol into stable).
+  const releasesByProduct = (releases || []).reduce((acc, r) => {
+    (acc[r.product_name] ||= []).push(r);
+    return acc;
+  }, {} as Record<string, Release[]>);
+  const ringHeadProducts = Object.keys(releasesByProduct)
+    .sort()
+    .map((product) => ({ product, heads: ringHeads(releasesByProduct[product]!) }));
+  const productsMissingStable = ringHeadProducts.filter((p) => !p.heads.stable).map((p) => p.product);
 
   const sortedOperators = [...(operators || [])].sort((a, b) => {
     const ta = a.last_heartbeat ? new Date(a.last_heartbeat).getTime() : 0;
@@ -91,7 +123,7 @@ export default function DashboardPage() {
           sub={
             operators && operators.length !== activeOperators
               ? `${operators.length - activeOperators} deactivated`
-              : "active licenses"
+              : "all active"
           }
           icon={Building2}
           color="text-violet-400"
@@ -127,13 +159,61 @@ export default function DashboardPage() {
         />
         <StatCard
           name="Releases"
-          value={releases?.length || 0}
-          sub="published artifacts"
+          value={releasesError ? 0 : normalReleaseCount}
+          sub={releasesError ? "failed to load" : "normal releases"}
           icon={Package}
           color="text-amber-400"
           bgColor="bg-amber-500/20"
           href="/releases"
         />
+      </div>
+
+      {operatorsError && (
+        <ErrorState title="Failed to load operators" error={operatorsErrorObj} onRetry={() => refetchOperators()} />
+      )}
+
+      {/* Ring heads: what each ring currently offers, and stable gaps */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">Ring Heads</h2>
+          <Link href="/releases" className="text-sm text-cyan-400 hover:underline">
+            View releases
+          </Link>
+        </div>
+        {productsMissingStable.length > 0 && (
+          <div className="mb-4 p-3 rounded-lg bg-red-500/15 border border-red-500/50 text-red-300 text-sm flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              No stable release for {productsMissingStable.join(", ")}. A fresh install enrols into stable, so it would
+              hang with nothing to install.
+            </span>
+          </div>
+        )}
+        {releasesLoading ? (
+          <p className="text-sm text-slate-400">Loading…</p>
+        ) : releasesError ? (
+          <ErrorState title="Failed to load releases" error={releasesErrorObj} onRetry={() => refetchReleases()} />
+        ) : ringHeadProducts.length === 0 ? (
+          <p className="text-sm text-slate-400">No releases yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {ringHeadProducts.map(({ product, heads }) => (
+              <div key={product} className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-white w-40 truncate">{product}</span>
+                {RINGS.map((ring: Ring) => (
+                  <span
+                    key={ring}
+                    className={`px-2.5 py-1 rounded text-xs font-medium ${
+                      heads[ring] ? RING_PILL[ring] : "bg-red-500/20 text-red-400 border border-red-500/40"
+                    }`}
+                  >
+                    {ring} → {heads[ring] ? heads[ring]!.version : "none"}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Status Overview + Operator cascades */}
@@ -271,35 +351,49 @@ export default function DashboardPage() {
               <tr>
                 <th>Product</th>
                 <th>Version</th>
+                <th>Kind</th>
                 <th>Target Groups</th>
                 <th>Released</th>
               </tr>
             </thead>
             <tbody>
-              {releases?.slice(0, 5).map((release) => (
-                <tr key={release.id}>
-                  <td className="font-medium text-white">{release.product_name}</td>
-                  <td>
-                    <code className="text-cyan-400">{release.version}</code>
-                  </td>
-                  <td>
-                    <span className="px-2 py-1 rounded bg-slate-700 text-xs">
-                      {(release.target_groups && release.target_groups.length > 0
-                        ? release.target_groups
-                        : ["all"]
-                      ).join(", ")}
-                    </span>
-                  </td>
-                  <td className="text-slate-400">
-                    {formatDistanceToNow(new Date(release.released_at), {
-                      addSuffix: true,
-                    })}
+              {releases?.slice(0, 5).map((release) => {
+                const kind = release.manifest?.artifact_variants?.length
+                  ? "pair"
+                  : release.manifest?.artifact_kind || "release";
+                const groups = release.target_groups || [];
+                return (
+                  <tr key={release.id}>
+                    <td className="font-medium text-white">{release.product_name}</td>
+                    <td>
+                      <code className="text-cyan-400">{release.version}</code>
+                    </td>
+                    <td className="text-slate-400 text-xs">{kind}</td>
+                    <td>
+                      {groups.length === 0 ? (
+                        <span className="px-2 py-1 rounded text-xs bg-red-500/20 text-red-400 border border-red-500/40">
+                          no ring
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded bg-slate-700 text-xs">{groups.join(", ")}</span>
+                      )}
+                    </td>
+                    <td className="text-slate-400">
+                      {formatDistanceToNow(new Date(release.released_at), { addSuffix: true })}
+                    </td>
+                  </tr>
+                );
+              })}
+              {releasesError && (
+                <tr>
+                  <td colSpan={5} className="text-center text-red-400 py-8">
+                    Failed to load releases
                   </td>
                 </tr>
-              ))}
-              {(!releases || releases.length === 0) && (
+              )}
+              {!releasesError && (!releases || releases.length === 0) && (
                 <tr>
-                  <td colSpan={4} className="text-center text-slate-400 py-8">
+                  <td colSpan={5} className="text-center text-slate-400 py-8">
                     No releases yet
                   </td>
                 </tr>

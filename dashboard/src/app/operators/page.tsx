@@ -35,9 +35,12 @@ export default function OperatorsPage() {
     queryKey: ["operators"],
     queryFn: () => api.getOperators(),
     retry: false,
+    // Rollup counts change slowly; the Refresh button covers on-demand.
+    refetchInterval: false,
   });
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<OperatorSummary | null>(null);
   const [issuedKey, setIssuedKey] = useState<{
     title: string;
     operatorName: string;
@@ -79,8 +82,19 @@ export default function OperatorsPage() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       api.updateOperator(id, { is_active: active }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["operators"] }),
+    onSuccess: () => {
+      setDeactivateTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["operators"] });
+    },
   });
+
+  // Reactivating is harmless; deactivating cuts off the operator's whole
+  // cascade, so it goes through a confirmation.
+  const requestToggle = (op: OperatorSummary) => {
+    toggleMutation.reset();
+    if (op.is_active) setDeactivateTarget(op);
+    else toggleMutation.mutate({ id: op.id, active: true });
+  };
 
   const activeCount = operators?.filter((o) => o.is_active).length ?? 0;
   const totalNodes = operators?.reduce((sum, o) => sum + (o.total_nodes || 0), 0) ?? 0;
@@ -160,7 +174,7 @@ export default function OperatorsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-white">{activeCount}</p>
-              <p className="text-sm text-slate-400">Active licenses</p>
+              <p className="text-sm text-slate-400">Active operators</p>
             </div>
           </div>
         </div>
@@ -205,18 +219,56 @@ export default function OperatorsPage() {
           </RequireRole>
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {operators.map((op) => (
-            <OperatorCard
-              key={op.id}
-              op={op}
-              onRotate={() => setRotateTarget(op)}
-              onToggle={() =>
-                toggleMutation.mutate({ id: op.id, active: !op.is_active })
-              }
-            />
-          ))}
-        </div>
+        <>
+          {toggleMutation.isError && !deactivateTarget && (
+            <div role="alert" className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+              Could not change operator status: {toggleMutation.error?.message}
+            </div>
+          )}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {operators.map((op) => (
+              <OperatorCard
+                key={op.id}
+                op={op}
+                onRotate={() => setRotateTarget(op)}
+                onToggle={() => requestToggle(op)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Deactivate confirmation */}
+      {deactivateTarget && (
+        <Modal title="Deactivate operator" onClose={() => setDeactivateTarget(null)}>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 rounded bg-red-500/10 border border-red-500/40">
+              <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-200">
+                Deactivating <span className="font-semibold">{deactivateTarget.name}</span> revokes
+                its platform key. Its mysoc — and every siemcore and swf node it relays to — stops
+                receiving updates until the operator is reactivated.
+              </p>
+            </div>
+            {toggleMutation.isError && (
+              <p role="alert" className="text-sm text-red-400">
+                {toggleMutation.error?.message || "Failed to deactivate operator"}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeactivateTarget(null)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={() => toggleMutation.mutate({ id: deactivateTarget.id, active: false })}
+                disabled={toggleMutation.isPending}
+                className="btn btn-danger"
+              >
+                {toggleMutation.isPending ? "Deactivating…" : "Deactivate"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Legacy licenses entry point */}
@@ -549,15 +601,24 @@ function IssuedKeyModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
+  // navigator.clipboard is undefined on plain-HTTP origins; fall back to
+  // manual selection instead of throwing.
   const copyKey = async () => {
-    await navigator.clipboard.writeText(issued.licenseKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(issued.licenseKey);
+      setCopyFailed(false);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyFailed(true);
+    }
   };
 
   return (
-    <Modal title={issued.title} onClose={onClose}>
+    <Modal title={issued.title} onClose={onClose} dismissible={false}>
       <div className="space-y-4">
         <p className="text-sm text-slate-400">
           Platform key for{" "}
@@ -567,7 +628,7 @@ function IssuedKeyModal({
         </p>
 
         <div className="flex items-center gap-2 p-3 rounded bg-slate-800 border border-slate-700">
-          <code className="flex-1 text-cyan-400 font-mono text-sm break-all">
+          <code className="flex-1 text-cyan-400 font-mono text-sm break-all select-all">
             {issued.licenseKey}
           </code>
           <button
@@ -578,6 +639,11 @@ function IssuedKeyModal({
             {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
+        {copyFailed && (
+          <p role="alert" className="text-xs text-amber-400">
+            Could not copy automatically — select the key above and copy it manually.
+          </p>
+        )}
 
         <div className="flex items-start gap-3 p-3 rounded bg-amber-500/10 border border-amber-500/40">
           <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
@@ -592,7 +658,7 @@ function IssuedKeyModal({
         </p>
 
         <button onClick={onClose} className="btn btn-primary w-full">
-          Done
+          I&apos;ve stored the key
         </button>
       </div>
     </Modal>

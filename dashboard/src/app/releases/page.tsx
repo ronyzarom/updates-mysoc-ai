@@ -1,23 +1,34 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Release, type SealStatus } from "@/lib/api";
+import { api, ApiError, type Release, type SealStatus } from "@/lib/api";
 import { Package, Upload, RefreshCw, X, FileUp, Trash2, Pencil, AlertTriangle, Search, ShieldCheck, ShieldAlert } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useRef, useEffect } from "react";
 import { LoadingState, ErrorState, EmptyState } from "@/components/ui";
 import { RequireRole } from "@/lib/auth-context";
 import { SealBadge, SEAL_LABELS } from "@/components/SealBadge";
-import { sealStatusOf } from "@/lib/derive";
+import {
+  sealStatusOf,
+  isNormalRelease,
+  ringHeads,
+  ringsHeadedBy,
+  compareVersionsDesc,
+  prefixThrough,
+  promoteThroughOf,
+  RINGS,
+  type Ring,
+} from "@/lib/derive";
+
+type Delivery = "release" | "bootstrap" | "update";
 
 interface UploadFormData {
   product: string;
   version: string;
   release_notes: string;
-  target_groups: string[];
+  promote_through: Ring;
   artifact: File | null;
-  artifact_kind: "bootstrap" | "update";
-  independent?: boolean;
+  delivery: Delivery;
   variant_manifest?: string;
 }
 
@@ -27,14 +38,28 @@ interface UploadFormData {
 const CASCADE_PRODUCTS = ["mysoc", "siemcore", "swf"] as const;
 const CUSTOM_PRODUCT = "__custom__";
 
-// Safe rollout default: new releases start in alpha; promote to further
-// groups explicitly after validation.
-const DEFAULT_TARGET_GROUPS = ["alpha"];
+const RING_PILL: Record<string, string> = {
+  alpha: "bg-purple-500/20 text-purple-400",
+  beta: "bg-amber-500/20 text-amber-400",
+  stable: "bg-blue-500/20 text-blue-400",
+  production: "bg-emerald-500/20 text-emerald-400",
+};
+
+const VERSION_RE = /^\d+\.\d+\.\d+\.\d+$/;
+
+// The rings alpha..ring (inclusive). Promotion is always a cumulative prefix,
+// so a higher ring never runs a release a lower ring was never offered.
+// A human label for a row's artifact shape.
+function kindLabel(release: Release): string {
+  if (release.manifest?.artifact_variants?.length) return "bootstrap+update pair";
+  if (release.manifest?.artifact_kind) return release.manifest.artifact_kind;
+  return "release";
+}
 
 export default function ReleasesPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const { data: releases, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["releases"],
     queryFn: () => api.getReleases(),
@@ -50,51 +75,44 @@ export default function ReleasesPage() {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previous; };
   }, [showUploadModal]);
-  const [uploadForm, setUploadForm] = useState<UploadFormData>({
+  const emptyUpload: UploadFormData = {
     product: "",
     version: "",
     release_notes: "",
-    target_groups: [...DEFAULT_TARGET_GROUPS],
+    promote_through: "alpha",
     artifact: null,
-    artifact_kind: "bootstrap",
-    independent: true,
-  });
+    delivery: "release",
+  };
+  const [uploadForm, setUploadForm] = useState<UploadFormData>(emptyUpload);
   const [productChoice, setProductChoice] = useState<string>("");
   const [uploadError, setUploadError] = useState("");
 
   const uploadMutation = useMutation({
     mutationFn: async (data: UploadFormData) => {
       if (!data.artifact) throw new Error("No file selected");
-      if (data.independent && !data.variant_manifest) throw new Error("Artifact metadata from the product build is required");
-      if (data.independent) {
-        const metadata = JSON.parse(data.variant_manifest!);
-        if (metadata.kind !== data.artifact_kind) {
+      const independent = data.delivery !== "release";
+      if (independent) {
+        if (!data.variant_manifest) throw new Error("Artifact metadata from the product build is required");
+        const metadata = JSON.parse(data.variant_manifest);
+        if (metadata.kind !== data.delivery) {
           throw new Error("Manifest kind must match the selected artifact type");
         }
       }
       return api.uploadRelease({
         product: data.product,
         version: data.version,
-        channel: data.independent ? `dual-alpha-${data.product}` : undefined,
+        channel: independent ? `dual-alpha-${data.product}` : undefined,
         release_notes: data.release_notes || undefined,
-        target_groups: data.independent ? ["alpha"] : data.target_groups.length > 0 ? data.target_groups : undefined,
+        target_groups: independent ? ["alpha"] : prefixThrough(data.promote_through),
         artifact: data.artifact,
-        artifact_kind: data.artifact_kind,
-        artifact_metadata: data.independent ? data.variant_manifest : undefined,
+        artifact_kind: independent ? (data.delivery as "bootstrap" | "update") : undefined,
+        artifact_metadata: independent ? data.variant_manifest : undefined,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["releases"] });
       setShowUploadModal(false);
-      setUploadForm({
-        product: "",
-        version: "",
-        release_notes: "",
-        target_groups: [...DEFAULT_TARGET_GROUPS],
-        artifact: null,
-        artifact_kind: "bootstrap",
-        independent: true,
-      });
+      setUploadForm(emptyUpload);
       setProductChoice("");
       setUploadError("");
     },
@@ -102,6 +120,13 @@ export default function ReleasesPage() {
       setUploadError(error.message);
     },
   });
+
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { product: string; version: string; kind?: string; label: string; headRings: Ring[] } | null
+  >(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const deleteMutation = useMutation({
     mutationFn: async ({ product, version, kind }: { product: string; version: string; kind?: string }) => {
@@ -111,22 +136,27 @@ export default function ReleasesPage() {
       queryClient.invalidateQueries({ queryKey: ["releases"] });
       setShowDeleteModal(false);
       setDeleteTarget(null);
+      setDeleteError("");
+    },
+    onError: (error: Error) => {
+      setDeleteError(error.message);
     },
   });
 
-  // Delete confirmation modal state
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ product: string; version: string; kind?: string } | null>(null);
-
-  const handleDeleteRelease = (product: string, version: string, kind?: string) => {
-    setDeleteTarget({ product, version, kind });
+  const handleDeleteRelease = (release: Release, productReleases: Release[]) => {
+    setDeleteError("");
+    setDeleteTarget({
+      product: release.product_name,
+      version: release.version,
+      kind: release.manifest?.artifact_kind,
+      label: kindLabel(release),
+      headRings: ringsHeadedBy(release, productReleases),
+    });
     setShowDeleteModal(true);
   };
 
   const confirmDelete = () => {
-    if (deleteTarget) {
-      deleteMutation.mutate(deleteTarget);
-    }
+    if (deleteTarget) deleteMutation.mutate(deleteTarget);
   };
 
   // Edit release state and mutation
@@ -135,45 +165,72 @@ export default function ReleasesPage() {
     product: "",
     version: "",
     release_notes: "",
-    target_groups: [] as string[],
+    original_notes: "",
+    promote_through: "alpha" as Ring,
+    original_through: "alpha" as Ring,
     artifact_kind: "",
+    label: "release",
   });
   const [editError, setEditError] = useState("");
+  const [overridePrompt, setOverridePrompt] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
 
   const editMutation = useMutation({
-    mutationFn: async (data: { product: string; version: string; release_notes: string; target_groups: string[]; artifact_kind?: string }) => {
-      return api.updateRelease(data.product, data.version, {
-        release_notes: data.release_notes,
-        target_groups: data.target_groups,
-        artifact_kind: data.artifact_kind,
-      });
+    mutationFn: async (data: { override?: string }) => {
+      const kind = editForm.artifact_kind || undefined;
+      if (editForm.release_notes !== editForm.original_notes) {
+        await api.updateRelease(editForm.product, editForm.version, {
+          release_notes: editForm.release_notes,
+          artifact_kind: kind,
+        });
+      }
+      if (editForm.promote_through !== editForm.original_through) {
+        await api.updateReleaseTargetGroups(
+          editForm.product,
+          editForm.version,
+          prefixThrough(editForm.promote_through),
+          { kind, override: data.override }
+        );
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["releases"] });
       setShowEditModal(false);
       setEditError("");
+      setOverridePrompt("");
+      setOverrideReason("");
     },
     onError: (error: Error) => {
-      setEditError(error.message);
+      if (error instanceof ApiError && error.status === 409) {
+        setOverridePrompt(error.message);
+      } else {
+        setEditError(error.message);
+      }
     },
   });
 
-  const handleEditRelease = (release: { product_name: string; version: string; release_notes?: string; target_groups?: string[]; manifest?: Release["manifest"] }) => {
+  const handleEditRelease = (release: Release) => {
+    const through = promoteThroughOf(release.target_groups);
     setEditForm({
       product: release.product_name,
       version: release.version,
       release_notes: release.release_notes || "",
-      target_groups: release.target_groups || [],
+      original_notes: release.release_notes || "",
+      promote_through: through,
+      original_through: through,
       artifact_kind: release.manifest?.artifact_kind || "",
+      label: kindLabel(release),
     });
     setEditError("");
+    setOverridePrompt("");
+    setOverrideReason("");
     setShowEditModal(true);
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setEditError("");
-    editMutation.mutate(editForm);
+    editMutation.mutate({ override: undefined });
   };
 
   const formatBytes = (bytes: number) => {
@@ -186,28 +243,24 @@ export default function ReleasesPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setUploadForm({ ...uploadForm, artifact: file });
-    }
+    if (file) setUploadForm({ ...uploadForm, artifact: file });
   };
 
   const handleUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setUploadError("");
-    
     if (!uploadForm.product) {
       setUploadError("Product name is required");
       return;
     }
-    if (!uploadForm.version) {
-      setUploadError("Version is required");
+    if (!VERSION_RE.test(uploadForm.version.trim())) {
+      setUploadError("Version must be four numeric parts, e.g. 1.5.2.1");
       return;
     }
     if (!uploadForm.artifact) {
       setUploadError("Please select a file to upload");
       return;
     }
-    
     uploadMutation.mutate(uploadForm);
   };
 
@@ -218,14 +271,12 @@ export default function ReleasesPage() {
       (sealFilter === "all" || sealStatusOf(release) === sealFilter)
   );
 
-  // Group by product
+  // Group by product, products alphabetical.
   const productGroups = filteredReleases?.reduce((acc, release) => {
-    if (!acc[release.product_name]) {
-      acc[release.product_name] = [];
-    }
-    acc[release.product_name]!.push(release);
+    (acc[release.product_name] ||= []).push(release);
     return acc;
-  }, {} as Record<string, typeof filteredReleases>);
+  }, {} as Record<string, Release[]>);
+  const productNames = Object.keys(productGroups || {}).sort();
 
   return (
     <div className="space-y-8">
@@ -234,8 +285,8 @@ export default function ReleasesPage() {
         <div>
           <h1 className="text-3xl font-bold text-white">Releases</h1>
           <p className="text-slate-400 mt-1">
-            Dev uploads land here, get signed, and cascade out: mysoc relays
-            pull for their fleet, siemcore relays serve swf
+            Dev uploads land here and cascade out: mysoc relays pull for their
+            fleet, siemcore relays serve swf. Rings are the only update selector.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -244,10 +295,7 @@ export default function ReleasesPage() {
             Refresh
           </button>
           <RequireRole roles={["admin"]}>
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="btn btn-primary"
-            >
+            <button onClick={() => setShowUploadModal(true)} className="btn btn-primary">
               <Upload className="w-4 h-4" />
               Upload Release
             </button>
@@ -283,168 +331,81 @@ export default function ReleasesPage() {
       {isLoading ? (
         <LoadingState label="Loading releases..." />
       ) : isError ? (
-        <ErrorState
-          title="Failed to load releases"
-          error={error}
-          onRetry={() => refetch()}
-        />
+        <ErrorState title="Failed to load releases" error={error} onRetry={() => refetch()} />
       ) : (
         <div className="space-y-8">
-          {productGroups &&
-            Object.entries(productGroups).map(([product, productReleases]) => (
+          {productNames.map((product) => {
+            const productReleases = productGroups![product]!;
+            const heads = ringHeads(productReleases);
+            const normal = productReleases
+              .filter(isNormalRelease)
+              .sort((a, b) => compareVersionsDesc(a.version, b.version));
+            const qualification = productReleases
+              .filter((r) => !isNormalRelease(r))
+              .sort((a, b) => compareVersionsDesc(a.version, b.version));
+            return (
               <div key={product} className="card">
-                <div className="flex items-center gap-3 mb-6">
+                <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-violet-500/20">
                     <Package className="w-5 h-5 text-violet-400" />
                   </div>
                   <h2 className="text-xl font-semibold text-white">{product}</h2>
-                  <span className="text-sm text-slate-400">
-                    ({productReleases?.length} releases)
-                  </span>
+                  <span className="text-sm text-slate-400">({productReleases.length} releases)</span>
+                </div>
+
+                {/* Ring-head strip: what each ring currently gets. */}
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {RINGS.map((ring) => {
+                    const head = heads[ring];
+                    return (
+                      <span
+                        key={ring}
+                        className={`px-2.5 py-1 rounded text-xs font-medium ${
+                          head ? RING_PILL[ring] : "bg-red-500/20 text-red-400 border border-red-500/40"
+                        }`}
+                        title={
+                          head
+                            ? `${ring} currently offers ${head.version}`
+                            : ring === "stable"
+                            ? "No release on stable — fresh installs (which enrol into stable) would hang"
+                            : `No release on ${ring}`
+                        }
+                      >
+                        {ring} → {head ? head.version : "none"}
+                      </span>
+                    );
+                  })}
                 </div>
 
                 <div className="space-y-6">
-                {(["bootstrap", "update"] as const).map((kind) => {
-                  const rows = (productReleases || []).flatMap<{ release: Release; artifact?: NonNullable<NonNullable<Release["manifest"]>["artifact_variants"]>[number]; legacy: boolean }>((release) => {
-                    const variants = release.manifest?.artifact_variants;
-                    if (!variants?.length) return [{ release, artifact: undefined, legacy: true }];
-                    return variants.filter((artifact) => artifact.kind === kind)
-                      .map((artifact) => ({ release, artifact, legacy: false }));
-                  });
-                  return (
-                  <section key={kind} aria-label={`${product} ${kind === "bootstrap" ? "Bootstrap" : "Updates"}`} className="rounded-lg border border-slate-700 overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-900/40 border-b border-slate-700">
-                      <h3 className="font-semibold text-white">{kind === "bootstrap" ? "Bootstrap" : "Updates"} <span className="text-sm font-normal text-slate-400">({rows.length})</span></h3>
-                      <p className="text-sm text-slate-400 mt-1">{kind === "bootstrap" ? "Fresh installations and hosts missing prerequisites." : "Existing installations with verified prerequisites."}</p>
-                    </div>
-                    {rows.length === 0 ? (
-                      <p className="px-4 py-6 text-sm text-slate-400">No {kind === "bootstrap" ? "bootstrap" : "update"} artifacts published.</p>
-                    ) : (
-                <div className="table-container">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Version</th>
-                        <th>Target Groups</th>
-                        <th>Integrity</th>
-                        <th>Issuer seal</th>
-                        <th>Size</th>
-                        <th>Released</th>
-                        <th>Notes</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map(({ release, artifact, legacy }) => (
-                        <tr key={release.id}>
-                          <td>
-                            <code className="text-cyan-400 font-medium">
-                              {release.version}
-                            </code>
-                            {legacy && (
-                              <div className="text-xs text-slate-400 mt-1" title="The same legacy artifact serves both installation paths; no separate variant was published.">
-                                Legacy · shared artifact
-                              </div>
-                            )}
-                            {release.channel?.startsWith("dual-alpha-") && (
-                              <div className="text-xs text-slate-400 mt-1" title="Published to the isolated qualification namespace; never offered on the normal update path.">
-                                Isolated qualification
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            <div className="flex flex-wrap gap-1">
-                              {(release.target_groups || ["all"]).map((group) => (
-                                <span
-                                  key={group}
-                                  className={`px-2 py-0.5 rounded text-xs ${
-                                    group === "alpha"
-                                      ? "bg-purple-500/20 text-purple-400"
-                                      : group === "beta"
-                                      ? "bg-amber-500/20 text-amber-400"
-                                      : group === "stable"
-                                      ? "bg-blue-500/20 text-blue-400"
-                                      : group === "production"
-                                      ? "bg-emerald-500/20 text-emerald-400"
-                                      : "bg-slate-700 text-slate-400"
-                                  }`}
-                                >
-                                  {group}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td>
-                            {(artifact ? artifact.signature : release.signature) ? (
-                              <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400"
-                                title="ed25519-signed at publish; every cascade hop verifies before install"
-                              >
-                                <ShieldCheck className="w-3.5 h-3.5" />
-                                signed
-                              </span>
-                            ) : (
-                              <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400"
-                                title="Published before signing was enabled; updaters with signing.require will reject it"
-                              >
-                                <ShieldAlert className="w-3.5 h-3.5" />
-                                unsigned
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <SealBadge release={release} />
-                          </td>
-                          <td className="text-slate-300">
-                            {formatBytes(artifact?.size ?? release.artifact_size)}
-                          </td>
-                          <td className="text-slate-400">
-                            {formatDistanceToNow(new Date(release.released_at), {
-                              addSuffix: true,
-                            })}
-                          </td>
-                          <td className="text-slate-400 max-w-xs truncate">
-                            {release.release_notes || "-"}
-                          </td>
-                          <td>
-                            <RequireRole
-                              roles={["admin"]}
-                              fallback={<span className="text-slate-600">—</span>}
-                            >
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => handleEditRelease(release)}
-                                  className="p-1.5 rounded-lg hover:bg-blue-500/20 text-slate-400 hover:text-blue-400 transition-colors"
-                                  title="Edit release"
-                                  aria-label={`Edit ${release.product_name} ${release.version}`}
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteRelease(release.product_name, release.version, release.manifest?.artifact_kind)}
-                                  disabled={deleteMutation.isPending}
-                                  className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors disabled:opacity-50"
-                                  title="Delete release"
-                                  aria-label={`Delete ${release.product_name} ${release.version}`}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </RequireRole>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                    )}
-                  </section>
-                  );
-                })}
+                  <ReleaseTable
+                    title="Releases"
+                    subtitle="Normal releases served to rings. The newest on a ring is that ring's head."
+                    rows={normal}
+                    heads={heads}
+                    productReleases={productReleases}
+                    formatBytes={formatBytes}
+                    onEdit={handleEditRelease}
+                    onDelete={handleDeleteRelease}
+                    deleteDisabled={deleteMutation.isPending}
+                  />
+                  {qualification.length > 0 && (
+                    <ReleaseTable
+                      title="Isolated qualification (alpha-only)"
+                      subtitle="Bootstrap/update qualification artifacts. Never offered on the normal update path."
+                      rows={qualification}
+                      heads={heads}
+                      productReleases={productReleases}
+                      formatBytes={formatBytes}
+                      onEdit={handleEditRelease}
+                      onDelete={handleDeleteRelease}
+                      deleteDisabled={deleteMutation.isPending}
+                    />
+                  )}
                 </div>
               </div>
-            ))}
+            );
+          })}
 
           {(!releases || releases.length === 0) && (
             <div className="card">
@@ -454,10 +415,7 @@ export default function ReleasesPage() {
                 description="Upload your first release to get started."
                 action={
                   <RequireRole roles={["admin"]}>
-                    <button
-                      onClick={() => setShowUploadModal(true)}
-                      className="btn btn-primary"
-                    >
+                    <button onClick={() => setShowUploadModal(true)} className="btn btn-primary">
                       <Upload className="w-4 h-4" />
                       Upload Release
                     </button>
@@ -467,32 +425,30 @@ export default function ReleasesPage() {
             </div>
           )}
 
-          {releases &&
-            releases.length > 0 &&
-            (!filteredReleases || filteredReleases.length === 0) && (
-              <div className="card">
-                <EmptyState
-                  icon={<Search className="w-12 h-12" />}
-                  title="No matching releases"
-                  description={
-                    sealFilter === "all"
-                      ? `No releases match "${filter}". Try a different search.`
-                      : `No ${SEAL_LABELS[sealFilter].toLowerCase()} releases match the current search.`
-                  }
-                  action={
-                    <button
-                      onClick={() => {
-                        setFilter("");
-                        setSealFilter("all");
-                      }}
-                      className="btn btn-secondary"
-                    >
-                      Clear filters
-                    </button>
-                  }
-                />
-              </div>
-            )}
+          {releases && releases.length > 0 && (!filteredReleases || filteredReleases.length === 0) && (
+            <div className="card">
+              <EmptyState
+                icon={<Search className="w-12 h-12" />}
+                title="No matching releases"
+                description={
+                  sealFilter === "all"
+                    ? `No releases match "${filter}". Try a different search.`
+                    : `No ${SEAL_LABELS[sealFilter].toLowerCase()} releases match the current search.`
+                }
+                action={
+                  <button
+                    onClick={() => {
+                      setFilter("");
+                      setSealFilter("all");
+                    }}
+                    className="btn btn-secondary"
+                  >
+                    Clear filters
+                  </button>
+                }
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -516,158 +472,148 @@ export default function ReleasesPage() {
 
             <form onSubmit={handleUploadSubmit} className="flex flex-col min-h-0">
               <div className="min-h-0 overflow-y-auto overscroll-contain px-6 py-4 space-y-4 [color-scheme:dark] [scrollbar-width:thin]">
-              {uploadError && (
-                <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
-                  {uploadError}
+                {uploadError && (
+                  <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
+                    {uploadError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Delivery</label>
+                  <select
+                    aria-label="Delivery"
+                    value={uploadForm.delivery}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, delivery: e.target.value as Delivery, promote_through: "alpha" })
+                    }
+                    className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                  >
+                    <option value="release">Release (rings)</option>
+                    <option value="bootstrap">Qualification: bootstrap (alpha-only)</option>
+                    <option value="update">Qualification: update (alpha-only)</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {uploadForm.delivery === "release"
+                      ? "A normal release, selected by ring."
+                      : "An isolated qualification artifact: alpha-only and never offered on the normal update path."}
+                  </p>
                 </div>
-              )}
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Delivery</label>
-                <select aria-label="Artifact type" value={uploadForm.independent ? uploadForm.artifact_kind : "legacy"} onChange={(e) => setUploadForm({ ...uploadForm, independent: e.target.value !== "legacy", artifact_kind: e.target.value === "update" ? "update" : "bootstrap", target_groups: ["alpha"] })} className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white">
-                  <option value="bootstrap">Bootstrap</option>
-                  <option value="update">Update</option>
-                  <option value="legacy">Legacy single artifact</option>
-                </select>
-                <p className="text-xs text-slate-500 mt-1">Publish this artifact independently. It has its own version and prerequisites; no matching artifact is required.</p>
-
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Product *
-                </label>
-                <select
-                  value={productChoice}
-                  onChange={(e) => {
-                    const choice = e.target.value;
-                    setProductChoice(choice);
-                    setUploadForm({
-                      ...uploadForm,
-                      product: choice === CUSTOM_PRODUCT ? "" : choice,
-                    });
-                  }}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                >
-                  <option value="" disabled>
-                    Select a product…
-                  </option>
-                  {CASCADE_PRODUCTS.map((product) => (
-                    <option key={product} value={product}>
-                      {product}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Product *</label>
+                  <select
+                    value={productChoice}
+                    onChange={(e) => {
+                      const choice = e.target.value;
+                      setProductChoice(choice);
+                      setUploadForm({ ...uploadForm, product: choice === CUSTOM_PRODUCT ? "" : choice });
+                    }}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="" disabled>
+                      Select a product…
                     </option>
-                  ))}
-                  <option value={CUSTOM_PRODUCT}>Other (custom name)</option>
-                </select>
-                {productChoice === CUSTOM_PRODUCT && (
+                    {CASCADE_PRODUCTS.map((product) => (
+                      <option key={product} value={product}>
+                        {product}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_PRODUCT}>Other (custom name)</option>
+                  </select>
+                  {productChoice === CUSTOM_PRODUCT && (
+                    <input
+                      type="text"
+                      placeholder="custom product name, e.g. siemcore-collector"
+                      value={uploadForm.product}
+                      onChange={(e) => setUploadForm({ ...uploadForm, product: e.target.value })}
+                      className="mt-2 w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  )}
+                  <p className="text-xs text-slate-500 mt-1">
+                    mysoc updates the platform relays; siemcore and swf cascade down through them.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Version *</label>
                   <input
                     type="text"
-                    placeholder="custom product name, e.g. siemcore-collector"
-                    value={uploadForm.product}
-                    onChange={(e) => setUploadForm({ ...uploadForm, product: e.target.value })}
-                    className="mt-2 w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    placeholder="e.g., 1.5.2.1"
+                    value={uploadForm.version}
+                    onChange={(e) => setUploadForm({ ...uploadForm, version: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
-                )}
-                <p className="text-xs text-slate-500 mt-1">
-                  mysoc updates the platform relays, siemcore and swf cascade
-                  down through them
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Version *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., 1.5.2"
-                  value={uploadForm.version}
-                  onChange={(e) => setUploadForm({ ...uploadForm, version: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Target Groups
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {["alpha", "beta", "stable", "production"].map((group) => (
-                    <button
-                      key={group}
-                      disabled={uploadForm.independent}
-                      type="button"
-                      onClick={() => {
-                        const groups = uploadForm.target_groups.includes(group)
-                          ? uploadForm.target_groups.filter((g) => g !== group)
-                          : [...uploadForm.target_groups, group];
-                        setUploadForm({ ...uploadForm, target_groups: groups });
-                      }}
-                      className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                        uploadForm.target_groups.includes(group)
-                          ? group === "alpha"
-                            ? "bg-purple-500/30 text-purple-300 border border-purple-500/50"
-                            : group === "beta"
-                            ? "bg-amber-500/30 text-amber-300 border border-amber-500/50"
-                            : group === "stable"
-                            ? "bg-blue-500/30 text-blue-300 border border-blue-500/50"
-                            : "bg-emerald-500/30 text-emerald-300 border border-emerald-500/50"
-                          : "bg-slate-800 text-slate-400 border border-slate-700"
-                      }`}
-                    >
-                      {group}
-                    </button>
-                  ))}
+                  <p className="text-xs text-slate-500 mt-1">Four numeric parts: MAJOR.MINOR.PATCH.BUILD.</p>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Safe rollout: releases start in alpha; promote to beta,
-                  stable, and production after validation
-                </p>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Release Notes
-                </label>
-                <textarea
-                  placeholder="What's new in this release..."
-                  value={uploadForm.release_notes}
-                  onChange={(e) => setUploadForm({ ...uploadForm, release_notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  {uploadForm.independent ? (uploadForm.artifact_kind === "bootstrap" ? "Bootstrap artifact *" : "Update artifact *") : "Artifact file *"}
-                </label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full p-4 rounded-lg border-2 border-dashed border-slate-700 hover:border-cyan-500 transition-colors flex flex-col items-center gap-2 text-slate-400 hover:text-white"
-                >
-                  <FileUp className="w-8 h-8" />
-                  {uploadForm.artifact ? (
-                    <span className="text-cyan-400 break-all">
-                      {uploadForm.artifact.name} ({formatBytes(uploadForm.artifact.size)})
-                    </span>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Rings</label>
+                  {uploadForm.delivery === "release" ? (
+                    <>
+                      <select
+                        aria-label="Promote through ring"
+                        value={uploadForm.promote_through}
+                        onChange={(e) => setUploadForm({ ...uploadForm, promote_through: e.target.value as Ring })}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                      >
+                        <option value="alpha">alpha</option>
+                        <option value="beta">alpha → beta</option>
+                        <option value="stable">alpha → beta → stable</option>
+                        <option value="production">alpha → beta → stable → production</option>
+                      </select>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Cumulative from alpha. Offered to: {prefixThrough(uploadForm.promote_through).join(", ")}.
+                      </p>
+                    </>
                   ) : (
-                    <span>Click to select a file</span>
+                    <p className="text-sm text-slate-400">Qualification artifacts are alpha-only.</p>
                   )}
-                </button>
-              </div>
+                </div>
 
-                {uploadForm.independent && <label className="block text-sm text-slate-300">Artifact metadata (JSON from product build)
-                  <textarea required value={uploadForm.variant_manifest || ""} onChange={(e) => setUploadForm({ ...uploadForm, variant_manifest: e.target.value })} className="block w-full mt-2 p-2 rounded bg-slate-800 font-mono text-xs" rows={5} />
-                </label>}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Release Notes</label>
+                  <textarea
+                    placeholder="What's new in this release..."
+                    value={uploadForm.release_notes}
+                    onChange={(e) => setUploadForm({ ...uploadForm, release_notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
+                  />
+                </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    {uploadForm.delivery === "release" ? "Artifact file *" : `${uploadForm.delivery} artifact *`}
+                  </label>
+                  <input ref={fileInputRef} type="file" onChange={handleFileChange} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full p-4 rounded-lg border-2 border-dashed border-slate-700 hover:border-cyan-500 transition-colors flex flex-col items-center gap-2 text-slate-400 hover:text-white"
+                  >
+                    <FileUp className="w-8 h-8" />
+                    {uploadForm.artifact ? (
+                      <span className="text-cyan-400 break-all">
+                        {uploadForm.artifact.name} ({formatBytes(uploadForm.artifact.size)})
+                      </span>
+                    ) : (
+                      <span>Click to select a file</span>
+                    )}
+                  </button>
+                </div>
+
+                {uploadForm.delivery !== "release" && (
+                  <label className="block text-sm text-slate-300">
+                    Artifact metadata (JSON from product build)
+                    <textarea
+                      required
+                      value={uploadForm.variant_manifest || ""}
+                      onChange={(e) => setUploadForm({ ...uploadForm, variant_manifest: e.target.value })}
+                      className="block w-full mt-2 p-2 rounded bg-slate-800 font-mono text-xs"
+                      rows={5}
+                    />
+                  </label>
+                )}
               </div>
               <div className="flex shrink-0 justify-end gap-3 px-6 py-4 border-t border-slate-700 bg-slate-900">
                 <button
@@ -709,12 +655,14 @@ export default function ReleasesPage() {
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-white">
-                Edit Release: {editForm.product} {editForm.version}
+                Edit {editForm.product} {editForm.version}
+                <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded bg-slate-800 text-slate-400">{editForm.label}</span>
               </h2>
               <button
                 onClick={() => {
                   setShowEditModal(false);
                   setEditError("");
+                  setOverridePrompt("");
                 }}
                 className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
               >
@@ -724,51 +672,55 @@ export default function ReleasesPage() {
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
               {editError && (
-                <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm">
+                <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm break-words">
                   {editError}
+                </div>
+              )}
+              {overridePrompt && (
+                <div className="p-3 rounded-lg bg-amber-500/15 border border-amber-500/50 text-amber-300 text-sm space-y-2">
+                  <p className="break-words">{overridePrompt}</p>
+                  <input
+                    type="text"
+                    placeholder="Override reason (audited)"
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded bg-slate-800 border border-slate-700 text-white text-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={!overrideReason.trim() || editMutation.isPending}
+                    onClick={() => editMutation.mutate({ override: overrideReason.trim() })}
+                    className="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium disabled:opacity-50"
+                  >
+                    Promote anyway (audited)
+                  </button>
+                </div>
+              )}
+
+              {editForm.artifact_kind ? (
+                <p className="text-sm text-slate-400">Qualification artifacts stay alpha-only; only notes are editable here.</p>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Rings</label>
+                  <select
+                    aria-label="Promote through ring"
+                    value={editForm.promote_through}
+                    onChange={(e) => setEditForm({ ...editForm, promote_through: e.target.value as Ring })}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                  >
+                    <option value="alpha">alpha</option>
+                    <option value="beta">alpha → beta</option>
+                    <option value="stable">alpha → beta → stable</option>
+                    <option value="production">alpha → beta → stable → production</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Cumulative from alpha. Offered to: {prefixThrough(editForm.promote_through).join(", ")}.
+                  </p>
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Target Groups
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {["alpha", "beta", "stable", "production"].map((group) => (
-                    <button
-                      key={group}
-                      type="button"
-                      onClick={() => {
-                        const newGroups = editForm.target_groups.includes(group)
-                          ? editForm.target_groups.filter((g) => g !== group)
-                          : [...editForm.target_groups, group];
-                        setEditForm({ ...editForm, target_groups: newGroups });
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        editForm.target_groups.includes(group)
-                          ? group === "alpha"
-                            ? "bg-purple-500/30 text-purple-300 border border-purple-500"
-                            : group === "beta"
-                            ? "bg-amber-500/30 text-amber-300 border border-amber-500"
-                            : group === "stable"
-                            ? "bg-blue-500/30 text-blue-300 border border-blue-500"
-                            : "bg-emerald-500/30 text-emerald-300 border border-emerald-500"
-                          : "bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600"
-                      }`}
-                    >
-                      {group}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Select which instance groups will receive this release
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Release Notes
-                </label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Release Notes</label>
                 <textarea
                   placeholder="What's new in this release..."
                   value={editForm.release_notes}
@@ -784,6 +736,7 @@ export default function ReleasesPage() {
                   onClick={() => {
                     setShowEditModal(false);
                     setEditError("");
+                    setOverridePrompt("");
                   }}
                   className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
                 >
@@ -817,30 +770,41 @@ export default function ReleasesPage() {
               <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
                 <AlertTriangle className="w-7 h-7 text-red-400" />
               </div>
-              
-              <h2 className="text-xl font-semibold text-white mb-2">
-                Delete Release
-              </h2>
-              
-              <p className="text-slate-400 mb-1">
-                Are you sure you want to delete this release?
-              </p>
-              
+
+              <h2 className="text-xl font-semibold text-white mb-2">Delete Release</h2>
+
+              <p className="text-slate-400 mb-1">Are you sure you want to delete this release?</p>
+
               <div className="bg-slate-800 rounded-lg px-4 py-2 my-3">
                 <span className="text-cyan-400 font-medium">{deleteTarget.product}</span>
                 <span className="text-slate-500 mx-2">•</span>
                 <span className="text-white font-mono">{deleteTarget.version}</span>
+                <span className="ml-2 text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">{deleteTarget.label}</span>
               </div>
-              
-              <p className="text-sm text-slate-500 mb-6">
-                This action cannot be undone. Instances will no longer be able to download this version.
+
+              {deleteTarget.headRings.length > 0 && (
+                <div className="w-full p-3 mb-3 rounded-lg bg-amber-500/15 border border-amber-500/50 text-amber-300 text-sm">
+                  This release is currently offered to {deleteTarget.headRings.join(", ")}. Deleting it leaves{" "}
+                  {deleteTarget.headRings.length > 1 ? "those rings" : "that ring"} on the next-highest version, or on nothing.
+                </div>
+              )}
+
+              <p className="text-sm text-slate-500 mb-4">
+                This removes the record and its files. It cannot be undone.
               </p>
+
+              {deleteError && (
+                <div className="w-full p-3 mb-4 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 text-sm break-words">
+                  {deleteError}
+                </div>
+              )}
 
               <div className="flex gap-3 w-full">
                 <button
                   onClick={() => {
                     setShowDeleteModal(false);
                     setDeleteTarget(null);
+                    setDeleteError("");
                   }}
                   className="flex-1 px-4 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors font-medium"
                 >
@@ -869,5 +833,147 @@ export default function ReleasesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function ReleaseTable({
+  title,
+  subtitle,
+  rows,
+  heads,
+  productReleases,
+  formatBytes,
+  onEdit,
+  onDelete,
+  deleteDisabled,
+}: {
+  title: string;
+  subtitle: string;
+  rows: Release[];
+  heads: Record<Ring, Release | null>;
+  productReleases: Release[];
+  formatBytes: (n: number) => string;
+  onEdit: (release: Release) => void;
+  onDelete: (release: Release, productReleases: Release[]) => void;
+  deleteDisabled: boolean;
+}) {
+  return (
+    <section aria-label={title} className="rounded-lg border border-slate-700 overflow-hidden">
+      <div className="px-4 py-3 bg-slate-900/40 border-b border-slate-700">
+        <h3 className="font-semibold text-white">
+          {title} <span className="text-sm font-normal text-slate-400">({rows.length})</span>
+        </h3>
+        <p className="text-sm text-slate-400 mt-1">{subtitle}</p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-slate-400">None published.</p>
+      ) : (
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Target Groups</th>
+                <th>Integrity</th>
+                <th>Issuer seal</th>
+                <th>Size</th>
+                <th>Released</th>
+                <th>Notes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((release) => {
+                const headRings = (Object.keys(heads) as Ring[]).filter((r) => heads[r]?.id === release.id);
+                const groups = release.target_groups || [];
+                return (
+                  <tr key={release.id}>
+                    <td>
+                      <code className="text-cyan-400 font-medium">{release.version}</code>
+                      {headRings.length > 0 && (
+                        <div className="text-xs text-emerald-400 mt-1" title="Currently offered to these rings">
+                          current for: {headRings.join(", ")}
+                        </div>
+                      )}
+                      {release.channel?.startsWith("dual-alpha-") && (
+                        <div className="text-xs text-slate-400 mt-1" title="Published to the isolated qualification namespace; never offered on the normal update path.">
+                          Isolated qualification
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {groups.length === 0 ? (
+                        <span className="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-400 border border-red-500/40">no ring</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {groups.map((group) => (
+                            <span
+                              key={group}
+                              className={`px-2 py-0.5 rounded text-xs ${RING_PILL[group] || "bg-slate-700 text-slate-400"}`}
+                            >
+                              {group}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {release.signature ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400"
+                          title="ed25519-signed at publish; every cascade hop verifies before install"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          signed
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400"
+                          title="Published before signing was enabled; updaters with signing.require will reject it"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          unsigned
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <SealBadge release={release} />
+                    </td>
+                    <td className="text-slate-300">{formatBytes(release.artifact_size)}</td>
+                    <td className="text-slate-400">
+                      {formatDistanceToNow(new Date(release.released_at), { addSuffix: true })}
+                    </td>
+                    <td className="text-slate-400 max-w-xs truncate">{release.release_notes || "-"}</td>
+                    <td>
+                      <RequireRole roles={["admin"]} fallback={<span className="text-slate-600">—</span>}>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => onEdit(release)}
+                            className="p-1.5 rounded-lg hover:bg-blue-500/20 text-slate-400 hover:text-blue-400 transition-colors"
+                            title="Edit release"
+                            aria-label={`Edit ${release.product_name} ${release.version} (${kindLabel(release)})`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => onDelete(release, productReleases)}
+                            disabled={deleteDisabled}
+                            className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors disabled:opacity-50"
+                            title="Delete release"
+                            aria-label={`Delete ${release.product_name} ${release.version} (${kindLabel(release)})`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </RequireRole>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

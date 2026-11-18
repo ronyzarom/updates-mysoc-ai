@@ -7,7 +7,13 @@ import (
 
 // Only offline leaf records with no activity for an hour are candidates.
 // Explicit update holds remain protected. The same predicate is rechecked at removal.
-const inactiveChildPredicate = `parent_instance_id = $1 AND status = 'offline'
+//
+// Liveness uses the derived (read-time) status, the same expression the fleet
+// views show: a direct node (reported_via IS NULL) never has 'offline' written
+// back, so matching the stored status alone would silently exclude every
+// direct child the UI shows as offline. derivedStatusExpr flips a stale direct
+// node to 'offline' while keeping the stored status for relay-reported rows.
+const inactiveChildPredicate = `parent_instance_id = $1 AND (` + derivedStatusExpr + `) = 'offline'
  AND auto_update_enabled = TRUE
  AND COALESCE(last_heartbeat, created_at) < NOW() - INTERVAL '1 hour'
  AND NOT EXISTS (SELECT 1 FROM instances child WHERE child.parent_instance_id = instances.instance_id AND child.status <> 'decommissioned')`

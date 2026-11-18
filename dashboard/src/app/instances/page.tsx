@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, InstanceQuery } from "@/lib/api";
 import { RefreshCw, LayoutGrid, Building2, Search, Network } from "lucide-react";
 import { CustomerDirectory } from "@/components/CustomerDirectory";
-import { InstancesList } from "@/components/InstancesList";
+import { InstancesList, statusFilterQuery } from "@/components/InstancesList";
 import { FleetTree } from "@/components/FleetTree";
 
 const TIER_FILTERS = [
@@ -21,6 +21,7 @@ const STATUS_FILTERS = [
   { value: "offline", label: "Offline" },
   { value: "degraded", label: "Degraded" },
   { value: "decommissioned", label: "Decommissioned" },
+  { value: "failed", label: "Failed updates" },
 ];
 
 const SORT_OPTIONS = [
@@ -55,14 +56,28 @@ export default function InstancesPage() {
   const [sort, dir] = sortKey.split(":") as [string, "asc" | "desc"];
 
   // Fleet-wide counts come from the SQL aggregate endpoint, not from counting
-  // rows on the client — the same filters narrow it.
-  const statsQuery: InstanceQuery = {
-    tier: tierFilter === "all" ? undefined : tierFilter,
-    status: statusFilter === "all" ? undefined : statusFilter,
-    search: debouncedSearch.trim() || undefined,
-  };
-  const { data: stats } = useQuery({
-    queryKey: ["fleet-stats", tierFilter, statusFilter, debouncedSearch, refreshTick],
+  // rows on the client. The filters sent follow the current view, so the cards
+  // are never narrowed by a control the view hides or ignores:
+  //   list      — tier, status and search all apply
+  //   tree      — only search (the tree ignores tier and status)
+  //   customers — none (the directory's counts are fleet-wide)
+  const trimmed = debouncedSearch.trim() || undefined;
+  const statsQuery: InstanceQuery =
+    view === "list"
+      ? {
+          tier: tierFilter === "all" ? undefined : tierFilter,
+          ...statusFilterQuery(statusFilter),
+          search: trimmed,
+        }
+      : view === "tree"
+      ? { search: trimmed }
+      : {};
+  const {
+    data: stats,
+    isError: statsError,
+    refetch: refetchStats,
+  } = useQuery({
+    queryKey: ["fleet-stats", view, statsQuery.tier, statsQuery.status, statsQuery.failed, statsQuery.search, refreshTick],
     queryFn: () => api.getFleetStats(statsQuery),
   });
 
@@ -83,11 +98,17 @@ export default function InstancesPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search instance, host, customer…"
+              placeholder={
+                view === "customers" ? "Search customer id or name…" : "Search id, host, name, customer, IP…"
+              }
               className="input py-2 pl-9 w-64"
               aria-label="Search fleet"
             />
           </div>
+          {/* Tier, status and sort narrow only the flat List. The Tree ignores
+              them (roots are parentless; it orders exceptions-first) and the
+              Customers directory counts fleet-wide, so hide them there. */}
+          {view === "list" && (
           <select
             value={tierFilter}
             onChange={(e) => setTierFilter(e.target.value)}
@@ -100,9 +121,8 @@ export default function InstancesPage() {
               </option>
             ))}
           </select>
-          {/* Status/sort narrow the flat list; the cascade tree orders itself
-              (exceptions first) and drills by parent, so hide them there. */}
-          {view !== "tree" && (
+          )}
+          {view === "list" && (
             <>
               <select
                 value={statusFilter}
@@ -170,10 +190,19 @@ export default function InstancesPage() {
       </div>
 
       {/* SQL-aggregated headline counts (never counts rows client-side). */}
+      {statsError && (
+        <div className="card border-red-500/50 bg-red-900/20 flex items-center justify-between">
+          <p className="text-red-400 text-sm">Failed to load fleet counts.</p>
+          <button onClick={() => refetchStats()} className="btn btn-secondary">
+            Retry
+          </button>
+        </div>
+      )}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatCard label="Total" value={stats.total} />
           <StatCard label="Online" value={stats.online} tone="online" />
+          <StatCard label="Degraded" value={stats.degraded} tone="warn" />
           <StatCard label="Offline" value={stats.offline} tone="offline" />
           <StatCard label="Failed updates" value={stats.failed_updates} tone="warn" />
           <StatCard label="Decommissioned" value={stats.decommissioned} />

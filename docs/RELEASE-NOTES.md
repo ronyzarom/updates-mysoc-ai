@@ -11,7 +11,7 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.5 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Build:** 1.19.0.6 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
 **Status:** **built + validated locally; NOT deployed.** Server deploy and the
 SiemCore self-service key issuance are separate gates awaiting Rony's explicit
 go. The migration (020) and the new auth surface change the **server**, so this
@@ -21,12 +21,107 @@ enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
 dashboard, configs and docs (#5); `.4` makes deleting a release delete its
-files (#6); `.5` adds automatic release retention (#7).
+files (#6); `.5` adds automatic release retention (#7); `.6` is the dashboard
+review fixes and the server changes they need (#8).
 
 **Open deploy blocker:** with the channel filter gone, a legacy release parked on
 a `dual-alpha-<product>` channel (today `swf 2.3.0.4`, published to all four
 groups) is a candidate on the normal offer path. It loses only on version today.
 The normal offer path must exclude `dual-alpha-*` releases before this deploys.
+(Still open in `.6`.)
+
+### #8 Dashboard review fixes
+
+A full review of the dashboard found about 40 problems, from wrong numbers to
+unsafe defaults. This build fixes them, plus the server changes they need.
+
+**Release safety (server)**
+
+- An upload with no target groups now lands on `alpha` only. It used to go to
+  all four rings, production included.
+- Ring edits must be cumulative from alpha (`alpha`, `alpha,beta`, …). A set
+  that skips a ring, a duplicate, an unknown ring, or an empty list on
+  `/target-groups` is a `400`. A skipped ring is how stable once ended up with
+  no mySOC release.
+- The availability promotion gate (`409`, audited `?override=<reason>`) now
+  also covers the notes-and-groups `PUT`. Before, that path could widen a
+  release with no check.
+- A dual-artifact upload matches the exact artifact kind when checking for a
+  duplicate, so a qualification pair can sit beside a normal release of the
+  same version.
+
+**Fleet (server)**
+
+- `failed=true` filter, and the failed count, skip a failure already
+  superseded by a newer installed version, the same rule as the detail page.
+- `customer=__none__` selects unassigned nodes; the customer directory lists
+  them as "Platform / unassigned".
+- Search also matches display name and IP, with `%` and `_` treated literally.
+- List items carry `self_update_capable` and `relay_listener_ok`.
+- Tree roots include orphans (parent not on record). A relay's rollup counts
+  only the nodes below it, not itself.
+- The security list and stats count only nodes that report security data.
+- Empty lists are `[]`, not `null`. Sorts have an `id` tie-breaker so paging
+  is stable.
+- `GET /instances/{id}` and the cleanup endpoints return `404` for an unknown,
+  malformed or deleted id (was `500`). Cleanup uses the derived status, so
+  stale direct children shown as offline are now candidates.
+- Malformed heartbeat values (a non-numeric version, `products` that is not an
+  array, a non-boolean flag) can no longer fail a fleet-wide query.
+- The operators list aggregates fleet counts in SQL instead of loading every
+  instance and license.
+
+**Auth and admin (server)**
+
+- `POST /auth/mfa/disable` accepts a backup code, so a lost phone does not
+  lock 2FA on.
+- An admin can no longer change their own role or deactivate themselves (`400`).
+- API keys: `product_tier` is accepted only with scope `update-group`, and must
+  be a known tier.
+- `GET /health` adds `database` and `storage` backend labels.
+
+**Dashboard**
+
+- Releases: ring-head pills per product, one cumulative "Rings" selector for
+  upload and edit, the `409` gate shown inline with "Promote anyway (audited)",
+  delete warnings for releases still on a ring.
+- Home: ring-heads card with a warning when a ring has no release.
+- Fleet: Degraded and Failed-updates cards, a "Failed updates" filter, badges
+  for no self-update / listener down / update failed, orphan badge in the
+  tree, controls shown only where they apply, inline retry for a failed page.
+- Instance detail: listener-down and rejected-credential banners, a
+  Self-update row, wrapped errors, "updating" in amber, "Last reported via".
+- Sessions: a refresh that fails on the network or a 5xx keeps you signed in;
+  only a refused refresh signs you out. Tabs share one session and adopt each
+  other's rotated tokens. Sign-out always lands on `/login` and clears cached
+  data.
+- MFA: backup codes stay on screen until "I saved them"; login and disable
+  accept a backup code. Password change signs you out.
+- Profile: "Sign out all sessions".
+- Admin: Operators moved under Admin; operator pages use the operator-scoped
+  cascade tree; deactivate asks first; key reveals cannot be dismissed by
+  accident and say so when copying fails; update-ring API keys with a tier.
+- Users: you cannot lock yourself out; Active/Inactive status; delete errors
+  shown. Legacy licenses: keys masked, no misleading "SOC Operator" scope.
+- Settings shows the real database and storage backends.
+
+**Relay compatibility.** No relay or updater change; nothing on the wire
+between hops changed. Every server change is additive or a tighter check on an
+admin endpoint. Two changes can break an existing caller and need a heads-up to
+mySOC, SiemCore and SWF before deploy:
+
+- An upload that omits `target_groups` and relied on reaching every ring will
+  now reach only alpha. `scripts/publish-updater.sh` already requires groups.
+- A ring edit that skips a ring (for example `production` alone) is now a
+  `400`.
+
+**Validation:** gofmt, `go vet`, and the full Go suite on Postgres 15; dashboard
+lint, typecheck, 57 unit tests and `next build`. A local walk-through against a
+seeded database covered releases (edit, `409` override audited in the server
+log, delete, upload defaults), fleet list/tree/customers and the failed filter,
+instance detail and ring change, security, operators (deactivate confirm, key
+rotation), API keys, users (self-lock enforced by the server too), legacy
+licenses, sign-out, and the full MFA cycle with a backup code.
 
 ### #7 Automatic release retention
 

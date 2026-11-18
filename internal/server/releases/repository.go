@@ -101,9 +101,11 @@ func (r *Repository) Create(ctx context.Context, release *types.Release) error {
 		release.SealStatus = SealUnsealed
 	}
 
-	// Default target groups to all if not specified
+	// A release with no target groups starts on alpha only. Promotion to wider
+	// rings is a deliberate, gated step; an upload must never land on production
+	// by omission.
 	if len(release.TargetGroups) == 0 {
-		release.TargetGroups = []string{"alpha", "beta", "stable", "production"}
+		release.TargetGroups = []string{"alpha"}
 	}
 
 	manifestJSON, err := json.Marshal(release.Manifest)

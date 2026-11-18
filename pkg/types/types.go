@@ -79,16 +79,25 @@ type Instance struct {
 	LastUpdateError         string     `json:"last_update_error,omitempty"`
 	LastUpdateAt            *time.Time `json:"last_update_at,omitempty"`
 
+	// Computed list flags, SQL-derived from the last heartbeat JSON for the
+	// lighter list/tree views (nil when the node never reported the signal):
+	// SelfUpdateCapable=false needs a kit reinstall; RelayListenerOK=false is a
+	// live relay with a dead child-facing listener.
+	SelfUpdateCapable *bool `json:"self_update_capable,omitempty"`
+	RelayListenerOK   *bool `json:"relay_listener_ok,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Release represents a product release
 type Release struct {
-	ID                string    `json:"id"`
-	ProductName       string    `json:"product_name"`
-	Version           string    `json:"version"`
-	Channel           string    `json:"channel"` // stable, beta, nightly
+	ID          string `json:"id"`
+	ProductName string `json:"product_name"`
+	Version     string `json:"version"`
+	// Legacy wire field. TargetGroups is the only update selector; channel is
+	// inert except for the internal "dual-alpha-<product>" qualification namespace.
+	Channel           string    `json:"channel"`
 	Manifest          Manifest  `json:"manifest"`
 	ArtifactPath      string    `json:"artifact_path,omitempty"`
 	ArtifactSize      int64     `json:"artifact_size"`

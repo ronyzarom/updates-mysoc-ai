@@ -378,9 +378,14 @@ func (s *Service) DisableMFA(ctx context.Context, userID, password, totpCode, ip
 		return ErrInvalidCredentials
 	}
 
-	// Verify TOTP
+	// Verify TOTP, falling back to a (consumed) backup code exactly like
+	// VerifyMFA, so a user who lost the authenticator can still turn MFA off.
 	if !totp.Validate(totpCode, user.MFASecret) {
-		return ErrInvalidMFACode
+		used, err := s.repo.UseBackupCode(ctx, user.ID, totpCode)
+		if err != nil || !used {
+			s.repo.LogAuditEvent(ctx, user.ID, "failed_mfa", ip, userAgent, nil)
+			return ErrInvalidMFACode
+		}
 	}
 
 	err = s.repo.DisableMFA(ctx, user.ID)

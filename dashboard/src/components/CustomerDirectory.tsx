@@ -26,13 +26,17 @@ const SORTS = [
 // list of customers with SQL-aggregated health — never a 20k-box tree. Each
 // row expands to that customer's nodes via a bounded, parent/customer-filtered
 // paged query, so drilling in stays O(page) too.
-export function CustomerDirectory({ tier, search }: { tier: string; search: string }) {
+// The tier prop is accepted for call-site compatibility but not applied: the
+// per-customer counts are fleet-wide, so filtering the expanded children by
+// tier would make a row's "N nodes" disagree with what expanding shows.
+export function CustomerDirectory({ search }: { tier?: string; search: string }) {
   const [sort, setSort] = useState("exceptions");
 
-  const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
       queryKey: ["customer-directory", search, sort],
       initialPageParam: 0,
+      refetchInterval: false,
       queryFn: ({ pageParam }) =>
         api.getCustomerDirectory({
           search: search.trim() || undefined,
@@ -41,22 +45,26 @@ export function CustomerDirectory({ tier, search }: { tier: string; search: stri
           offset: pageParam as number,
         }),
       getNextPageParam: (last: CustomerDirectoryResponse) => {
-        const loaded = last.offset + last.items.length;
+        const loaded = last.offset + (last.items?.length ?? 0);
         return loaded < last.total ? loaded : undefined;
       },
     });
 
-  const customers = data?.pages.flatMap((p) => p.items) ?? [];
+  // `items ?? []` guards an older server that serialised an empty page as null.
+  const customers = data?.pages.flatMap((p) => p.items ?? []) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
   if (isLoading) return <div className="text-slate-400">Loading customer directory…</div>;
-  if (isError) {
+  if (isError && customers.length === 0) {
     return (
       <div className="card border-red-500/50 bg-red-900/20">
         <p className="text-red-400 font-medium">Failed to load customer directory</p>
         <p className="text-sm text-slate-400 mt-1">
           {error instanceof Error ? error.message : "Unknown error"}
         </p>
+        <button onClick={() => refetch()} className="btn btn-secondary mt-3">
+          Retry
+        </button>
       </div>
     );
   }
@@ -90,12 +98,20 @@ export function CustomerDirectory({ tier, search }: { tier: string; search: stri
       ) : (
         <div className="space-y-2">
           {customers.map((c) => (
-            <CustomerRow key={c.customer_id || "__platform__"} customer={c} tier={tier} />
+            <CustomerRow key={c.customer_id || "__platform__"} customer={c} />
           ))}
         </div>
       )}
 
-      {hasNextPage && (
+      {isError && customers.length > 0 && (
+        <div className="text-center pt-2">
+          <button onClick={() => refetch()} className="btn btn-secondary">
+            Failed to load more — retry
+          </button>
+        </div>
+      )}
+
+      {hasNextPage && !isError && (
         <div className="text-center pt-2">
           <button
             onClick={() => fetchNextPage()}
@@ -110,7 +126,7 @@ export function CustomerDirectory({ tier, search }: { tier: string; search: stri
   );
 }
 
-function CustomerRow({ customer, tier }: { customer: CustomerSummaryRow; tier: string }) {
+function CustomerRow({ customer }: { customer: CustomerSummaryRow }) {
   const [open, setOpen] = useState(false);
   const name = customer.customer_name || (customer.customer_id ? customer.customer_id : "Platform / unassigned");
   const hasProblems = customer.failed > 0 || customer.offline > 0;
@@ -142,7 +158,7 @@ function CustomerRow({ customer, tier }: { customer: CustomerSummaryRow; tier: s
           )}
         </div>
       </button>
-      {open && <CustomerChildren customerId={customer.customer_id} tier={tier} />}
+      {open && <CustomerChildren customerId={customer.customer_id} />}
     </div>
   );
 }
@@ -155,35 +171,53 @@ function Count({ label, value, className }: { label: string; value: number; clas
   );
 }
 
-function CustomerChildren({ customerId, tier }: { customerId: string; tier: string }) {
+// The server's sentinel for "no customer assigned" (operator platform nodes and
+// unlicensed rows). An empty customer value is dropped from the query and would
+// list the entire fleet under the "Platform / unassigned" row.
+const UNASSIGNED_CUSTOMER = "__none__";
+
+function CustomerChildren({ customerId }: { customerId: string }) {
   const {
     data,
     isLoading,
+    isError,
+    error,
+    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["customer-children", customerId, tier],
+    queryKey: ["customer-children", customerId],
     initialPageParam: 0,
+    refetchInterval: false,
     queryFn: ({ pageParam }) =>
       api.getInstancesFiltered({
-        customer: customerId,
-        tier: tier === "all" ? undefined : tier,
+        customer: customerId || UNASSIGNED_CUSTOMER,
         sort: "product_tier",
         dir: "asc",
         limit: CHILD_PAGE,
         offset: pageParam as number,
       }),
     getNextPageParam: (last) => {
-      const loaded = last.offset + last.items.length;
+      const loaded = last.offset + (last.items?.length ?? 0);
       return loaded < last.total ? loaded : undefined;
     },
   });
 
-  const nodes = data?.pages.flatMap((p) => p.items) ?? [];
+  const nodes = data?.pages.flatMap((p) => p.items ?? []) ?? [];
 
   if (isLoading) {
     return <div className="px-4 pb-3 text-xs text-slate-500">Loading nodes…</div>;
+  }
+  if (isError && nodes.length === 0) {
+    return (
+      <div className="px-4 pb-3 text-xs text-red-400 flex items-center gap-2">
+        <span>{error instanceof Error ? error.message : "Failed to load nodes"}</span>
+        <button onClick={() => refetch()} className="text-cyan-400 hover:underline">
+          Retry
+        </button>
+      </div>
+    );
   }
   if (nodes.length === 0) {
     return <div className="px-4 pb-3 text-xs text-slate-500">No nodes reported.</div>;

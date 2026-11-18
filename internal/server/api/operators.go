@@ -34,52 +34,12 @@ func (s *Server) handleListOperators(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fleet summary per operator, derived from instances attached to the
-	// operator's licenses.
-	instanceRepo := licensing.NewInstanceRepository(s.db)
-	instances, err := instanceRepo.List(r.Context())
+	// Fleet summary per operator (instances attached to the operator's
+	// licenses), aggregated in SQL rather than by loading the whole fleet.
+	agg, err := licensing.NewInstanceRepository(s.db).OperatorFleetSummary(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-	licenses, err := licenseSvc.ListLicenses(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	licenseOperator := map[string]string{} // license id -> operator ref
-	for _, l := range licenses {
-		if l.OperatorRef != "" {
-			licenseOperator[l.ID] = l.OperatorRef
-		}
-	}
-
-	type fleetAgg struct {
-		byTier map[string]int
-		total  int
-		latest *time.Time
-	}
-	agg := map[string]*fleetAgg{}
-	for i := range instances {
-		inst := &instances[i]
-		op := licenseOperator[inst.LicenseID]
-		if op == "" {
-			continue
-		}
-		a := agg[op]
-		if a == nil {
-			a = &fleetAgg{byTier: map[string]int{}}
-			agg[op] = a
-		}
-		a.total++
-		tier := inst.ProductTier
-		if tier == "" {
-			tier = "unknown"
-		}
-		a.byTier[tier]++
-		if inst.LastHeartbeat != nil && (a.latest == nil || inst.LastHeartbeat.After(*a.latest)) {
-			a.latest = inst.LastHeartbeat
-		}
 	}
 
 	out := make([]operatorSummary, 0, len(operators))
@@ -93,9 +53,9 @@ func (s *Server) handleListOperators(w http.ResponseWriter, r *http.Request) {
 			summary.KeyActive = op.License.IsActive
 		}
 		if a := agg[op.ID]; a != nil {
-			summary.NodesByTier = a.byTier
-			summary.TotalNodes = a.total
-			summary.LastHeartbeat = a.latest
+			summary.NodesByTier = a.ByTier
+			summary.TotalNodes = a.Total
+			summary.LastHeartbeat = a.LastHeartbeat
 		}
 		out = append(out, summary)
 	}

@@ -80,28 +80,33 @@ export function EmptyState({
 }
 
 // Modal renders an accessible dialog with Escape-to-close, backdrop dismissal,
-// initial focus, and proper ARIA semantics.
+// initial focus, and proper ARIA semantics. Pass dismissible={false} for
+// dialogs that reveal a one-time secret: Escape, a stray backdrop click and the
+// header X are disabled, so only an explicit in-dialog action closes it.
 export function Modal({
   title,
   onClose,
   children,
   maxWidth = "max-w-md",
+  dismissible = true,
 }: {
   title?: string;
   onClose: () => void;
   children: React.ReactNode;
   maxWidth?: string;
+  dismissible?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
   useEffect(() => {
+    if (!dismissible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, dismissible]);
 
   useEffect(() => {
     panelRef.current?.focus();
@@ -111,7 +116,7 @@ export function Modal({
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissible && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -127,14 +132,16 @@ export function Modal({
             <h2 id={titleId} className="text-xl font-semibold text-white">
               {title}
             </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close dialog"
-              className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {dismissible && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close dialog"
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
         )}
         {children}

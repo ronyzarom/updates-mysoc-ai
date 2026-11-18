@@ -7,7 +7,8 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { api, User, LoginResponse } from "./api";
+import { useQueryClient } from "@tanstack/react-query";
+import { api, ApiError, User, LoginResponse } from "./api";
 
 interface AuthContextType {
   user: User | null;
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   const refreshUser = useCallback(async () => {
     if (!api.isAuthenticated()) {
@@ -35,18 +37,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const profile = await api.getProfile();
       setUser(profile);
-    } catch {
-      // Token might be invalid, clear it
-      api.clearTokens();
-      setUser(null);
+    } catch (err) {
+      // Only a definitive refusal ends the session. A network blip or a 5xx
+      // keeps the tokens (and any user already shown) so a transient outage
+      // does not sign the user out of every tab.
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        api.clearTokens();
+        queryClient.clear();
+        setUser(null);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
+
+  // When the API client finds the session dead (refresh token refused, or
+  // another tab signed out), drop the user so LayoutWrapper redirects to
+  // login, and drop cached data so nothing leaks into the next session.
+  useEffect(() => {
+    api.setAuthLostHandler(() => {
+      queryClient.clear();
+      setUser(null);
+    });
+    return () => api.setAuthLostHandler(null);
+  }, [queryClient]);
 
   const login = async (
     email: string,
@@ -54,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ): Promise<LoginResponse> => {
     const response = await api.login(email, password);
     if (!response.requires_mfa && response.user) {
+      queryClient.clear();
       setUser(response.user);
     }
     return response;
@@ -65,13 +84,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ): Promise<LoginResponse> => {
     const response = await api.verifyMFA(mfaToken, totpCode);
     if (response.user) {
+      queryClient.clear();
       setUser(response.user);
     }
     return response;
   };
 
+  // logout always ends the local session: api.logout swallows server and
+  // network errors, so an expired session can still sign out.
   const logout = async () => {
     await api.logout();
+    queryClient.clear();
     setUser(null);
   };
 

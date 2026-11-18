@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/catalog"
 	"github.com/cyfox-labs/updates-mysoc-ai/internal/server/database"
 )
 
@@ -80,6 +81,30 @@ func NormalizeScope(scope string) (string, error) {
 	}
 }
 
+// NormalizeKeyTier validates the optional product-tier binding for a key of
+// the given (already normalized) scope. A tier must be a canonical catalog
+// tier — a typo would mint a key that silently matches no instance — and is
+// only meaningful for update-group keys: tier binding is enforced only on the
+// update-group action, so on a releases or admin key it would look like a
+// restriction while restricting nothing.
+func NormalizeKeyTier(scope, productTier string) (string, error) {
+	tier := catalog.Normalize(productTier)
+	if tier == "" {
+		return "", nil
+	}
+	if scope != ScopeUpdateGroup {
+		return "", fmt.Errorf("product_tier is only supported for %q keys (got scope %q)", ScopeUpdateGroup, scope)
+	}
+	if !catalog.IsValidTier(tier) {
+		names := make([]string, 0, len(catalog.Tiers()))
+		for _, t := range catalog.Tiers() {
+			names = append(names, t.Name)
+		}
+		return "", fmt.Errorf("invalid product_tier %q (must be one of %s)", productTier, strings.Join(names, ", "))
+	}
+	return tier, nil
+}
+
 // ScopeAllows reports whether a key with keyScope may perform an action that
 // requires required. An admin-scoped key satisfies every requirement; otherwise
 // the scopes must match exactly.
@@ -121,7 +146,10 @@ func (r *APIKeyRepository) Create(ctx context.Context, name, scope, productTier,
 	if err != nil {
 		return "", nil, err
 	}
-	productTier = strings.ToLower(strings.TrimSpace(productTier))
+	productTier, err = NormalizeKeyTier(normalizedScope, productTier)
+	if err != nil {
+		return "", nil, err
+	}
 	var productTierPtr *string
 	if productTier != "" {
 		productTierPtr = &productTier

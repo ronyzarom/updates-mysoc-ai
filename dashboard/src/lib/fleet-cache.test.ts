@@ -5,7 +5,19 @@ import { refreshFleetQueries } from "./fleet-cache";
 describe("fleet deletion cache refresh", () => {
   it("removes the deleted detail and invalidates the actual list, tree, hierarchy and count keys", async () => {
     const client = new QueryClient();
-    const keys = [["instances-list", "siemcore"], ["instance-tree"], ["instance-children", "parent"], ["fleet-stats"], ["inactive-children", "parent"]];
+    const keys = [
+      ["instances-list", "siemcore"],
+      ["instance-tree"],
+      ["instance-children", "parent"],
+      ["fleet-stats"],
+      ["fleet-tree", "__roots__"],
+      ["fleet-tree-roots", ""],
+      ["customer-directory", ""],
+      ["customer-children", "cust"],
+      ["security-stats"],
+      ["security-list"],
+      ["inactive-children", "parent"],
+    ];
     for (const key of keys) client.setQueryData(key, { items: ["deleted"] });
     client.setQueryData(["instance", "deleted"], { id: "deleted" });
     client.setQueryData(["releases"], []);

@@ -52,7 +52,7 @@ export default function InstanceDetailPage() {
   // Hierarchy is resolved server-side, never by pulling the whole fleet:
   // the ancestor chain via a dedicated endpoint, and direct children via a
   // parent-filtered paged query (bounded — a relay can have many children).
-  const { data: ancestorChain } = useQuery({
+  const { data: ancestorChain, isSuccess: parentsLoaded } = useQuery({
     queryKey: ["instance-parents", id],
     queryFn: ({ signal }) => api.getInstanceParents(id, signal),
     enabled: deletedId !== id && Boolean(instance),
@@ -89,19 +89,13 @@ export default function InstanceDetailPage() {
     }
   }, [instance?.update_group]);
 
-  // Clear error after 5 seconds
-  useEffect(() => {
-    if (mutationError) {
-      const timer = setTimeout(() => setMutationError(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [mutationError]);
+  // Errors persist until the user dismisses them or takes the next action — a
+  // timed auto-clear hid failures before they were seen.
 
   const updateInstanceMutation = useMutation({
     mutationFn: (data: { display_name?: string }) => api.updateInstance(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["instance", id] });
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      refreshFleetQueries(queryClient);
       setIsEditingName(false);
       setMutationError(null);
     },
@@ -127,8 +121,7 @@ export default function InstanceDetailPage() {
   const autoUpdateMutation = useMutation({
     mutationFn: (enabled: boolean) => api.setInstanceAutoUpdate(id, enabled),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["instance", id] });
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
+      refreshFleetQueries(queryClient);
       setMutationError(null);
     },
     onError: (error: Error) => {
@@ -136,15 +129,18 @@ export default function InstanceDetailPage() {
     },
   });
 
+  const [groupError, setGroupError] = useState<string | null>(null);
   const updateGroupMutation = useMutation({
     mutationFn: (group: string) => api.setInstanceUpdateGroup(id, group),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["instance", id] });
-      queryClient.invalidateQueries({ queryKey: ["instances"] });
-      setMutationError(null);
+      refreshFleetQueries(queryClient);
+      setGroupError(null);
     },
     onError: (error: Error) => {
-      setMutationError(`Failed to update group: ${error.message}`);
+      // Keep the error next to the control, and reset the select to the value
+      // the server still holds so a failed change never looks like a success.
+      setGroupError(error.message);
+      setSelectedGroup(instance?.update_group || "stable");
     },
   });
 
@@ -244,6 +240,18 @@ export default function InstanceDetailPage() {
   }
 
   const heartbeat = instance.last_heartbeat_data;
+
+  // Health signals the server records but a status dot can't show.
+  const selfUpdate = heartbeat?.self_update;
+  const relayListenerDown = heartbeat?.relay_listener_ok === false;
+  const parentRejected = heartbeat?.parent_rejected_credential === true;
+
+  // Relay-reported nodes are refreshed only on change (delta reporting), so the
+  // server exempts them from the time-based "offline" rule. Age the heartbeat
+  // by status for them, and label it as reported via the relay, not a direct
+  // heartbeat that looks stale.
+  const relayReported = Boolean(instance.reported_via);
+  const lastContactAt = relayReported ? instance.reported_at : instance.last_heartbeat;
 
   // A failed last-update attempt is rendered as resolved once the node
   // demonstrably runs the version that attempt targeted (or newer).
@@ -389,7 +397,7 @@ export default function InstanceDetailPage() {
               <span className="text-slate-600">&rsaquo;</span>
             </span>
           ))}
-          {instance.parent_instance_id && !parentKnown && (
+          {instance.parent_instance_id && !parentKnown && parentsLoaded && (
             <span className="flex items-center gap-2 text-slate-500">
               {instance.parent_instance_id} (not enrolled)
               <span className="text-slate-600">&rsaquo;</span>
@@ -404,14 +412,41 @@ export default function InstanceDetailPage() {
 
       {/* Error Banner */}
       {mutationError && (
-        <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 flex items-center justify-between">
-          <span className="text-red-200">{mutationError}</span>
+        <div role="alert" className="bg-red-900/50 border border-red-500 rounded-lg p-4 flex items-center justify-between">
+          <span className="text-red-200 break-words">{mutationError}</span>
           <button
             onClick={() => setMutationError(null)}
             className="text-red-300 hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* Survivability / health warnings the server tracks but the status dot
+          alone can't convey: a live relay with a dead child-facing listener,
+          a credential the parent is rejecting, or a node that can't self-update. */}
+      {relayListenerDown && (
+        <div role="alert" className="bg-red-900/40 border border-red-500/60 rounded-lg p-4 flex items-start gap-2">
+          <Network className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-red-200 font-medium">Relay listener down</p>
+            <p className="text-sm text-red-300/80">
+              This relay is reporting, but its child-facing listener failed its last self-probe. The cascade beneath it
+              cannot update until the listener recovers.
+            </p>
+          </div>
+        </div>
+      )}
+      {parentRejected && (
+        <div role="alert" className="bg-amber-900/40 border border-amber-500/60 rounded-lg p-4 flex items-start gap-2">
+          <KeyRound className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-amber-200 font-medium">Parent rejected this node&apos;s credential</p>
+            <p className="text-sm text-amber-300/80">
+              The parent returned 401/403, not a network error — often an operator deactivation starving the subtree.
+            </p>
+          </div>
         </div>
       )}
 
@@ -429,14 +464,19 @@ export default function InstanceDetailPage() {
             <InfoRow label="Type" value={instance.instance_type} />
             <InfoRow label="Hostname" value={instance.hostname} />
             <InfoRow label="Status" value={instance.status} />
+            {instance.customer_name && <InfoRow label="Customer" value={instance.customer_name} />}
+            <InfoRow label="Update ring" value={instance.update_group || "stable"} />
             <InfoRow
-              label="Last Heartbeat"
+              label={relayReported ? `Last reported via ${instance.reported_via}` : "Last Heartbeat"}
               value={
-                instance.last_heartbeat
-                  ? formatDistanceToNow(new Date(instance.last_heartbeat), { addSuffix: true })
+                lastContactAt
+                  ? formatDistanceToNow(new Date(lastContactAt), { addSuffix: true })
                   : "Never"
               }
             />
+            {instance.last_ip_seen_at && (
+              <InfoRow label="IP last seen" value={formatDistanceToNow(new Date(instance.last_ip_seen_at), { addSuffix: true })} />
+            )}
             <InfoRow
               label="Created"
               value={format(new Date(instance.created_at), "PPp")}
@@ -506,6 +546,11 @@ export default function InstanceDetailPage() {
               <p className="text-xs text-slate-500 mt-1">
                 Current: <span className="text-cyan-400">{instance.update_group || "stable"}</span>
               </p>
+              {groupError && (
+                <p role="alert" className="text-xs text-red-400 mt-1 break-words">
+                  Failed to change group: {groupError}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -532,6 +577,8 @@ export default function InstanceDetailPage() {
                   <Link href={`/instances/${parentKnown.id}`} className="text-cyan-400 hover:text-cyan-300">
                     {parentKnown.instance_id}
                   </Link>
+                ) : instance.parent_instance_id && !parentsLoaded ? (
+                  <span className="text-slate-400">…</span>
                 ) : instance.parent_instance_id ? (
                   <span className="text-amber-400" title="Declared parent not enrolled yet">
                     {instance.parent_instance_id} (orphan)
@@ -561,6 +608,7 @@ export default function InstanceDetailPage() {
                         >
                           {child.instance_id}
                         </Link>
+                        <StatusBadge status={child.status} />
                       </li>
                     ))}
                   </ul>
@@ -600,6 +648,30 @@ export default function InstanceDetailPage() {
               <span className="text-slate-400">Updater Version</span>
               <span className="text-white">{heartbeat?.updater_version || "Unknown"}</span>
             </div>
+            {selfUpdate && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400" title="Whether this node can replace its own binary through the cascade">
+                  Self-update
+                </span>
+                {selfUpdate.capable ? (
+                  <span className="text-emerald-400">Capable</span>
+                ) : (
+                  <span className="text-red-400 text-right" title={selfUpdate.reason || ""}>
+                    Not capable{selfUpdate.reason ? ` — ${selfUpdate.reason}` : " (needs kit reinstall)"}
+                  </span>
+                )}
+              </div>
+            )}
+            {selfUpdate?.last_result && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Last self-update</span>
+                <span className={selfUpdate.last_result.success ? "text-emerald-400" : "text-red-400"}>
+                  {selfUpdate.last_result.success ? "Succeeded" : "Failed"}
+                  {" · "}
+                  {selfUpdate.last_result.target_version}
+                </span>
+              </div>
+            )}
             {heartbeat?.relay_guard && (
               <div className="flex items-center justify-between text-sm">
                 <span
@@ -685,15 +757,29 @@ export default function InstanceDetailPage() {
           </div>
         </div>
 
-        {instance.last_heartbeat_data?.last_update_attempt?.selected_artifact_kind && (
+        {instance.last_heartbeat_data?.last_update_attempt?.selected_artifact_kind && (() => {
+          const attempt = instance.last_heartbeat_data!.last_update_attempt!;
+          return (
           <div className="card space-y-2">
             <h2 className="text-lg font-semibold text-white">Artifact delivery</h2>
-            <p className="text-slate-300">Artifact: {instance.last_heartbeat_data.last_update_attempt.selected_artifact_kind}</p>
-            <p className="text-slate-300">Prerequisites: {instance.last_heartbeat_data.last_update_attempt.dependency_validation || "Not reported"}</p>
-            <p className="text-slate-300">Apply result: {instance.last_heartbeat_data.last_update_attempt.success ? "Succeeded" : "Failed"}</p>
-            <p className="text-xs text-slate-400 break-all">SHA-256: {instance.last_heartbeat_data.last_update_attempt.artifact_digest || "Not reported"}</p>
+            <p className="text-slate-300">Artifact: {attempt.selected_artifact_kind}</p>
+            <p className="text-slate-300">Prerequisites: {attempt.dependency_validation || "Not reported"}</p>
+            <p className="text-slate-300">Apply result: {attempt.success ? "Succeeded" : "Failed"}</p>
+            {attempt.unavailable_seconds !== undefined && (
+              <p className="text-slate-300">
+                Restart window: {attempt.unavailable_seconds}s
+                {attempt.availability_violation && (
+                  <span className="text-red-400"> · exceeded budget (availability violation)</span>
+                )}
+              </p>
+            )}
+            {!attempt.success && attempt.error && (
+              <p className="text-xs text-red-400 break-words">Error: {attempt.error}</p>
+            )}
+            <p className="text-xs text-slate-400 break-all">SHA-256: {attempt.artifact_digest || "Not reported"}</p>
           </div>
-        )}
+          );
+        })()}
 
         {/* Last Update Attempt */}
         {instance.last_update_at && (
@@ -735,7 +821,7 @@ export default function InstanceDetailPage() {
                     {instance.last_update_error && (
                       <div>
                         <span className="text-slate-400">Error</span>
-                        <p className="text-slate-300 mt-1 text-xs">{instance.last_update_error}</p>
+                        <p className="text-slate-300 mt-1 text-xs break-words">{instance.last_update_error}</p>
                       </div>
                     )}
                   </div>
@@ -772,7 +858,7 @@ export default function InstanceDetailPage() {
               {instance.last_update_error && (
                 <div className="text-sm">
                   <span className="text-slate-400">Error</span>
-                  <p className="text-red-400 mt-1 text-xs">{instance.last_update_error}</p>
+                  <p className="text-red-400 mt-1 text-xs break-words">{instance.last_update_error}</p>
                 </div>
               )}
               <div className="flex items-center justify-between text-sm">
@@ -870,7 +956,9 @@ export default function InstanceDetailPage() {
                         className={`text-xs px-2 py-1 rounded ${
                           product.status === "running"
                             ? "bg-emerald-500/20 text-emerald-400"
-                            : "bg-red-500/20 text-red-400"
+                            : product.status === "updating"
+                              ? "bg-amber-500/20 text-amber-400"
+                              : "bg-red-500/20 text-red-400"
                         }`}
                       >
                         {product.status || "unknown"}
@@ -938,8 +1026,11 @@ export default function InstanceDetailPage() {
                       {tel.target_endpoint && (
                         <div className="flex items-center justify-between">
                           <span className="text-slate-400">TLS</span>
-                          <span className={tel.target_tls ? "text-emerald-400" : "text-slate-300"}>
-                            {tel.target_tls ? "on" : "off"}
+                          <span
+                            className={tel.target_tls ? "text-emerald-400" : "text-slate-300"}
+                            title={tel.target_tls ? undefined : "The agent omits this field when TLS is off, so it can't be told apart from not reported"}
+                          >
+                            {tel.target_tls ? "on" : "off / not reported"}
                             {tel.target_tls && tel.target_sni ? ` · ${tel.target_sni}` : ""}
                           </span>
                         </div>
@@ -1034,6 +1125,13 @@ export default function InstanceDetailPage() {
               <p className="text-sm text-slate-500 mb-6">
                 This removes the instance from fleet lists and counts. An internal retirement record is retained to block cached relay reports. A new heartbeat from the host can reactivate it.
               </p>
+
+              {childrenTotal > 0 && (
+                <p className="text-sm text-amber-400 mb-6 -mt-3">
+                  This node still has {childrenTotal.toLocaleString()} child{childrenTotal === 1 ? "" : "ren"} beneath it.
+                  They will be orphaned until they re-enrol under a new parent.
+                </p>
+              )}
 
               <div className="flex gap-3 w-full">
                 <button

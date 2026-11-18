@@ -313,6 +313,8 @@ When uploading releases, always include the groups that should receive the updat
 | `production` | Production instances |
 
 > **Common Issue:** If you forget to include `stable`, most instances won't see the update because they default to `update_group: stable`.
+>
+> Since 1.19.0.6 an upload with no target groups lands on `alpha` only (it used to land on all four rings). Rings are cumulative: an edit must name a prefix of `alpha, beta, stable, production` (for example `alpha,beta,stable`); a set that skips a ring, such as `production` alone, is rejected with `400`.
 
 ### Version Comparison
 
@@ -422,7 +424,7 @@ chmod 600 keys/ADMIN-API-KEY.txt
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/health` | GET | Server health check (`status`, `version`, `commit`) |
+| `/health` | GET | Server health check (`status`, `version`, `commit`; `database`, `storage` backend labels since 1.19.0.6) |
 | `/api/v1/releases` | GET | List all releases |
 | `/api/v1/signing-key` | GET | Release signing public key and key id |
 

@@ -12,9 +12,17 @@ import { TierBadge } from "@/components/InstanceTree";
 const PAGE_SIZE = 100;
 const ROW_HEIGHT = 84; // px, must match the rendered row height for windowing
 
+// statusFilterQuery maps the fleet status select onto the server query.
+// "failed" is not a derived status but its own filter (failed=true).
+export function statusFilterQuery(status: string): { status?: string; failed?: boolean } {
+  if (status === "all") return {};
+  if (status === "failed") return { failed: true };
+  return { status };
+}
+
 export interface InstancesListProps {
   tier: string; // "all" or a product tier
-  status: string; // "all" or a derived status
+  status: string; // "all", a derived status, or "failed"
   search: string;
   sort: string;
   dir: "asc" | "desc";
@@ -31,16 +39,20 @@ export function InstancesList({ tier, status, search, sort, dir }: InstancesList
     isLoading,
     isError,
     error,
+    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey: ["instances-list", tier, status, search, sort, dir],
     initialPageParam: 0,
+    // Infinite list: no background refetch, or the global 30s interval re-pulls
+    // every loaded page and shuffles rows (last_heartbeat sort) under the user.
+    refetchInterval: false,
     queryFn: ({ pageParam }) =>
       api.getInstancesFiltered({
         tier: tier === "all" ? undefined : tier,
-        status: status === "all" ? undefined : status,
+        ...statusFilterQuery(status),
         search: search.trim() || undefined,
         sort,
         dir,
@@ -80,13 +92,18 @@ export function InstancesList({ tier, status, search, sort, dir }: InstancesList
   if (isLoading) {
     return <div className="text-slate-400">Loading instances...</div>;
   }
-  if (isError) {
+  // Only blank the whole view when nothing is loaded; a failed next page keeps
+  // the rows already shown and offers an inline retry at the foot of the list.
+  if (isError && items.length === 0) {
     return (
       <div className="card border-red-500/50 bg-red-900/20">
         <p className="text-red-400 font-medium">Failed to load instances</p>
         <p className="text-sm text-slate-400 mt-1">
           {error instanceof Error ? error.message : "Unknown error"}
         </p>
+        <button onClick={() => refetch()} className="btn btn-secondary mt-3">
+          Retry
+        </button>
       </div>
     );
   }
@@ -133,7 +150,15 @@ export function InstancesList({ tier, status, search, sort, dir }: InstancesList
               >
                 {isSentinel ? (
                   <div className="px-4 py-6 text-center text-sm text-slate-500">
-                    {isFetchingNextPage ? "Loading more…" : "Scroll for more"}
+                    {isError ? (
+                      <button onClick={() => fetchNextPage()} className="text-red-400 hover:underline">
+                        Failed to load more — retry
+                      </button>
+                    ) : isFetchingNextPage ? (
+                      "Loading more…"
+                    ) : (
+                      "Scroll for more"
+                    )}
                   </div>
                 ) : (
                   <Link
@@ -170,6 +195,26 @@ export function InstancesList({ tier, status, search, sort, dir }: InstancesList
                         <span className="text-xs text-slate-300" title={instance.last_artifact_delivery.artifact_digest}>
                           {instance.last_artifact_delivery.selected_artifact_kind}
                           {" · "}{instance.last_artifact_delivery.dependency_validation || "Not reported"}
+                        </span>
+                      )}
+                      {instance.last_artifact_delivery?.availability_violation && (
+                        <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30" title="Last update exceeded the restart budget">
+                          slow restart
+                        </span>
+                      )}
+                      {instance.self_update_capable === false && (
+                        <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30" title="Cannot self-update — needs a kit reinstall">
+                          no self-update
+                        </span>
+                      )}
+                      {instance.relay_listener_ok === false && (
+                        <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30" title="Relay listener down">
+                          listener down
+                        </span>
+                      )}
+                      {instance.last_update_success === false && (
+                        <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30" title={instance.last_update_error || "Last update failed"}>
+                          update failed
                         </span>
                       )}
                       <StatusBadge status={instance.status} />

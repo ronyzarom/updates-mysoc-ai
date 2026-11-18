@@ -71,6 +71,85 @@ export function compareVersions(a: string, b: string): number | null {
   return 0;
 }
 
+export const RINGS = ["alpha", "beta", "stable", "production"] as const;
+export type Ring = (typeof RINGS)[number];
+
+// prefixThrough is the "promote through" selector's ring list: every ring from
+// alpha up to and including `ring`. Rings are cumulative, so the selector can
+// never produce an empty list or one that skips a ring.
+export function prefixThrough(ring: Ring): Ring[] {
+  const out: Ring[] = [];
+  for (const r of RINGS) {
+    out.push(r);
+    if (r === ring) break;
+  }
+  return out;
+}
+
+// promoteThroughOf maps a release's stored target groups back to the selector:
+// the furthest ring it is offered to (alpha when none is recognized).
+export function promoteThroughOf(groups: string[] | undefined): Ring {
+  let last: Ring = "alpha";
+  for (const r of RINGS) if ((groups || []).includes(r)) last = r;
+  return last;
+}
+
+// A normal release is the one the update check serves. Qualification rows (an
+// artifact_kind, or paired variants) are never offered on the normal path.
+export function isNormalRelease(r: Pick<Release, "manifest">): boolean {
+  return (
+    !r.manifest?.artifact_kind &&
+    !(r.manifest?.artifact_variants && r.manifest.artifact_variants.length > 0)
+  );
+}
+
+// The release each ring currently offers for one product: the highest normal
+// version whose target_groups contains that ring. null means the ring has no
+// release — for stable that breaks fresh installs, since new servers enrol
+// into stable.
+export function ringHeads<
+  T extends Pick<Release, "id" | "version" | "target_groups" | "manifest">
+>(releases: T[]): Record<Ring, T | null> {
+  const heads = { alpha: null, beta: null, stable: null, production: null } as Record<Ring, T | null>;
+  for (const ring of RINGS) {
+    let best: T | null = null;
+    for (const r of releases) {
+      if (!isNormalRelease(r)) continue;
+      if (!(r.target_groups || []).includes(ring)) continue;
+      if (!best) {
+        best = r;
+        continue;
+      }
+      const cmp = compareVersions(r.version, best.version);
+      if (cmp !== null && cmp > 0) best = r;
+    }
+    heads[ring] = best;
+  }
+  return heads;
+}
+
+// Which rings a given release currently heads, among all releases of its product.
+export function ringsHeadedBy<
+  T extends Pick<Release, "id" | "version" | "target_groups" | "manifest">
+>(release: T, productReleases: T[]): Ring[] {
+  const heads = ringHeads(productReleases);
+  return RINGS.filter((ring) => heads[ring]?.id === release.id);
+}
+
+// Comparator for release version strings, newest first. Unparsable versions
+// sort last, then by string, so the order is always stable.
+export function compareVersionsDesc(a: string, b: string): number {
+  const c = compareVersions(a, b);
+  if (c !== null) return -c;
+  // One (or both) sides is unparsable. Parsable versions always sort ahead of
+  // unparsable labels; ties between unparsable labels fall back to string order.
+  const pa = !a.trim().split(".").map(Number).some(Number.isNaN);
+  const pb = !b.trim().split(".").map(Number).some(Number.isNaN);
+  if (pa !== pb) return pa ? -1 : 1;
+  if (a === b) return 0;
+  return a < b ? 1 : -1;
+}
+
 // A failed update attempt is moot once the node demonstrably runs the version
 // the attempt was trying to reach (or newer) — e.g. it recovered through an
 // out-of-band reinstall. Returns the current version proving supersession, or
@@ -133,11 +212,14 @@ export interface IssuerSealCoverage {
 // Per-issuer share of releases published in the last 30 days that carried a
 // verified issuer seal. Issuers with no recent releases are omitted.
 export function sealCoverage(
-  releases: Pick<Release, "issuer" | "seal_status" | "released_at">[] | undefined,
+  releases: Pick<Release, "issuer" | "seal_status" | "released_at" | "manifest">[] | undefined,
   now = Date.now()
 ): IssuerSealCoverage[] {
   const byIssuer = new Map<string, IssuerSealCoverage>();
   for (const r of releases || []) {
+    // Qualification rows are always stored unsealed and would drag the
+    // published-release coverage down; count only normal releases.
+    if (!isNormalRelease(r)) continue;
     const at = new Date(r.released_at).getTime();
     if (Number.isNaN(at) || at < now - THIRTY_DAYS_MS || at > now) continue;
     const issuer = r.issuer || "other";

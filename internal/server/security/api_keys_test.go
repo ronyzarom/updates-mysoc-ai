@@ -106,3 +106,29 @@ func TestScopeAllows(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeKeyTier(t *testing.T) {
+	cases := []struct {
+		scope, tier string
+		want        string
+		wantErr     bool
+	}{
+		{ScopeUpdateGroup, "", "", false},                   // unbound update-group key
+		{ScopeUpdateGroup, " SiemCore ", "siemcore", false}, // normalized
+		{ScopeUpdateGroup, "mysoc", "mysoc", false},
+		{ScopeUpdateGroup, "swf", "swf", false},
+		{ScopeUpdateGroup, "siem-core", "", true}, // typo: not a catalog tier
+		{ScopeReleases, "", "", false},
+		{ScopeReleases, "siemcore", "", true}, // tier would restrict nothing
+		{ScopeAdmin, "mysoc", "", true},
+	}
+	for _, c := range cases {
+		got, err := NormalizeKeyTier(c.scope, c.tier)
+		if (err != nil) != c.wantErr {
+			t.Fatalf("NormalizeKeyTier(%q, %q) err = %v, wantErr %v", c.scope, c.tier, err, c.wantErr)
+		}
+		if got != c.want {
+			t.Fatalf("NormalizeKeyTier(%q, %q) = %q, want %q", c.scope, c.tier, got, c.want)
+		}
+	}
+}

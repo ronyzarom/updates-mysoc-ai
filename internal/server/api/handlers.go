@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -98,6 +99,22 @@ type HealthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
+	// Backend kinds for the dashboard's settings page. Labels only — never
+	// paths, hosts or credentials. Omitted when unknown.
+	Database string `json:"database,omitempty"`
+	Storage  string `json:"storage,omitempty"`
+}
+
+// storageKind names the artifact storage backend actually in use.
+func storageKind(st storage.Storage) string {
+	switch st.(type) {
+	case *storage.LocalStorage:
+		return "local"
+	case nil:
+		return ""
+	default:
+		return "other"
+	}
 }
 
 // handleHealth returns server health status
@@ -106,6 +123,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Status:  "ok",
 		Version: Version,
 		Commit:  GitCommit,
+		Storage: storageKind(s.storage),
+	}
+	if s.db != nil && s.db.Pool != nil {
+		resp.Database = "postgresql"
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -582,12 +603,9 @@ func (s *Server) handleUpdateRelease(w http.ResponseWriter, r *http.Request) {
 
 	// Validate groups if provided
 	if len(req.TargetGroups) > 0 {
-		validGroups := map[string]bool{"alpha": true, "beta": true, "stable": true, "production": true}
-		for _, g := range req.TargetGroups {
-			if !validGroups[g] {
-				writeError(w, http.StatusBadRequest, "invalid group: "+g)
-				return
-			}
+		if err := validateCumulativeGroups(req.TargetGroups); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
 		}
 	}
 
@@ -602,6 +620,15 @@ func (s *Server) handleUpdateRelease(w http.ResponseWriter, r *http.Request) {
 	if release == nil {
 		writeError(w, http.StatusNotFound, "release not found")
 		return
+	}
+
+	// A group change here is gated exactly as the dedicated target-groups
+	// endpoint is, so widening past alpha can never slip through the notes PUT.
+	if len(req.TargetGroups) > 0 {
+		if code, msg := s.checkPromotionGate(r.Context(), product, version, release.TargetGroups, req.TargetGroups, strings.TrimSpace(r.URL.Query().Get("override"))); code != 0 {
+			writeError(w, code, msg)
+			return
+		}
 	}
 
 	// Update the release
@@ -638,13 +665,10 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Validate groups
-	validGroups := map[string]bool{"alpha": true, "beta": true, "stable": true, "production": true}
-	for _, g := range req.TargetGroups {
-		if !validGroups[g] {
-			writeError(w, http.StatusBadRequest, "invalid group: "+g+" (must be alpha, beta, stable, or production)")
-			return
-		}
+	// Validate groups (non-empty, known rings, cumulative from alpha).
+	if err := validateCumulativeGroups(req.TargetGroups); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	svc := s.releaseService()
@@ -662,26 +686,10 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 
 	// Invariant 7 promotion gate: refuse to widen a release past alpha when any
 	// alpha-ring node reported that applying it exceeded the restart-window
-	// budget (availability_violation). Alpha is where downtime is caught; a
-	// release that took the product down for too long must not reach more rings.
-	// An operator may override with ?override=<reason>, which is audited.
-	if wideningBeyondAlpha(release.TargetGroups, req.TargetGroups) {
-		override := strings.TrimSpace(r.URL.Query().Get("override"))
-		violations, vErr := licensing.NewInstanceRepository(s.db).CountAvailabilityViolations(r.Context(), product, version)
-		if vErr != nil {
-			writeError(w, http.StatusInternalServerError, "failed to check availability violations: "+vErr.Error())
-			return
-		}
-		if violations > 0 {
-			if override == "" {
-				writeError(w, http.StatusConflict, fmt.Sprintf(
-					"refusing to widen %s %s beyond alpha: %d alpha-ring node(s) reported an availability_violation (restart window exceeded max_unavailable_seconds). Fix the release or retry with ?override=<reason> to proceed with an audited override.",
-					product, version, violations))
-				return
-			}
-			fmt.Printf("[promotion-override] product=%s version=%s violations=%d groups=%v reason=%q\n",
-				product, version, violations, req.TargetGroups, override)
-		}
+	// budget. An operator may override with ?override=<reason>, which is audited.
+	if code, msg := s.checkPromotionGate(r.Context(), product, version, release.TargetGroups, req.TargetGroups, strings.TrimSpace(r.URL.Query().Get("override"))); code != 0 {
+		writeError(w, code, msg)
+		return
 	}
 
 	// Update target groups
@@ -696,6 +704,75 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 		"version":       version,
 		"target_groups": req.TargetGroups,
 	})
+}
+
+// ringOrder is the cumulative promotion order. A release's target groups must
+// be a prefix of this list.
+var ringOrder = []string{"alpha", "beta", "stable", "production"}
+
+// validateCumulativeGroups rejects an empty list, an unknown ring, a duplicate,
+// or a set that skips a ring (for example {production} or {alpha,stable}).
+// Rings are cumulative: a higher ring must never be offered a release that a
+// lower ring was never offered, or a node demoted to the lower ring is stranded
+// above its own ring's head. This is the gap that once left stable with no
+// mySOC release.
+func validateCumulativeGroups(groups []string) error {
+	if len(groups) == 0 {
+		return fmt.Errorf("at least one target group is required")
+	}
+	have := map[string]bool{}
+	for _, g := range groups {
+		valid := false
+		for _, r := range ringOrder {
+			if g == r {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("invalid target group: %q (must be alpha, beta, stable, or production)", g)
+		}
+		if have[g] {
+			return fmt.Errorf("duplicate target group: %q", g)
+		}
+		have[g] = true
+	}
+	seenGap := false
+	for _, r := range ringOrder {
+		if have[r] {
+			if seenGap {
+				return fmt.Errorf("target groups must be cumulative from alpha (got %v); rings cannot be skipped", groups)
+			}
+		} else {
+			seenGap = true
+		}
+	}
+	return nil
+}
+
+// checkPromotionGate enforces the invariant 7 availability gate when a target-
+// group change widens a release past alpha. It returns an HTTP status and
+// message to write, or (0, "") when the change is allowed. A non-empty override
+// (from ?override=) bypasses the refusal but is audited. Shared by both edit
+// handlers so the gate cannot be skipped through the notes+groups PUT.
+func (s *Server) checkPromotionGate(ctx context.Context, product, version string, current, requested []string, override string) (int, string) {
+	if !wideningBeyondAlpha(current, requested) {
+		return 0, ""
+	}
+	violations, err := licensing.NewInstanceRepository(s.db).CountAvailabilityViolations(ctx, product, version)
+	if err != nil {
+		return http.StatusInternalServerError, "failed to check availability violations: " + err.Error()
+	}
+	if violations > 0 {
+		if override == "" {
+			return http.StatusConflict, fmt.Sprintf(
+				"refusing to widen %s %s beyond alpha: %d alpha-ring node(s) reported an availability_violation (restart window exceeded max_unavailable_seconds). Fix the release or retry with ?override=<reason> to proceed with an audited override.",
+				product, version, violations)
+		}
+		fmt.Printf("[promotion-override] product=%s version=%s violations=%d groups=%v reason=%q\n",
+			product, version, violations, requested, override)
+	}
+	return 0, ""
 }
 
 // wideningBeyondAlpha reports whether the requested target groups add any ring
@@ -1252,6 +1329,7 @@ func instanceFilterFromQuery(r *http.Request) licensing.InstanceListFilter {
 		Operator: q.Get("operator"),
 		Parent:   q.Get("parent"),
 		Search:   q.Get("search"),
+		Failed:   q.Get("failed") == "true",
 		Sort:     q.Get("sort"),
 		SortDir:  q.Get("dir"),
 	}

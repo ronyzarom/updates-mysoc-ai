@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { refreshFleetQueries } from "@/lib/fleet-cache";
 import { api } from "@/lib/api";
@@ -16,10 +16,22 @@ export function CleanupChildren({ parentId }: { parentId: string }) {
     enabled: open,
     staleTime: 0,
     refetchOnWindowFocus: false,
+    // Don't poll: a background refetch would blank the list ("Checking…") and
+    // wipe the user's selection mid-review.
+    refetchInterval: false,
   });
+  // Seed the selection once per open session, not on every data change, so a
+  // refresh never discards what the user has unchecked.
+  const seeded = useRef(false);
   useEffect(() => {
-    if (candidates.data) setSelected(candidates.data.items.map((item) => item.id));
-  }, [candidates.data]);
+    if (!open) seeded.current = false;
+  }, [open]);
+  useEffect(() => {
+    if (open && !seeded.current && candidates.data) {
+      setSelected(candidates.data.items.map((item) => item.id));
+      seeded.current = true;
+    }
+  }, [open, candidates.data]);
   const cleanup = useMutation({
     mutationFn: () => api.cleanupChildren(parentId, selected),
     onSuccess: ({ removed }) => {
@@ -40,7 +52,7 @@ export function CleanupChildren({ parentId }: { parentId: string }) {
           <p className="text-sm text-slate-400 mt-2">This removes entries from the hierarchy and retains their history. It does not uninstall software. A genuine new heartbeat can make a host visible again.</p>
         </div>
         <div className="p-5 overflow-y-auto min-h-0">
-          {candidates.isFetching ? <p className="text-slate-400">Checking inactive entries…</p> : candidates.isError ? <p role="alert" className="text-red-400">{candidates.error.message}</p> : items.length === 0 ? <p className="text-slate-400">No eligible inactive entries.</p> : <>
+          {candidates.isLoading ? <p className="text-slate-400">Checking inactive entries…</p> : candidates.isError ? <p role="alert" className="text-red-400">{candidates.error.message}</p> : items.length === 0 ? <p className="text-slate-400">No eligible inactive entries.</p> : <>
             <label className="flex gap-2 text-white mb-4"><input type="checkbox" checked={selected.length === items.length} onChange={(e) => setSelected(e.target.checked ? items.map((item) => item.id) : [])} /> Select all ({items.length})</label>
             {items.length === 1000 && <p className="text-amber-400 text-sm mb-3">Showing up to 1,000 entries. Repeat cleanup if more remain.</p>}
             <ul className="space-y-3">{items.map((item) => <li key={item.id}><label className="flex items-start gap-3 text-sm text-slate-200"><input type="checkbox" className="mt-1" checked={selected.includes(item.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, item.id] : selected.filter((id) => id !== item.id))} /><span className="break-all">{item.instance_id}<span className="block text-xs text-slate-500">Last heartbeat: {item.last_heartbeat ? new Date(item.last_heartbeat).toLocaleString() : "Never"}</span></span></label></li>)}</ul>
@@ -49,7 +61,7 @@ export function CleanupChildren({ parentId }: { parentId: string }) {
         </div>
         <div className="p-5 border-t border-slate-700 flex justify-end gap-3">
           <button type="button" className="btn btn-secondary" disabled={cleanup.isPending} onClick={() => setOpen(false)}>Cancel</button>
-          <button type="button" className="btn bg-red-600 text-white" disabled={cleanup.isPending || candidates.isFetching || candidates.isError || selected.length === 0} onClick={() => cleanup.mutate()}>{cleanup.isPending ? "Removing…" : `Delete selected (${selected.length})`}</button>
+          <button type="button" className="btn bg-red-600 text-white" disabled={cleanup.isPending || candidates.isLoading || candidates.isError || selected.length === 0} onClick={() => cleanup.mutate()}>{cleanup.isPending ? "Removing…" : `Delete selected (${selected.length})`}</button>
         </div>
       </div>
     </div>}

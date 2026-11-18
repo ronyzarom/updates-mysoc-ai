@@ -34,6 +34,11 @@ export interface Instance {
   last_update_success?: boolean;
   last_update_error?: string;
   last_update_at?: string;
+  // Computed list flags, SQL-derived from the last heartbeat (list/tree views).
+  // self_update_capable=false needs a kit reinstall; relay_listener_ok=false is
+  // a live relay whose child-facing listener is down. Absent when not reported.
+  self_update_capable?: boolean;
+  relay_listener_ok?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -45,13 +50,17 @@ export interface LicenseStatus {
   last_check?: string;
 }
 
-export type ApiKeyScope = "releases" | "admin";
+// update-group keys may only move instances between update rings, optionally
+// bound to one product tier (product_tier) for operator self-service.
+export type ApiKeyScope = "releases" | "admin" | "update-group";
 
 export interface ApiKey {
   id: string;
   name: string;
   key_prefix: string;
   scope: ApiKeyScope;
+  // Set only on update-group keys bound to a single tier.
+  product_tier?: string;
   created_by?: string;
   created_at: string;
   expires_at?: string;
@@ -69,8 +78,6 @@ export interface CreatedApiKey {
 
 export interface UpdateAttempt {
   selected_artifact_kind?: "bootstrap" | "update";
-    artifact_variants?: string;
-    update_artifact?: File;
   dependency_validation?: "complete" | "missing" | "mismatch";
   artifact_digest?: string;
   from_version: string;
@@ -78,6 +85,20 @@ export interface UpdateAttempt {
   success: boolean;
   error?: string;
   timestamp: string;
+  // Measured process restart window for this change, and whether it blew the
+  // host's budget (invariant 7). The server gates ring promotion on the flag.
+  unavailable_seconds?: number;
+  availability_violation?: boolean;
+}
+
+// A node's ability to replace its own binary and the result of its last
+// self-update (survivability visibility, 1.18.0). Capable=false can never fix
+// itself through the cascade and needs a kit reinstall.
+export interface SelfUpdateStatus {
+  capable: boolean;
+  reason?: string;
+  current_version?: string;
+  last_result?: UpdateAttempt;
 }
 
 // Paginated response for instances list
@@ -97,6 +118,8 @@ export interface InstanceQuery {
   operator?: string;
   parent?: string;
   search?: string;
+  // Only nodes whose last update failed and was not superseded by a newer install.
+  failed?: boolean;
   sort?: string;
   dir?: "asc" | "desc";
   limit?: number;
@@ -282,6 +305,15 @@ export interface HeartbeatData {
   last_update_attempt?: UpdateAttempt;
   timestamp: string;
   relay_guard?: RelayGuardStats;
+  // Survivability/health signals (1.18.0+). self_update: can this node repair
+  // itself through the cascade. relay_listener_ok: this relay's child-facing
+  // listener answered its self-probe (false = a dead cascade beneath a live
+  // process). parent_rejected_credential: the parent rejected this node's
+  // credential (an operator deactivation starving the subtree), distinct from
+  // "parent unreachable". All absent on older agents.
+  self_update?: SelfUpdateStatus;
+  relay_listener_ok?: boolean;
+  parent_rejected_credential?: boolean;
 }
 
 // Port-protection counters reported by relay listeners (since process start).
@@ -383,21 +415,41 @@ export interface License {
 }
 
 export interface Release {
-  manifest?: { artifact_kind?: "bootstrap" | "update"; artifact_variants?: Array<{ kind: "bootstrap" | "update"; size: number; checksum: string; signature?: string }> };
+  manifest?: {
+    // Empty/absent means a normal release. Any non-empty value (e.g.
+    // "bootstrap", "update", "qualification") marks a qualification row that is
+    // never offered on the normal update path.
+    artifact_kind?: string;
+    artifact_variants?: Array<{
+      kind: "bootstrap" | "update";
+      name?: string;
+      arch?: string;
+      url?: string;
+      size: number;
+      checksum: string;
+      signature?: string;
+    }>;
+  };
   id: string;
   product_name: string;
   version: string;
+  // Legacy wire field. Target groups are the only update selector; channel is
+  // inert except for the internal "dual-alpha-<product>" qualification namespace.
   channel: string;
+  artifact_path?: string;
   artifact_size: number;
   checksum: string;
   signature?: string; // base64 ed25519; empty = unsigned (pre-1.8.0)
   release_notes?: string;
+  min_updater_version?: string;
   target_groups?: string[];
   released_at: string;
+  created_at?: string;
   // Issuer seal as checked at upload (1.16.2+); absent on older servers.
   seal_status?: SealStatus;
   issuer?: string;
   issuer_key_id?: string;
+  issuer_signature?: string;
 }
 
 export type SealStatus = "sealed" | "unsealed" | "invalid" | "unknown_key";
@@ -478,20 +530,60 @@ export interface AuditEvent {
   created_at: string;
 }
 
+// ApiError carries the HTTP status so callers can tell apart a 409 promotion
+// refusal, a 403 permission error, and a generic failure.
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+// RefreshOutcome separates a dead session ("lost": the server refused the
+// refresh token) from a failure that says nothing about the session
+// ("transient": network error or 5xx), so only the former signs the user out.
+type RefreshOutcome = "ok" | "lost" | "transient";
+
 class ApiClient {
   private baseUrl: string;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   // Single-flight guard so concurrent 401s trigger exactly one token refresh.
-  private refreshPromise: Promise<boolean> | null = null;
+  private refreshPromise: Promise<RefreshOutcome> | null = null;
+  // Invoked once when a required-auth request can no longer be satisfied (the
+  // refresh token is gone or rejected), so the app can sign the user out
+  // instead of leaving 401 pages polling.
+  private authLostHandler: (() => void) | null = null;
+
+  setAuthLostHandler(fn: (() => void) | null) {
+    this.authLostHandler = fn;
+  }
 
   constructor() {
     this.baseUrl = API_URL;
     // Load tokens from localStorage if available
     if (typeof window !== "undefined") {
-      this.accessToken = localStorage.getItem("access_token");
-      this.refreshToken = localStorage.getItem("refresh_token");
+      this.syncFromStorage();
+      // Tabs share localStorage. Another tab may rotate the refresh token (the
+      // server rotates it on every refresh) or sign out; follow it so this tab
+      // never refreshes with a revoked token and wipes the shared session.
+      window.addEventListener("storage", (e) => {
+        if (e.key !== null && e.key !== "access_token" && e.key !== "refresh_token") return;
+        const hadSession = !!this.accessToken;
+        this.syncFromStorage();
+        if (hadSession && !this.accessToken) this.authLostHandler?.();
+      });
     }
+  }
+
+  // syncFromStorage re-reads the shared tokens; another tab may have changed
+  // them since this client last looked.
+  private syncFromStorage() {
+    if (typeof window === "undefined") return;
+    this.accessToken = localStorage.getItem("access_token");
+    this.refreshToken = localStorage.getItem("refresh_token");
   }
 
   setTokens(accessToken: string, refreshToken: string) {
@@ -547,14 +639,22 @@ class ApiClient {
       headers: buildHeaders(),
     });
 
-    // If unauthorized and we can refresh, refresh once (shared) and retry.
-    if (response.status === 401 && requireAuth && this.refreshToken) {
-      const refreshed = await this.refreshTokens();
-      if (refreshed) {
+    // If unauthorized, refresh once (shared) and retry. Only a definitive
+    // refusal of the refresh token signs the user out; a network blip or a 5xx
+    // from the refresh endpoint surfaces as an ordinary error and keeps the
+    // session so the next request can try again.
+    if (response.status === 401 && requireAuth) {
+      if (!this.refreshToken) this.syncFromStorage();
+      const outcome = this.refreshToken ? await this.refreshOutcome() : "lost";
+      if (outcome === "ok") {
         response = await fetch(`${this.baseUrl}${path}`, {
           ...options,
           headers: buildHeaders(),
         });
+      } else if (outcome === "lost") {
+        // The session is gone: tell the app to sign out rather than render a
+        // 401 error on every page.
+        this.authLostHandler?.();
       }
     }
 
@@ -562,7 +662,10 @@ class ApiClient {
       const error = await response
         .json()
         .catch(() => ({ error: "Unknown error" }));
-      throw new Error(error.error || `API error: ${response.status}`);
+      throw new ApiError(
+        response.status,
+        error.error || `API error: ${response.status}`
+      );
     }
 
     // Some endpoints (e.g. 204) return no body.
@@ -609,42 +712,69 @@ class ApiClient {
   }
 
   async refreshTokens(): Promise<boolean> {
-    if (!this.refreshToken) return false;
-    // Coalesce concurrent refreshes: rotating the refresh token more than once
-    // in parallel would invalidate sessions and log the user out.
-    if (this.refreshPromise) return this.refreshPromise;
+    return (await this.refreshOutcome()) === "ok";
+  }
 
-    this.refreshPromise = this.doRefresh().finally(() => {
-      this.refreshPromise = null;
-    });
+  // refreshOutcome is single-flight: rotating the refresh token more than once
+  // in parallel would invalidate the session.
+  private refreshOutcome(): Promise<RefreshOutcome> {
+    if (!this.refreshToken) this.syncFromStorage();
+    if (!this.refreshToken) return Promise.resolve("lost");
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.doRefresh().finally(() => {
+        this.refreshPromise = null;
+      });
+    }
     return this.refreshPromise;
   }
 
-  private async doRefresh(): Promise<boolean> {
+  private async doRefresh(): Promise<RefreshOutcome> {
+    // Another tab may already have rotated the pair; adopt it instead of
+    // spending a refresh token the server has already revoked.
+    const before = this.refreshToken;
+    this.syncFromStorage();
+    if (this.refreshToken && this.refreshToken !== before) return "ok";
     const refreshToken = this.refreshToken;
-    if (!refreshToken) return false;
+    if (!refreshToken) return "lost";
 
+    let response: Response;
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
+      response = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
-
-      if (!response.ok) {
-        this.clearTokens();
-        return false;
-      }
-
-      const data = await response.json();
-      this.setTokens(data.access_token, data.refresh_token);
-      return true;
     } catch {
-      this.clearTokens();
-      return false;
+      return "transient"; // network failure: keep the session
     }
+
+    if (response.ok) {
+      try {
+        const data = await response.json();
+        this.setTokens(data.access_token, data.refresh_token);
+        return "ok";
+      } catch {
+        return "transient";
+      }
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      // A parallel tab may have won the rotation race with this same token.
+      if (typeof window !== "undefined") {
+        const shared = localStorage.getItem("refresh_token");
+        if (shared && shared !== refreshToken) {
+          this.syncFromStorage();
+          return "ok";
+        }
+      }
+      this.clearTokens();
+      return "lost";
+    }
+    return "transient"; // 5xx etc.: not a verdict on the session
   }
 
+  // logout never throws: an expired session or a network error must still
+  // leave the user signed out locally.
   async logout(): Promise<void> {
     try {
       await this.fetch(
@@ -655,17 +785,19 @@ class ApiClient {
         },
         true
       );
+    } catch {
+      // ignore: local sign-out below is what matters
     } finally {
       this.clearTokens();
     }
   }
 
+  // logoutAll revokes every session for the user. Unlike logout it reports
+  // failure, so the user is not told other devices were signed out when they
+  // were not; local tokens are cleared only once the server confirms.
   async logoutAll(): Promise<void> {
-    try {
-      await this.fetch("/api/v1/auth/logout-all", { method: "POST" }, true);
-    } finally {
-      this.clearTokens();
-    }
+    await this.fetch("/api/v1/auth/logout-all", { method: "POST" }, true);
+    this.clearTokens();
   }
 
   async getProfile(): Promise<User> {
@@ -734,17 +866,9 @@ class ApiClient {
     return this.fetch<AuditEvent[]>("/api/v1/auth/audit", {}, true);
   }
 
-  // Instances
-  async getInstances(): Promise<Instance[]> {
-    return this.fetch<Instance[]>("/api/v1/instances");
-  }
-
-  // Paginated instances response
-  async getInstancesPaged(limit = 50, offset = 0): Promise<InstancesPagedResponse> {
-    return this.fetch<InstancesPagedResponse>(
-      `/api/v1/instances/paged?limit=${limit}&offset=${offset}`
-    );
-  }
+  // Instances. The unbounded getInstances/getInstancesPaged were removed: every
+  // fleet view now uses the filtered, paged endpoints (getInstancesFiltered,
+  // getTreeChildren) so nothing pulls the whole fleet to the client.
 
   // buildInstanceQuery renders an InstanceQuery into a URLSearchParams string,
   // dropping empty values so the server sees only active filters.
@@ -756,6 +880,7 @@ class ApiClient {
     if (q.operator) params.set("operator", q.operator);
     if (q.parent) params.set("parent", q.parent);
     if (q.search) params.set("search", q.search);
+    if (q.failed) params.set("failed", "true");
     if (q.sort) params.set("sort", q.sort);
     if (q.dir) params.set("dir", q.dir);
     if (q.limit != null) params.set("limit", String(q.limit));
@@ -1031,10 +1156,15 @@ class ApiClient {
   async updateReleaseTargetGroups(
     product: string,
     version: string,
-    targetGroups: string[]
+    targetGroups: string[],
+    opts?: { kind?: string; override?: string }
   ): Promise<void> {
+    const params = new URLSearchParams();
+    if (opts?.kind) params.set("artifact_kind", opts.kind);
+    if (opts?.override) params.set("override", opts.override);
+    const qs = params.toString();
     await this.fetch(
-      `/api/v1/releases/${product}/${version}/target-groups`,
+      `/api/v1/releases/${product}/${version}/target-groups${qs ? `?${qs}` : ""}`,
       {
         method: "PUT",
         body: JSON.stringify({ target_groups: targetGroups }),
@@ -1056,6 +1186,8 @@ class ApiClient {
   async createApiKey(data: {
     name: string;
     scope: ApiKeyScope;
+    // Only valid with scope "update-group"; the server rejects it otherwise.
+    product_tier?: string;
     expires_in_days?: number;
   }): Promise<CreatedApiKey> {
     return this.fetch<CreatedApiKey>(
@@ -1134,7 +1266,15 @@ class ApiClient {
   }
 
   // Health
-  async getHealth(): Promise<{ status: string; version: string; commit?: string }> {
+  // database/storage are backend kinds (e.g. "postgresql", "local"); older
+  // servers omit them.
+  async getHealth(): Promise<{
+    status: string;
+    version: string;
+    commit?: string;
+    database?: string;
+    storage?: string;
+  }> {
     return this.fetch("/health", {}, false);
   }
 }

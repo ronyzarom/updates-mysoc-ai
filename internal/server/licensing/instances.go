@@ -84,8 +84,57 @@ const (
 	selectInstanceListCols = `id, instance_id, instance_type, hostname, display_name, license_id, 
 		api_key_hash, last_heartbeat, ` + derivedStatusCol + `, auto_update_enabled, update_group, 
 		last_ip_address, product_tier, parent_instance_id, customer_id, customer_name,
-		reported_via, reported_at, created_at, updated_at, CASE WHEN last_heartbeat_data->'last_update_attempt'->>'selected_artifact_kind' IN ('bootstrap','update') THEN last_heartbeat_data->'last_update_attempt' ELSE NULL END`
+		reported_via, reported_at, created_at, updated_at, CASE WHEN last_heartbeat_data->'last_update_attempt'->>'selected_artifact_kind' IN ('bootstrap','update') THEN last_heartbeat_data->'last_update_attempt' ELSE NULL END,
+		last_update_target_version, last_update_success, last_update_error,
+		CASE WHEN jsonb_typeof(last_heartbeat_data->'self_update'->'capable') = 'boolean'
+		     THEN (last_heartbeat_data->'self_update'->>'capable')::boolean END,
+		CASE WHEN jsonb_typeof(last_heartbeat_data->'relay_listener_ok') = 'boolean'
+		     THEN (last_heartbeat_data->>'relay_listener_ok')::boolean END`
 )
+
+// versionNumericExpr matches a dotted all-numeric version (MAJOR.MINOR.PATCH.BUILD).
+const versionNumericExpr = `'^[0-9]+(\.[0-9]+){0,3}$'`
+
+// supersededExpr is true when a failed update's target version has been reached
+// (or passed) by a version the node now reports running — the updater itself or
+// any product. It mirrors the dashboard's superseded rule (derive.ts) so the
+// fleet-wide failed count agrees with the detail page. Only all-numeric
+// versions compare; a label like "dev" never counts as superseded.
+//
+// Every cast sits behind a CASE, never an AND: Postgres may evaluate AND
+// operands in any order, and one unguarded cast of a non-numeric version or a
+// non-array products value would fail the whole fleet query. numeric[] rather
+// than int[] so a long build component cannot overflow.
+const supersededExpr = `(CASE WHEN last_update_target_version ~ ` + versionNumericExpr + ` THEN (
+	(CASE WHEN last_heartbeat_data->>'updater_version' ~ ` + versionNumericExpr + `
+	      THEN string_to_array(last_heartbeat_data->>'updater_version', '.')::numeric[]
+	           >= string_to_array(last_update_target_version, '.')::numeric[]
+	      ELSE false END)
+	OR EXISTS (
+		SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(last_heartbeat_data->'products') = 'array'
+		                                        THEN last_heartbeat_data->'products' ELSE '[]'::jsonb END) pv
+		WHERE CASE WHEN pv->>'version' ~ ` + versionNumericExpr + `
+		           THEN string_to_array(pv->>'version', '.')::numeric[]
+		                >= string_to_array(last_update_target_version, '.')::numeric[]
+		           ELSE false END
+	)
+) ELSE false END)`
+
+// failedExpr is true when a node's last update failed and that failure has not
+// been superseded by a later installed version. supersededExpr can evaluate to
+// NULL (e.g. a node reporting no updater_version and no products), so it is
+// coalesced to false — a NULL would otherwise poison NOT and drop a genuine
+// failure from the count.
+const failedExpr = `(last_update_success IS FALSE AND NOT COALESCE(` + supersededExpr + `, false))`
+
+// securityReportingCond keeps non-reporting nodes out of the security views and
+// stats: a node counts only when it actually reports a firewall status or a
+// non-zero score. The security JSON key is present on every node (no omitempty
+// on the wire), so key presence alone would inflate the counts.
+const securityReportingCond = `(COALESCE(last_heartbeat_data->'security'->>'firewall_status','') <> ''
+	OR CASE WHEN jsonb_typeof(last_heartbeat_data->'security'->'security_score') = 'number'
+	        THEN (last_heartbeat_data->'security'->'security_score')::numeric > 0
+	        ELSE false END)`
 
 // InstanceRepository handles instance database operations
 type InstanceRepository struct {
@@ -192,6 +241,8 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 	var autoUpdateEnabled *bool
 	var productTier, parentInstanceID *string
 	var customerID, customerName, reportedVia *string
+	var lastUpdateTargetVersion, lastUpdateError *string
+	var lastUpdateSuccess, selfUpdateCapable, relayListenerOK *bool
 
 	err := row.Scan(
 		&instance.ID, &instance.InstanceID, &instance.InstanceType, &instance.Hostname, &displayName,
@@ -199,6 +250,8 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 		&instance.Status, &autoUpdateEnabled, &updateGroup,
 		&lastIPAddress, &productTier, &parentInstanceID, &customerID, &customerName,
 		&reportedVia, &instance.ReportedAt, &instance.CreatedAt, &instance.UpdatedAt, &delivery,
+		&lastUpdateTargetVersion, &lastUpdateSuccess, &lastUpdateError,
+		&selfUpdateCapable, &relayListenerOK,
 	)
 	if err != nil {
 		return nil, err
@@ -211,6 +264,15 @@ func (r *InstanceRepository) scanInstanceList(row rowScanner) (*types.Instance, 
 		}
 		instance.LastArtifactDelivery = &attempt
 	}
+	if lastUpdateTargetVersion != nil {
+		instance.LastUpdateTargetVersion = *lastUpdateTargetVersion
+	}
+	if lastUpdateError != nil {
+		instance.LastUpdateError = *lastUpdateError
+	}
+	instance.LastUpdateSuccess = lastUpdateSuccess
+	instance.SelfUpdateCapable = selfUpdateCapable
+	instance.RelayListenerOK = relayListenerOK
 	// Handle nullable fields
 	if licenseID != nil {
 		instance.LicenseID = *licenseID
@@ -272,10 +334,15 @@ func (r *InstanceRepository) Create(ctx context.Context, instance *types.Instanc
 	return err
 }
 
-// GetByID retrieves an instance by ID
+// GetByID retrieves an instance by ID. A non-UUID id and a retired (deleted)
+// row both read as not found, so the detail view 404s instead of 500ing on a
+// bad id or showing live controls for a tombstone.
 func (r *InstanceRepository) GetByID(ctx context.Context, id string) (*types.Instance, error) {
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, ErrInstanceNotFound
+	}
 	row := r.db.Pool.QueryRow(ctx,
-		`SELECT `+selectInstanceFullCols+` FROM instances WHERE id = $1`, id)
+		`SELECT `+selectInstanceFullCols+` FROM instances WHERE id = $1 AND deleted_at IS NULL`, id)
 
 	instance, err := r.scanInstanceFull(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -321,6 +388,54 @@ func (r *InstanceRepository) GetByAPIKeyHash(ctx context.Context, apiKeyHash str
 }
 
 // List retrieves all instances
+// OperatorFleet is one operator's fleet rollup: live (non-deleted) instances
+// attached to licenses the operator owns, counted per product tier.
+type OperatorFleet struct {
+	ByTier        map[string]int
+	Total         int
+	LastHeartbeat *time.Time
+}
+
+// OperatorFleetSummary aggregates every operator's fleet in SQL, keyed by
+// operator id. The Operators page used to load all instances (heartbeat blobs
+// included) and all licenses into memory on every poll to compute this.
+// Instances with no tier count under "unknown".
+func (r *InstanceRepository) OperatorFleetSummary(ctx context.Context) (map[string]*OperatorFleet, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT l.operator_ref, COALESCE(NULLIF(i.product_tier, ''), 'unknown') AS tier,
+		       COUNT(*), MAX(i.last_heartbeat)
+		FROM instances i
+		JOIN licenses l ON l.id = i.license_id
+		WHERE i.deleted_at IS NULL AND l.operator_ref IS NOT NULL AND l.operator_ref <> ''
+		GROUP BY l.operator_ref, tier
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("operator fleet summary: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]*OperatorFleet{}
+	for rows.Next() {
+		var op, tier string
+		var n int
+		var latest *time.Time
+		if err := rows.Scan(&op, &tier, &n, &latest); err != nil {
+			return nil, fmt.Errorf("scan operator fleet summary: %w", err)
+		}
+		f := out[op]
+		if f == nil {
+			f = &OperatorFleet{ByTier: map[string]int{}}
+			out[op] = f
+		}
+		f.ByTier[tier] += n
+		f.Total += n
+		if latest != nil && (f.LastHeartbeat == nil || latest.After(*f.LastHeartbeat)) {
+			f.LastHeartbeat = latest
+		}
+	}
+	return out, rows.Err()
+}
+
 func (r *InstanceRepository) List(ctx context.Context) ([]types.Instance, error) {
 	rows, err := r.db.Pool.Query(ctx, `
 		SELECT id, instance_id, instance_type, hostname, display_name, license_id, api_key_hash, last_heartbeat, last_heartbeat_data, `+derivedStatusCol+`, auto_update_enabled, update_group, product_tier, parent_instance_id, customer_id, customer_name, reported_via, reported_at, created_at, updated_at
@@ -452,12 +567,28 @@ func (r *InstanceRepository) ListPaged(ctx context.Context, limit, offset int) (
 type InstanceListFilter struct {
 	Status   string // derived status: online | offline | degraded | decommissioned
 	Tier     string // product_tier exact match
-	Customer string // customer_id exact match
+	Customer string // customer_id exact match ("__none__" = unassigned)
 	Operator string // operator id (via the instance's license)
 	Parent   string // parent_instance_id exact match (direct children of a node)
-	Search   string // ILIKE across instance_id / hostname / customer_name
+	Search   string // ILIKE across instance_id / hostname / display_name / customer_name / last_ip_address
+	Failed   bool   // only nodes whose last update failed and is not superseded
 	Sort     string // created_at | updated_at | last_heartbeat | hostname | instance_id | product_tier | status
 	SortDir  string // asc | desc
+}
+
+// unassignedCustomer is the sentinel the dashboard sends to list the nodes with
+// no customer assigned (operator platform nodes and unlicensed rows), which an
+// empty value cannot express.
+const unassignedCustomer = "__none__"
+
+// escapeLike neutralises LIKE/ILIKE wildcards in user search text so a typed
+// "%" or "_" matches literally rather than everything. Backslash is the default
+// ILIKE escape character.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "%", `\%`)
+	s = strings.ReplaceAll(s, "_", `\_`)
+	return s
 }
 
 // sortColumns maps the public sort keys to SQL-safe expressions.
@@ -484,7 +615,11 @@ func buildInstanceFilter(f InstanceListFilter) (string, []interface{}) {
 		add("product_tier = $%d", s)
 	}
 	if s := strings.TrimSpace(f.Customer); s != "" {
-		add("customer_id = $%d", s)
+		if s == unassignedCustomer {
+			conds = append(conds, "(customer_id IS NULL OR customer_id = '')")
+		} else {
+			add("customer_id = $%d", s)
+		}
 	}
 	if s := strings.TrimSpace(f.Parent); s != "" {
 		add("parent_instance_id = $%d", s)
@@ -493,10 +628,14 @@ func buildInstanceFilter(f InstanceListFilter) (string, []interface{}) {
 		add("EXISTS (SELECT 1 FROM licenses l WHERE l.id = instances.license_id AND l.operator_ref = $%d)", s)
 	}
 	if s := strings.TrimSpace(f.Search); s != "" {
-		args = append(args, "%"+s+"%")
+		args = append(args, "%"+escapeLike(s)+"%")
 		n := len(args)
 		conds = append(conds, fmt.Sprintf(
-			"(instance_id ILIKE $%d OR hostname ILIKE $%d OR customer_name ILIKE $%d)", n, n, n))
+			"(instance_id ILIKE $%d OR hostname ILIKE $%d OR display_name ILIKE $%d OR customer_name ILIKE $%d OR last_ip_address ILIKE $%d)",
+			n, n, n, n, n))
+	}
+	if f.Failed {
+		conds = append(conds, failedExpr)
 	}
 	if s := strings.TrimSpace(f.Status); s != "" {
 		// Filter on the derived (read-time) status, matching what the UI shows.
@@ -519,7 +658,10 @@ func orderClause(f InstanceListFilter) string {
 	if strings.EqualFold(strings.TrimSpace(f.SortDir), "asc") {
 		dir = "ASC"
 	}
-	return " ORDER BY " + col + " " + dir
+	// id tie-breaker so offset paging is stable when the sort column ties (it
+	// ties heavily on product_tier/status), otherwise rows duplicate or vanish
+	// across pages.
+	return " ORDER BY " + col + " " + dir + ", id " + dir
 }
 
 // ListPagedFiltered is ListPaged with server-side filtering, text search, and
@@ -577,11 +719,13 @@ func (r *InstanceRepository) FleetStatsSummary(ctx context.Context, f InstanceLi
 	where, args := buildInstanceFilter(f)
 
 	stats := &FleetStats{ByTier: map[string]int{}}
-	// One pass: derived-status histogram + failed-update count.
-	statusQuery := `SELECT ` + derivedStatusExpr + ` AS s,
-		COUNT(*) AS c,
-		COUNT(*) FILTER (WHERE last_update_success IS FALSE) AS failed
-		FROM instances` + where + ` GROUP BY s`
+	// One pass: derived-status histogram + failed-update count. The failed flag
+	// is computed per row in a subselect (it carries a correlated subquery, not
+	// allowed directly inside an aggregate FILTER) and skips superseded failures
+	// so the count agrees with the detail page.
+	statusQuery := `SELECT s, COUNT(*) AS c, COUNT(*) FILTER (WHERE failed) AS failed FROM (
+		SELECT ` + derivedStatusExpr + ` AS s, ` + failedExpr + ` AS failed
+		FROM instances` + where + `) t GROUP BY s`
 	rows, err := r.db.Pool.Query(ctx, statusQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("fleet stats status: %w", err)
@@ -646,9 +790,11 @@ type CustomerSummaryRow struct {
 var customerSortClauses = map[string]string{
 	// Problem customers first: most failed updates, then most offline, then
 	// biggest — the operator sees what needs attention without scrolling.
-	"exceptions": "failed DESC, offline DESC, total DESC, cname ASC",
-	"name":       "cname ASC",
-	"nodes":      "total DESC, cname ASC",
+	// cid tie-breaker keeps offset paging stable when the leading keys tie (many
+	// customers share an empty name).
+	"exceptions": "failed DESC, offline DESC, total DESC, cname ASC, cid ASC",
+	"name":       "cname ASC, cid ASC",
+	"nodes":      "total DESC, cname ASC, cid ASC",
 }
 
 // CustomerDirectory returns per-customer health aggregates, searchable and
@@ -665,7 +811,7 @@ func (r *InstanceRepository) CustomerDirectory(ctx context.Context, search, sort
 	var searchCond string
 	var args []interface{}
 	if s := strings.TrimSpace(search); s != "" {
-		args = append(args, "%"+s+"%")
+		args = append(args, "%"+escapeLike(s)+"%")
 		searchCond = " WHERE cid ILIKE $1 OR cname ILIKE $1"
 	}
 
@@ -676,9 +822,10 @@ func (r *InstanceRepository) CustomerDirectory(ctx context.Context, search, sort
 			       COUNT(*) AS total,
 			       COUNT(*) FILTER (WHERE derived = 'online') AS online,
 			       COUNT(*) FILTER (WHERE derived = 'offline') AS offline,
-			       COUNT(*) FILTER (WHERE last_update_success IS FALSE) AS failed
+			       COUNT(*) FILTER (WHERE failed_flag) AS failed
 			FROM (
-				SELECT customer_id, customer_name, last_update_success,
+				SELECT customer_id, customer_name,
+				       ` + failedExpr + ` AS failed_flag,
 				       ` + derivedStatusExpr + ` AS derived
 				FROM instances WHERE deleted_at IS NULL
 			) t
@@ -701,7 +848,7 @@ func (r *InstanceRepository) CustomerDirectory(ctx context.Context, search, sort
 	}
 	defer rows.Close()
 
-	var out []CustomerSummaryRow
+	out := []CustomerSummaryRow{}
 	for rows.Next() {
 		var c CustomerSummaryRow
 		if err := rows.Scan(&c.CustomerID, &c.CustomerName, &c.Total, &c.Online, &c.Offline, &c.Failed); err != nil {
@@ -712,9 +859,9 @@ func (r *InstanceRepository) CustomerDirectory(ctx context.Context, search, sort
 	return out, total, rows.Err()
 }
 
-// SubtreeCounts rolls up a node's whole descendant cascade (the node itself
-// included) so a collapsed relay can show its coverage without the client
-// loading a single descendant row.
+// SubtreeCounts rolls up a node's descendant cascade — the descendants only,
+// NOT the node itself — so a collapsed relay can show the coverage beneath it
+// without the client loading a single descendant row.
 type SubtreeCounts struct {
 	Total          int `json:"total"`
 	Online         int `json:"online"`
@@ -763,8 +910,11 @@ func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFil
 	if p := strings.TrimSpace(f.Parent); p != "" {
 		add("parent_instance_id = $%d", p)
 	} else {
-		// Cascade roots: no parent set at all.
-		conds = append(conds, "(parent_instance_id IS NULL OR parent_instance_id = '')")
+		// Cascade roots: no parent link at all, OR a parent link that resolves to
+		// nothing live (a deleted/cleaned relay, or a node enrolled before its
+		// parent). Orphans are otherwise unreachable in the tree.
+		conds = append(conds, `(parent_instance_id IS NULL OR parent_instance_id = ''
+			OR NOT EXISTS (SELECT 1 FROM instances p WHERE p.instance_id = instances.parent_instance_id AND p.deleted_at IS NULL))`)
 	}
 	if !includeDecommissioned {
 		conds = append(conds, "("+derivedStatusExpr+") <> 'decommissioned'")
@@ -776,10 +926,14 @@ func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFil
 		add("EXISTS (SELECT 1 FROM licenses l WHERE l.id = instances.license_id AND l.operator_ref = $%d)", s)
 	}
 	if s := strings.TrimSpace(f.Search); s != "" {
-		args = append(args, "%"+s+"%")
+		args = append(args, "%"+escapeLike(s)+"%")
 		n := len(args)
 		conds = append(conds, fmt.Sprintf(
-			"(instance_id ILIKE $%d OR hostname ILIKE $%d OR customer_name ILIKE $%d)", n, n, n))
+			"(instance_id ILIKE $%d OR hostname ILIKE $%d OR display_name ILIKE $%d OR customer_name ILIKE $%d OR last_ip_address ILIKE $%d)",
+			n, n, n, n, n))
+	}
+	if f.Failed {
+		conds = append(conds, failedExpr)
 	}
 	if s := strings.TrimSpace(f.Status); s != "" {
 		args = append(args, s)
@@ -824,24 +978,27 @@ func (r *InstanceRepository) TreeChildren(ctx context.Context, f InstanceListFil
 
 	// One recursive pass rolls each descendant up to the page node it sits
 	// under. The seed carries the columns derivedStatusExpr needs so the outer
-	// aggregate computes read-time status without re-reading instances. Depth is
+	// aggregate computes read-time status without re-reading instances, plus a
+	// precomputed failed flag (its superseded test uses a correlated subquery
+	// that can't live in an aggregate FILTER). depth 0 is the page node itself
+	// and is excluded from the counts; the rollup is descendants only. Depth is
 	// capped so malformed parent links can never loop forever.
 	rollup := `
-WITH RECURSIVE seed(root, iid, depth, reported_via, status, last_heartbeat, last_update_success) AS (
-    SELECT instance_id, instance_id, 0, reported_via, status, last_heartbeat, last_update_success
+WITH RECURSIVE seed(root, iid, depth, reported_via, status, last_heartbeat, failed) AS (
+    SELECT instance_id, instance_id, 0, reported_via, status, last_heartbeat, ` + failedExpr + `
     FROM instances WHERE deleted_at IS NULL AND instance_id = ANY($1)
     UNION ALL
-    SELECT s.root, i.instance_id, s.depth + 1, i.reported_via, i.status, i.last_heartbeat, i.last_update_success
+    SELECT s.root, i.instance_id, s.depth + 1, i.reported_via, i.status, i.last_heartbeat, ` + failedExpr + `
     FROM instances i JOIN seed s ON i.parent_instance_id = s.iid
     WHERE s.depth < 16 AND i.deleted_at IS NULL
 )
 SELECT root,
-    COUNT(*) AS total,
-    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'online') AS online,
-    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'offline') AS offline,
-    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'degraded') AS degraded,
-    COUNT(*) FILTER (WHERE (` + derivedStatusExpr + `) = 'decommissioned') AS decommissioned,
-    COUNT(*) FILTER (WHERE last_update_success IS FALSE) AS failed
+    COUNT(*) FILTER (WHERE depth > 0) AS total,
+    COUNT(*) FILTER (WHERE depth > 0 AND (` + derivedStatusExpr + `) = 'online') AS online,
+    COUNT(*) FILTER (WHERE depth > 0 AND (` + derivedStatusExpr + `) = 'offline') AS offline,
+    COUNT(*) FILTER (WHERE depth > 0 AND (` + derivedStatusExpr + `) = 'degraded') AS degraded,
+    COUNT(*) FILTER (WHERE depth > 0 AND (` + derivedStatusExpr + `) = 'decommissioned') AS decommissioned,
+    COUNT(*) FILTER (WHERE depth > 0 AND failed) AS failed
 FROM seed
 GROUP BY root`
 
@@ -867,14 +1024,13 @@ GROUP BY root`
 	for i := range items {
 		c := counts[items[i].InstanceID]
 		items[i].Subtree = c
-		// total counts the node itself; anything beyond one means descendants.
-		// When decommissioned rows are hidden, expandability must reflect only
-		// the descendants that would actually render, or the chevron would open
-		// to nothing.
+		// Subtree counts are descendants only. When decommissioned rows are
+		// hidden, expandability must reflect only the descendants that would
+		// actually render, or the chevron would open to nothing.
 		if includeDecommissioned {
-			items[i].HasChildren = c.Total > 1
+			items[i].HasChildren = c.Total > 0
 		} else {
-			items[i].HasChildren = (c.Total - c.Decommissioned) > 1
+			items[i].HasChildren = (c.Total - c.Decommissioned) > 0
 		}
 	}
 	return items, total, nil
@@ -906,7 +1062,8 @@ func (r *InstanceRepository) SecurityStatsSummary(ctx context.Context) (*Securit
 			COALESCE(SUM((sec->>'pending_updates')::int), 0) AS pending,
 			COALESCE(SUM((sec->>'security_updates')::int), 0) AS secupd,
 			COUNT(*) FILTER (WHERE (sec->>'reboot_required')::boolean) AS reboot
-		FROM (SELECT last_heartbeat_data->'security' AS sec FROM instances WHERE deleted_at IS NULL) t
+		FROM (SELECT last_heartbeat_data->'security' AS sec FROM instances
+		      WHERE deleted_at IS NULL AND `+securityReportingCond+`) t
 	`).Scan(&s.Reporting, &s.AvgScore, &s.FirewallEnabled, &s.SSHHardened,
 		&s.PendingUpdates, &s.SecurityUpdates, &s.RebootRequired)
 	if err != nil {
@@ -930,7 +1087,7 @@ type SecurityRow struct {
 func (r *InstanceRepository) ListSecurityPaged(ctx context.Context, limit, offset int) ([]SecurityRow, int, error) {
 	var total int
 	if err := r.db.Pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM instances WHERE deleted_at IS NULL AND last_heartbeat_data ? 'security'`,
+		`SELECT COUNT(*) FROM instances WHERE deleted_at IS NULL AND `+securityReportingCond,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("security count: %w", err)
 	}
@@ -940,15 +1097,16 @@ func (r *InstanceRepository) ListSecurityPaged(ctx context.Context, limit, offse
 		       `+derivedStatusExpr+` AS status,
 		       last_heartbeat_data->'security' AS security
 		FROM instances
-		WHERE deleted_at IS NULL AND last_heartbeat_data ? 'security'
-		ORDER BY (last_heartbeat_data->'security'->>'security_score')::int ASC NULLS LAST
+		WHERE deleted_at IS NULL AND `+securityReportingCond+`
+		ORDER BY CASE WHEN jsonb_typeof(last_heartbeat_data->'security'->'security_score') = 'number'
+		              THEN (last_heartbeat_data->'security'->'security_score')::numeric END ASC NULLS LAST, id ASC
 		LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("security list: %w", err)
 	}
 	defer rows.Close()
 
-	var out []SecurityRow
+	out := []SecurityRow{}
 	for rows.Next() {
 		var row SecurityRow
 		var secJSON []byte

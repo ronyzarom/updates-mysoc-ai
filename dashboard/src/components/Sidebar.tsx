@@ -26,11 +26,13 @@ const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Fleet", href: "/instances", icon: Server },
   { name: "Releases", href: "/releases", icon: Package },
-  { name: "Operators", href: "/operators", icon: Building2 },
   { name: "Security", href: "/security", icon: Shield },
 ];
 
+// Operators (and the legacy licenses behind it) are served by admin-only
+// endpoints, so non-admins would only ever see a 403 there.
 const adminNavigation = [
+  { name: "Operators", href: "/operators", icon: Building2 },
   { name: "Users", href: "/admin/users", icon: Users },
 ];
 
@@ -47,8 +49,12 @@ export function Sidebar() {
   }, [pathname]);
 
   const handleLogout = async () => {
-    await logout();
-    router.push("/login");
+    setShowUserMenu(false);
+    try {
+      await logout();
+    } finally {
+      router.replace("/login");
+    }
   };
 
   if (!isAuthenticated) {
