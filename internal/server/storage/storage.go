@@ -27,6 +27,8 @@ type Storage interface {
 	Get(product, version, filename string) (io.ReadCloser, error)
 	// Delete removes an artifact
 	Delete(product, version, filename string) error
+	// DeleteVersion removes every artifact stored for one product version.
+	DeleteVersion(product, version string) error
 	// Exists checks if an artifact exists
 	Exists(product, version, filename string) bool
 	// GetPath returns the full path to an artifact
@@ -149,6 +151,11 @@ func (s *LocalStorage) Get(product, version, filename string) (io.ReadCloser, er
 func (s *LocalStorage) Delete(product, version, filename string) error {
 	path := s.GetPath(product, version, filename)
 	return os.Remove(path)
+}
+
+// DeleteVersion removes the product/version directory and everything in it.
+func (s *LocalStorage) DeleteVersion(product, version string) error {
+	return os.RemoveAll(filepath.Join(s.basePath, sanitizeSegment(product), sanitizeSegment(version)))
 }
 
 // Exists checks if an artifact exists

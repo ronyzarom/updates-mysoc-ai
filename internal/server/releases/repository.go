@@ -142,6 +142,21 @@ func (r *Repository) GetByProductVersion(ctx context.Context, product, version s
 	`, product, version, kind)
 }
 
+// GetByID retrieves a release by its ID.
+func (r *Repository) GetByID(ctx context.Context, id string) (*types.Release, error) {
+	return r.queryRelease(ctx, `SELECT `+releaseColumns+` FROM releases WHERE id = $1`, id)
+}
+
+// ListByProductVersion returns every release of one product version (one per
+// artifact kind).
+func (r *Repository) ListByProductVersion(ctx context.Context, product, version string) ([]types.Release, error) {
+	return r.queryReleases(ctx, `
+		SELECT `+releaseColumns+`
+		FROM releases
+		WHERE product_name = $1 AND version = $2
+	`, product, version)
+}
+
 // existsExact reports whether product+version is published with exactly this
 // artifact kind ("" for legacy single-artifact releases).
 func (r *Repository) existsExact(ctx context.Context, product, version, kind string) (bool, error) {

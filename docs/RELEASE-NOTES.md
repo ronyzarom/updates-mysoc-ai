@@ -11,7 +11,7 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.3 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Build:** 1.19.0.4 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
 **Status:** **built + validated locally; NOT deployed.** Server deploy and the
 SiemCore self-service key issuance are separate gates awaiting Rony's explicit
 go. The migration (020) and the new auth surface change the **server**, so this
@@ -20,12 +20,35 @@ needs a server deploy before either feature is live. The dashboard changed too
 enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
-dashboard, configs and docs (#5).
+dashboard, configs and docs (#5); `.4` makes deleting a release delete its
+files (#6).
 
 **Open deploy blocker:** with the channel filter gone, a legacy release parked on
 a `dual-alpha-<product>` channel (today `swf 2.3.0.4`, published to all four
 groups) is a candidate on the normal offer path. It loses only on version today.
 The normal offer path must exclude `dual-alpha-*` releases before this deploys.
+
+### #6 Deleting a release deletes its files
+
+`DeleteRelease` removed only the database record and never the artifact files,
+so every deleted release left its bytes on disk forever. On 2026-11-18 a
+one-off cleanup on updates.mysoc.ai removed 522 such version directories
+(22 GB, 37 live releases untouched), taking the root disk from 78% to 18%.
+
+- The record is deleted first, then the files, so a failure can never leave a
+  release pointing at missing bytes. File removal is best effort and logged; a
+  leftover file is unreachable.
+- Two releases of one version (bootstrap and update kinds) share a directory.
+  Deleting one removes only its own files (artifact path, manifest artifacts and
+  variants) and keeps anything the other still references.
+- When the last release of a version is deleted, the whole version directory
+  goes, including binaries uploaded separately per architecture.
+- New `Storage.DeleteVersion`, with the same single-level path confinement as
+  every other storage call. Tests: storage unit test (incl. traversal), and the
+  DB-gated dual-publication test now checks the shared-directory and
+  last-release cases against Postgres 15.
+
+**Relay compatibility (#6):** none; server-internal.
 
 ### #5 Channel removed from publishing tools, dashboard, configs and docs
 

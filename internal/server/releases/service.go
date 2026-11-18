@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -421,7 +423,68 @@ func (s *Service) ListProductReleases(ctx context.Context, product string) ([]ty
 	return s.repo.ListByProduct(ctx, product)
 }
 
-// DeleteRelease deletes a release
+// DeleteRelease deletes a release record and then its stored files. Files are
+// removed after the record so a failure never leaves a release pointing at
+// missing bytes; a file left behind is unreachable and only costs disk.
 func (s *Service) DeleteRelease(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, id)
+	release, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	if release != nil {
+		s.deleteReleaseFiles(ctx, release)
+	}
+	return nil
+}
+
+// deleteReleaseFiles removes the files of a deleted release. Another release of
+// the same version (the other artifact kind) may share the directory, so its
+// files are kept. Once no release of the version remains, the whole directory
+// goes, including binaries uploaded separately per architecture.
+func (s *Service) deleteReleaseFiles(ctx context.Context, release *types.Release) {
+	product, version := release.ProductName, release.Version
+	remaining, err := s.repo.ListByProductVersion(ctx, product, version)
+	if err != nil {
+		log.Printf("WARNING release delete: %s %s: files kept, cannot list remaining releases: %v", product, version, err)
+		return
+	}
+	if len(remaining) == 0 {
+		if err := s.storage.DeleteVersion(product, version); err != nil {
+			log.Printf("WARNING release delete: %s %s: cannot remove files: %v", product, version, err)
+		}
+		return
+	}
+	shared := map[string]bool{}
+	for i := range remaining {
+		for _, name := range releaseFiles(&remaining[i]) {
+			shared[name] = true
+		}
+	}
+	for _, name := range releaseFiles(release) {
+		if shared[name] {
+			continue
+		}
+		if err := s.storage.Delete(product, version, name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Printf("WARNING release delete: %s %s: cannot remove %s: %v", product, version, name, err)
+		}
+	}
+}
+
+// releaseFiles names the files a release owns in its version directory.
+func releaseFiles(release *types.Release) []string {
+	names := []string{}
+	if release.ArtifactPath != "" {
+		names = append(names, filepath.Base(release.ArtifactPath))
+	}
+	for _, artifacts := range [][]types.Artifact{release.Manifest.Artifacts, release.Manifest.ArtifactVariants} {
+		for _, a := range artifacts {
+			if a.Name != "" {
+				names = append(names, a.Name)
+			}
+		}
+	}
+	return names
 }

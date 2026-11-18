@@ -25,6 +25,40 @@ func TestSaveNewNeverReplaces(t *testing.T) {
 	assertNoTempFiles(t, s, "swf", "1.0.0")
 }
 
+func TestDeleteVersionRemovesOnlyThatVersion(t *testing.T) {
+	root := t.TempDir()
+	s, err := NewLocalStorage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"1.0.0", "1.0.1"} {
+		for _, name := range []string{"swf.msi", "swf-arm64.msi"} {
+			if _, err := s.Save("swf", v, name, strings.NewReader(v)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := s.DeleteVersion("swf", "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "swf", "1.0.0")); !os.IsNotExist(err) {
+		t.Fatalf("version directory must be gone, stat err=%v", err)
+	}
+	assertContent(t, s, "swf", "1.0.1", "swf.msi", "1.0.1")
+	if err := s.DeleteVersion("swf", "1.0.0"); err != nil {
+		t.Fatalf("deleting an absent version must succeed, got %v", err)
+	}
+
+	// A traversal attempt is confined to a single directory level.
+	if err := s.DeleteVersion("swf", ".."); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteVersion("..", "swf"); err != nil {
+		t.Fatal(err)
+	}
+	assertContent(t, s, "swf", "1.0.1", "swf-arm64.msi", "1.0.1")
+}
+
 func TestSaveNewConcurrentSingleWinner(t *testing.T) {
 	s, err := NewLocalStorage(t.TempDir())
 	if err != nil {

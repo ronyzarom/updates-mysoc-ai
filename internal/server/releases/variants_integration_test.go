@@ -195,11 +195,25 @@ func TestDualPublicationDatabase(t *testing.T) {
 			if prerequisiteErr != ErrPrerequisites {
 				t.Fatal("missing prerequisites did not fail closed", prerequisiteErr)
 			}
+			boot, _ := svc.GetRelease(ctx, product, version, "bootstrap")
 			if err := svc.DeleteRelease(ctx, ids[0]); err != nil {
 				t.Fatal(err)
 			}
-			if u, _ := svc.GetRelease(ctx, product, version, "update"); u == nil {
+			upd, _ := svc.GetRelease(ctx, product, version, "update")
+			if upd == nil {
 				t.Fatal("bootstrap delete removed update")
+			}
+			if _, err := os.Stat(boot.ArtifactPath); !os.IsNotExist(err) {
+				t.Fatalf("bootstrap file must be removed with its release, stat err=%v", err)
+			}
+			if _, err := os.Stat(upd.ArtifactPath); err != nil {
+				t.Fatalf("update file shares the version directory and must stay: %v", err)
+			}
+			if err := svc.DeleteRelease(ctx, upd.ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, product, version)); !os.IsNotExist(err) {
+				t.Fatalf("last release of a version must take its directory, stat err=%v", err)
 			}
 		})
 	}
