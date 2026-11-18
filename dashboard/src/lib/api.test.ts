@@ -62,7 +62,6 @@ describe("multipart upload", () => {
     const res = await api.uploadRelease({
       product: "siemcore",
       version: "1.0.0",
-      channel: "stable",
       artifact: file,
     });
 
@@ -103,7 +102,6 @@ describe("multipart upload", () => {
     const res = await api.uploadRelease({
       product: "siemcore",
       version: "1.0.0",
-      channel: "stable",
       artifact: file,
     });
 
@@ -123,7 +121,9 @@ describe("paired artifact upload", () => {
       body = init?.body as FormData;
       return new Response(JSON.stringify({ id: "paired" }), { status: 201 });
     }));
-    await api.uploadRelease({ product: "siemcore", version: "1.0.1", channel: "stable", target_groups: ["alpha"], artifact: new File(["boot"], "bootstrap.tgz"), update_artifact: new File(["thin"], "update.tgz"), artifact_variants: "[]" });
+    await api.uploadRelease({ product: "siemcore", version: "1.0.1", target_groups: ["alpha"], artifact: new File(["boot"], "bootstrap.tgz"), update_artifact: new File(["thin"], "update.tgz"), artifact_variants: "[]" });
+    expect(body?.has("channel")).toBe(false);
+    expect(body?.get("target_groups")).toBe("alpha");
     expect(body?.has("artifact")).toBe(false);
     expect((body?.get("bootstrap") as File).name).toBe("bootstrap.tgz");
     expect((body?.get("update") as File).name).toBe("update.tgz");
@@ -143,6 +143,7 @@ describe("independent artifact publication", () => {
     const metadata = JSON.stringify({ kind, product: "mysoc", version: "2.0.0" });
     await api.uploadRelease({ product: "mysoc", version: "2.0.0", channel: "dual-alpha-mysoc", target_groups: ["alpha"], artifact_kind: kind, artifact: new File([kind], `${kind}.tgz`), artifact_metadata: metadata });
     expect((body?.get("artifact") as File).name).toBe(`${kind}.tgz`);
+    expect(body?.get("channel")).toBe("dual-alpha-mysoc");
     expect(body?.get("artifact_kind")).toBe(kind);
     expect(body?.get("artifact_metadata")).toBe(metadata);
     expect(body?.has("bootstrap")).toBe(false);

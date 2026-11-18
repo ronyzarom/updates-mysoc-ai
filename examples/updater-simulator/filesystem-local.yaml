@@ -49,4 +49,3 @@ simulation:
 products:
   - name: siemcore
     current_version: v2.0.0
-    channel: stable

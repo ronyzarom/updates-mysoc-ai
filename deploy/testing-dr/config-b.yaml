@@ -83,4 +83,3 @@ products:
     # Fresh host: no app installed yet. 0.0.0 is older than any real release,
     # so once in alpha the cascade offers the highest alpha mysoc artifact.
     current_version: "0.0.0"
-    channel: stable

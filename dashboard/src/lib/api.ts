@@ -968,7 +968,9 @@ class ApiClient {
   async uploadRelease(data: {
     product: string;
     version: string;
-    channel: string;
+    // Only the isolated-qualification namespace (dual-alpha-<product>). Normal
+    // releases omit it: target groups are the only update selector.
+    channel?: string;
     release_notes?: string;
     target_groups?: string[];
     artifact: File;
@@ -980,7 +982,9 @@ class ApiClient {
     const formData = new FormData();
     formData.append("product", data.product);
     formData.append("version", data.version);
-    formData.append("channel", data.channel);
+    if (data.channel) {
+      formData.append("channel", data.channel);
+    }
     if (data.release_notes) {
       formData.append("release_notes", data.release_notes);
     }

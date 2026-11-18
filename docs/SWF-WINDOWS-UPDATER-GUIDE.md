@@ -208,6 +208,11 @@ under its own credential and rewrites the download URL to itself.
 }
 ```
 
+`channel` is a fixed legacy wire field: always send `"stable"` and ignore it in
+responses. It selects nothing. Which release you are offered is decided only by
+your node's **update group** (ring: `alpha`, `beta`, `stable`, `production`),
+which the server owns and reports back as `update_group`.
+
 No update: `{"update_available":false,"current_version":"2.2.0","update_group":"stable"}`
 
 Update offered:
@@ -343,13 +348,52 @@ The mechanics are yours (MSI, service swap, etc.), but the cascade expects:
 
 ## 6. Publishing SWF releases (your build → the fleet)
 
-Unchanged from today: you build and sign off the SWF executable, and it is
-uploaded to `updates.mysoc.ai` as product `swf` with a version and channel by
-whoever holds the release-upload key (the updates team, or your existing
-upload credential). The cascade handles distribution from there: mysoc and
-siemcore relays pull and verify it hop by hop, and your agents receive the
-offer from their local relay. Nothing new to build on your side for
-distribution.
+SWF owns its products end to end, **including its own updater**. You build,
+sign off, version and publish each of them; the updates team builds only the
+Linux cascade updaters (`updater-linux-*`) and runs the distribution plane
+(signing, rings, relays, dashboard). Your products ride that plane like any
+other:
+
+| Product | What it is |
+|---|---|
+| `swf` | the Win Forwarder application |
+| `updater-windows-amd64` | SWF's own Windows updater |
+| `swf-setup-windows-amd64` | the generic setup package |
+
+Each is versioned independently as `MAJOR.MINOR.PATCH.BUILD`.
+
+**Rings are the only selector.** A release is offered to the nodes in the rings
+(target groups) it is published to: `alpha` → `beta` → `stable` →
+`production`. There is no channel to choose; never pass one.
+
+1. **Upload to alpha only**, with the release-upload key in `UPDATES_API_KEY`:
+
+   ```bash
+   scripts/upload-release.sh --product swf --version 2.3.0.22 \
+     --file ./dist/swf-2.3.0.22.zip --groups alpha --notes "what changed"
+   ```
+
+   `--groups` is mandatory: an upload without target groups reaches every ring,
+   production included. The server signs the artifact at upload (§4); nothing
+   is signed on a workstation.
+2. **Prove it on alpha.** Turn Auto Update on for the pilot node (§5.4), run
+   simulate mode first, then a real install, and watch the install report
+   (§3.5) and `last_update_attempt` on the dashboard.
+3. **Widen one ring at a time**, each after a soak on the previous ring and its
+   own explicit approval. Send the complete new list:
+
+   ```bash
+   curl -X PUT https://updates.mysoc.ai/api/v1/releases/swf/2.3.0.22/target-groups \
+     -H "X-API-Key: $UPDATES_API_KEY" -H 'Content-Type: application/json' \
+     -d '{"target_groups": ["alpha", "beta"]}'
+   ```
+
+   Then add `stable`, then `production`. `{"target_groups": []}` withdraws it.
+
+Releases are immutable: a product/version pair is uploaded once. Fix a mistake
+with a new build number, never a re-upload. The cascade handles distribution:
+mysoc and siemcore relays pull and verify each release hop by hop, and your
+agents receive the offer from their local relay.
 
 ## 7. Pilot checklist (testing fleet)
 
@@ -423,6 +467,6 @@ Other confirmed limits and rules:
   anchor to be **replaceable in your agent's config without reinstalling**:
   the operator may add hostnames/IPs to a self-signed cert (it regenerates),
   rotate a public cert, or migrate a host from self-signed to public trust.
-- Your agent's own self-update can ride the same protocol later (product
-  `updater-windows-amd64` is reserved for that, mirroring how the Linux
-  updaters already update themselves) — out of scope for the pilot.
+- Your agent's own self-update rides the same protocol as product
+  `updater-windows-amd64`, which SWF builds and publishes (§6), mirroring how
+  the Linux updaters update themselves.

@@ -62,7 +62,6 @@ heartbeat:
 # layout created by install.sh; a kit reinstall re-arms it if broken.
 # self_update:
 #   disabled: true      # opt out of updater self-updates
-#   channel: stable
 #   timeout: 10m        # (1.18.0) whole self-update phase budget; runs first and
 #                       # in isolation so a wedged product never starves it.
 
@@ -127,4 +126,3 @@ products:
     # Set to the version actually installed on this host BEFORE first start —
     # do not leave 0.0.0.
     current_version: "0.0.0"
-    channel: stable

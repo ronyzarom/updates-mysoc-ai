@@ -101,7 +101,7 @@ The Updates Server owns:
 
 - Company, device, cluster, and node registry
 - Release metadata and immutable artifact distribution
-- Channel, rollout-ring, and compatibility policy
+- Rollout-ring and compatibility policy
 - Heartbeat evaluation and update offers
 - Device-scoped update grants
 - Cluster rollout and schema-migration leases
@@ -242,28 +242,29 @@ Instances → Tree view. The canonical tier catalog is served at
 
 ---
 
-## 5. Release Channels and Rollout Rings
+## 5. Rollout Rings
 
-Channels and rollout rings are separate controls.
-
-### 5.1 Channels
-
-Channels describe build stability:
-
-- `nightly`: automated development builds
-- `beta`: release candidates
-- `stable`: approved release line
-
-### 5.2 Rollout Rings
-
-Rollout rings describe who may receive a release:
+Rollout rings (update groups / target groups) are the only control that decides
+who may receive a release:
 
 - `alpha`: internal testing
 - `beta`: staging and pre-production
 - `stable`: legacy/default general ring
 - `production`: explicitly approved customer production
 
-A stable channel does not imply production approval.
+A device belongs to exactly one ring, owned by the server. A release lists the
+rings it is offered to. A device is offered a release only when its ring is in
+that list.
+
+Release channels are retired as a selector. Earlier versions of these
+guidelines described channels (`nightly`, `beta`, `stable`) as a separate build
+stability control; two overlapping vocabularies (`beta` and `stable` exist in
+both) confused operators and agents. Build stability is expressed by which ring
+a release has reached. The `channel` field remains on the wire with the fixed
+value `stable` for compatibility with deployed relays and servers. Publishers
+MUST NOT set it, and configs SHOULD NOT carry it. The one exception is internal:
+isolated artifact qualification uses a server-managed `dual-alpha-<product>`
+namespace, which the publishing tools set automatically.
 
 New devices SHOULD receive an explicit rollout ring during enrollment. The
 legacy `stable` default MUST NOT be added to an alpha release merely to make
@@ -821,7 +822,7 @@ The Updates Server SHOULD expose:
 
 - Last heartbeat and connectivity state
 - Current and desired versions
-- Update ring, channel, and effective policy
+- Update ring and effective policy
 - Update state and stage duration
 - Grant and cluster lease status
 - Last success, failure, and rollback

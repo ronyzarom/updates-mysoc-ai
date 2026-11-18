@@ -168,7 +168,8 @@ func (c *Config) SourcePath() string { return c.source }
 type SelfUpdateConfig struct {
 	// Disabled turns self-update checks off entirely.
 	Disabled bool `yaml:"disabled,omitempty"`
-	// Channel selects the release channel to follow (default "stable").
+	// Channel is a legacy wire field sent as "stable" (the default); leave it
+	// unset. The node's update group alone decides which release is offered.
 	Channel string `yaml:"channel,omitempty"`
 	// Dir is the managed layout root. Default: <state_file dir>/self-update.
 	Dir string `yaml:"dir,omitempty"`

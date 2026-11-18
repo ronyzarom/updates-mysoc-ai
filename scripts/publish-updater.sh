@@ -22,7 +22,6 @@ SSH_KEY="${UPDATES_SSH_KEY:-/Users/ronyzaromil/Downloads/LightsailDefaultKey-eu-
 REMOTE_DIR="${UPDATES_REMOTE_DIR:-/home/bitnami/updates-mysoc-ai}"
 LOCAL_API="${UPDATES_LOCAL_API:-http://127.0.0.1:8080}"
 PUBLIC_API="${UPDATES_PUBLIC_API:-https://updates.mysoc.ai}"
-CHANNEL="stable"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 die() { echo -e "${RED}Error: $1${NC}" >&2; exit 1; }
@@ -106,7 +105,6 @@ for arch in "${ARCHES[@]}"; do
             -H \"X-API-Key: \$ADMIN_API_KEY\" \
             -F 'product=${product}' \
             -F 'version=${VERSION}' \
-            -F 'channel=${CHANNEL}' \
             -F 'target_groups=${TARGET_GROUPS}' \
             -F 'artifact=@${REMOTE_TMP}/${product}'
     ")
@@ -134,10 +132,10 @@ for r in data:
     name = r.get("product_name", "")
     if name.startswith("updater-linux") and r.get("version") == want:
         arts = (r.get("manifest") or {}).get("artifacts") or [{}]
-        rows.append((name, r.get("version"), r.get("channel"),
+        rows.append((name, r.get("version"),
                      ",".join(r.get("target_groups") or []), arts[0].get("checksum", "")))
 for row in sorted(rows):
-    print("  %-22s %-10s %-8s groups=%-20s sha256=%s" % row)
+    print("  %-22s %-10s groups=%-20s sha256=%s" % row)
 print("COUNT", len(rows))
 PY
 )

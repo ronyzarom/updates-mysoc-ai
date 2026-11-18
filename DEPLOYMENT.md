@@ -185,10 +185,10 @@ Customer-installed siemcore nodes: [Self-Service Installation](docs/SELF-SERVICE
 
 ```bash
 curl -X POST https://updates.mysoc.ai/api/v1/releases \
-  -H "X-API-Key: YOUR-ADMIN-KEY" \
+  -H "X-API-Key: YOUR-RELEASES-KEY" \
   -F "product=siemcore-api" \
-  -F "version=1.0.0" \
-  -F "channel=stable" \
+  -F "version=1.0.0.1" \
+  -F "target_groups=alpha" \
   -F "release_notes=Initial release" \
   -F "artifact=@siemcore-api-linux-amd64"
 ```
@@ -197,8 +197,10 @@ curl -X POST https://updates.mysoc.ai/api/v1/releases \
 
 1. Navigate to Releases page
 2. Click "Upload Release"
-3. Fill in product details
+3. Fill in product details and pick the target groups (start with `alpha`)
 4. Upload the binary
+
+Target groups are the only update selector; there is no channel to set.
 
 ---
 

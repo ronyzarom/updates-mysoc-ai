@@ -71,7 +71,6 @@ heartbeat:
 # installs are not yet wired to an executor.
 # self_update:
 #   disabled: true      # opt out of updater self-updates
-#   channel: stable
 #   timeout: 10m        # (1.18.0) whole self-update phase budget; it runs first
 #                       # and in isolation, so a wedged product never starves it.
 
@@ -130,4 +129,3 @@ simulation:
 products:
   - name: siemcore
     current_version: "0.0.0"   # set to the currently installed siemcore version
-    channel: stable

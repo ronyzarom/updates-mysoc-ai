@@ -290,8 +290,9 @@ Failure returns `400` with `{ "success": false, "error": "…" }`.
 | `PUT  /releases/{product}/{version}`                  | Admin  | Update notes and/or target groups   |
 | `DELETE /releases/{product}/{version}`                | Admin  | Delete a release                    |
 
-**`GET /releases/{product}/latest`** — supports `?channel=stable` and
-`?current_version=v2.0.0` query params. Returns a `ReleaseInfo`
+**`GET /releases/{product}/latest`** — supports the
+`?current_version=v2.0.0` query param. A `?channel=` param is accepted for
+compatibility and ignored (1.19.0+). Returns a `ReleaseInfo`
 ([Section 7.2](#72-releaseinfo)) with `update_available` computed against
 `current_version`.
 
@@ -309,9 +310,9 @@ Failure returns `400` with `{ "success": false, "error": "…" }`.
 | `artifact`      | yes      | The file (max 500 MB)                                     |
 | `product`       | yes      | Product name                                              |
 | `version`       | yes      | Release version (e.g. `v2.0.270`)                         |
-| `channel`       | no       | Defaults to `stable`                                      |
+| `channel`       | no       | Legacy; do not send. Recorded as `stable`. Selects nothing (1.19.0+). Only isolated qualification sets `dual-alpha-<product>`, automatically |
 | `release_notes` | no       | Free text                                                 |
-| `target_groups` | no       | Comma-separated **or** `target_groups[]` repeated. Valid: `alpha`, `beta`, `stable`, `production` |
+| `target_groups` | no       | The only update selector. Comma-separated **or** `target_groups[]` repeated. Valid: `alpha`, `beta`, `stable`, `production`. Omitted = all four rings, production included, so always set it |
 | `issuer_signature` | no    | Issuer seal: base64 ed25519 over `mysoc-release-v1\n{product}\n{version}\n{sha256}` (1.16.2+, §9.6) |
 | `issuer_key_id` | no       | Key id of the sealing key (1.16.2+, §9.6)                 |
 
@@ -319,8 +320,8 @@ Failure returns `400` with `{ "success": false, "error": "…" }`.
 curl -X POST https://updates.mysoc.ai/api/v1/releases \
   -H "X-API-Key: $ADMIN_API_KEY" \
   -F artifact=@siemcore-v2.0.270-linux-amd64.tar.gz \
-  -F product=siemcore -F version=v2.0.270 -F channel=stable \
-  -F 'target_groups=alpha,beta'
+  -F product=siemcore -F version=v2.0.270 \
+  -F 'target_groups=alpha'
 ```
 
 Returns `201` with the created `Release` ([Section 7.1](#71-release)).
@@ -385,7 +386,7 @@ every product that has a newer release:
 ```
 
 > Note: heartbeat hints are **not** update-group aware; they reflect the latest
-> release for the channel. The group-aware decision is made by
+> release for the product. The group-aware decision is made by
 > `updates/{product}/check` (below).
 
 ---
@@ -685,8 +686,8 @@ Revocation is immediate and permanent.
 ```bash
 curl -X POST https://updates.mysoc.ai/api/v1/releases \
   -H "X-API-Key: msk_9f3c1a2b7d4e…" \
-  -F "product=swf" -F "version=v2.2.0" -F "channel=stable" \
-  -F "artifact=@SiemCoreWinForwarder-2.2.0.exe"
+  -F "product=swf" -F "version=2.2.0.1" -F "target_groups=alpha" \
+  -F "artifact=@SiemCoreWinForwarder-2.2.0.1.exe"
 ```
 
 ---
@@ -710,6 +711,8 @@ All error bodies are `{ "error": "message" }`.
 ## 7. Data Models
 
 Field names are the JSON keys emitted by the server (`pkg/types/types.go`).
+Every `channel` field below is legacy: `stable` for every normal release, and it
+selects nothing since 1.19.0. Target groups decide who is offered a release.
 
 ### 7.1 Release
 
@@ -760,7 +763,7 @@ the SWF team's request.
 | Signing keys + key rotation             | Partial (1.8.0) | Single active key published at `GET /api/v1/signing-key`. Rotation = new seed + re-publish; no multi-key trust set yet. |
 | Grant claiming / lease / idempotency    | Target        | No explicit grant object; the offer is stateless per check. Idempotency is by `instance_id` + version. |
 | Download resume (range requests)        | Target        | Full-body download only; no `Range`/`Content-Range` support.                                    |
-| Maintenance windows / approval gates    | Partial       | Rollout via channel + `target_groups` + per-instance `auto_update_enabled`/`update_group`; no time-window fields. |
+| Maintenance windows / approval gates    | Partial       | Rollout via `target_groups` + per-instance `auto_update_enabled`/`update_group`; no time-window fields. |
 | API versioning + standard error codes   | Implemented   | `/api/v1` prefix; error shape `{ "error": … }`; status codes per Section 6.                     |
 | Proxy / enterprise CA support           | Deployment    | Standard HTTPS via nginx; honors `X-Forwarded-Proto`/`X-Real-IP`. CA trust is client-side.      |
 

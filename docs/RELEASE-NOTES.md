@@ -11,13 +11,53 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.2 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Build:** 1.19.0.3 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
 **Status:** **built + validated locally; NOT deployed.** Server deploy and the
 SiemCore self-service key issuance are separate gates awaiting Rony's explicit
 go. The migration (020) and the new auth surface change the **server**, so this
-needs a server deploy before either feature is live. Build history: `.1`
+needs a server deploy before either feature is live. The dashboard changed too
+(#5), so the deploy also needs a dashboard rebuild. Build history: `.1`
 enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
-update selector (#4, below).
+update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
+1.18.2.1 measurement fix) and removes channel from the publishing tools,
+dashboard, configs and docs (#5).
+
+**Open deploy blocker:** with the channel filter gone, a legacy release parked on
+a `dual-alpha-<product>` channel (today `swf 2.3.0.4`, published to all four
+groups) is a candidate on the normal offer path. It loses only on version today.
+The normal offer path must exclude `dual-alpha-*` releases before this deploys.
+
+### #5 Channel removed from publishing tools, dashboard, configs and docs
+
+Finishes the follow-on to #4, so no one is ever asked to choose a channel.
+
+- **`scripts/upload-release.sh`:** the `--channel` option is gone. Passing it is
+  a clear error saying target groups are the only selector. Uploads no longer
+  send `channel`; the server records the same `stable` default as before
+  (deployed 1.18.0.2 and this build both default an omitted channel to
+  `stable`), so nothing changes on the wire.
+- **`scripts/publish-updater.sh`:** stops sending `channel` and drops it from
+  the verification listing.
+- **Dashboard:** the upload form's Channel dropdown (Stable / Beta / Alpha, next
+  to Target Groups) is removed. On the deployed server a "Beta" choice there
+  silently hid a release from every node. Normal uploads send no channel. The
+  isolated-qualification upload still sets `dual-alpha-<product>`
+  automatically. The release list drops the Channel column and labels
+  isolated-qualification releases instead; the overview shows target groups.
+- **Configs:** `channel: stable` removed from both kit templates, the example
+  and deploy configs, and the config `install-siemcore-updater.sh` writes. The
+  updater still defaults an empty channel to `stable` and still accepts the key,
+  so existing host configs keep working unchanged.
+- **Docs:** `UPDATER-GUIDELINES.md` §5 now defines rings as the only selector
+  and records channels as retired. The SiemCore deployment guide (2.2.0)
+  replaces "Channels vs Update Groups"; the SWF guide's §6 is the rings-only
+  release process and states that SWF owns its own updater
+  (`updater-windows-amd64`). Upload examples in the admin guide, API contract and
+  `DEPLOYMENT.md` drop `channel` and start at `alpha` (two examples previously
+  had no target groups and would have published to every ring).
+
+**Relay compatibility (#5):** none. No wire field is added or removed; `channel`
+keeps arriving as `stable`.
 
 Features that let an operator stop hand-moving new nodes between rings — the
 pain behind SiemCore's pod-a "new id landed in stable, move it to alpha" step —
@@ -44,13 +84,14 @@ full stop. The `channel` column/field is no longer part of release selection.
   internal artifact *namespace* — that is a qualification scope, not a ring, and
   is invisible to normal clients. Removing it there is separate, out-of-scope
   work.
-- **Backward compatible:** every product already runs a single channel
-  (`stable`), so collapsing the predicate changes no live offer; the ring
-  (`target_groups`) was already doing the real gating.
+- **Backward compatible for normal releases:** every normal release is on
+  `stable`, so collapsing the predicate changes no live offer for them; the ring
+  (`target_groups`) was already doing the real gating. Legacy releases parked on
+  a `dual-alpha-*` channel are the exception (see the open deploy blocker above).
 
-**Follow-on (not in this build):** stop emitting `channel` in new kit/config
-templates and docs (keep accepting it inbound); a later, cross-project phased
-removal of `channel` from the wire contract once no deployed fleet relies on it.
+**Follow-on:** removing `channel` from new templates and docs is done in #5. A
+later, cross-project phased removal of `channel` from the wire contract can
+follow once no deployed fleet relies on it.
 
 ### #2 Enrolment can request a ring (server + updater + relay + contract)
 

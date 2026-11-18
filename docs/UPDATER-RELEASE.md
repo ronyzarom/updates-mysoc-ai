@@ -88,22 +88,20 @@ cycle and needs an explicit instruction naming the ring.
 
    The script copies both `updater-linux-*` artifacts to the server, reads the
    admin key from the server-side env file inside the SSH session, posts each
-   as product `updater-linux-<arch>`, `channel=stable`, with the given
-   `target_groups`, and then prints the public listing for the version so the
-   result is verified from the outside. `--groups` is mandatory; there is no
-   default. (Until the script exists on `main`, the same steps are performed
-   by hand over SSH; `scripts/upload-release.sh` must not be used for updater
-   artifacts because its `--groups` handling is broken on `main`.)
+   as product `updater-linux-<arch>` with the given `target_groups`, and then
+   prints the public listing for the version so the result is verified from the
+   outside. `--groups` is mandatory; there is no default. No channel is sent:
+   target groups are the only selector.
 4. Verify from a workstation, with no credentials:
 
    ```bash
    curl -s https://updates.mysoc.ai/api/v1/releases | jq -r \
      '.[] | select(.product_name|startswith("updater-linux")) | select(.version=="<VERSION>")
-      | "\(.product_name) \(.version) \(.channel) \(.target_groups) \(.manifest.artifacts[0].checksum)"'
+      | "\(.product_name) \(.version) \(.target_groups) \(.manifest.artifacts[0].checksum)"'
    ```
 
-   Both products listed, `channel=stable`, exactly the intended groups, and
-   checksums equal to the build's `SHA256SUMS`.
+   Both products listed, exactly the intended groups, and checksums equal to
+   the build's `SHA256SUMS`.
 5. Merge the version branch to `main` (fast-forward), tag `v<VERSION>` on the
    build commit, push both. Update the entry in `RELEASE-NOTES.md` to the ring
    it is on.

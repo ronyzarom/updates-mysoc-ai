@@ -271,7 +271,7 @@ export default function DashboardPage() {
               <tr>
                 <th>Product</th>
                 <th>Version</th>
-                <th>Channel</th>
+                <th>Target Groups</th>
                 <th>Released</th>
               </tr>
             </thead>
@@ -284,7 +284,10 @@ export default function DashboardPage() {
                   </td>
                   <td>
                     <span className="px-2 py-1 rounded bg-slate-700 text-xs">
-                      {release.channel}
+                      {(release.target_groups && release.target_groups.length > 0
+                        ? release.target_groups
+                        : ["all"]
+                      ).join(", ")}
                     </span>
                   </td>
                   <td className="text-slate-400">

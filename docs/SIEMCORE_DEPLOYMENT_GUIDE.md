@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Document Version** | 2.1.0 |
-| **Last Updated** | September 26, 2026 |
+| **Document Version** | 2.2.0 |
+| **Last Updated** | November 18, 2026 |
 | **Status** | Production |
 | **Maintained By** | SiemCore Platform Team |
 
@@ -13,6 +13,7 @@
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 2.2.0 | 2026-11-18 | Updates Team | Channels retired as a selector: update groups (rings) are the only thing that decides who gets a release; removed `channel` from upload examples; `channel` stays on the wire as a fixed `stable` |
 | 2.1.0 | 2026-09-26 | Updates Team | SiemCore review: four live rings (alpha incl. bench, beta cloud, stable = customer hosts seetech/danshar, production cyfox-il) with live-registry check; promotion by widening target_groups with approval and soak; first upload alpha only (never "include stable"); releases-scoped upload key; universal bundle artifact and 4-part versions; forward-only rollback; withdrawing does not roll back applied hosts; no deploy-all |
 | 2.0.0 | 2026-09-26 | Updates Team | Cascade: SiemCore servers run `siemcore-cascade-updater` and talk only to the operator's mysoc relay; replaced the retired v2 `siemcore-updater` install, commands and paths; credentials, troubleshooting and API reference for the relay path |
 | 1.5.0 | 2026-02-03 | SiemCore Team | Added API key requirement, target groups fix (include "stable"), dashboard features (edit/delete), semantic versioning |
@@ -41,7 +42,7 @@ This guide explains how to deploy and manage SiemCore instances using the MySoc 
 6. [License Key](#license-key)
 7. [Dashboard Access](#dashboard-access)
 8. [Managing Instances](#managing-instances)
-9. [Channels vs Update Groups](#channels-vs-update-groups)
+9. [Update Groups Are the Only Selector](#update-groups-are-the-only-selector)
 10. [Staged Rollouts](#staged-rollouts)
 11. [Release Rules](#release-rules)
 12. [Uploading Releases](#uploading-releases)
@@ -344,19 +345,26 @@ This removes the instance record and heartbeat history. The instance will reappe
 
 ---
 
-## Channels vs Update Groups
+## Update Groups Are the Only Selector
 
-Two separate concepts control update delivery:
+One concept decides who gets a release: the **update group** (rollout ring).
 
-| Concept | Purpose | Values |
-|---------|---------|--------|
-| **Channel** | Build quality/stability of the release | `stable`, `beta`, `nightly` |
-| **Update Group** | Which instances receive the release (rollout ring) | `alpha`, `beta`, `stable`, `production` |
+| Ring | Who is in it |
+|------|--------------|
+| `alpha` | internal and bench hosts |
+| `beta` | pre-production (cloud) |
+| `stable` | customer hosts |
+| `production` | production customer hosts, with explicit consent |
 
-- **Channel** = "What kind of build is this?" (stable releases vs experimental)
-- **Update Group** = "Who gets this release?" (internal → pre-prod → customers)
+Each instance belongs to one ring (server-owned), and each release lists the
+rings it is offered to (`target_groups`). An instance is offered a release only
+when its ring is in that list.
 
-Most instances use `channel: stable` but belong to different update groups.
+There is no release channel to choose. Older documents described a separate
+"channel" (`stable`, `beta`, `nightly`); it is retired. The `channel` field
+still appears on the wire with the fixed value `stable` so older relays keep
+working, but it selects nothing. Never pass a channel when uploading, and never
+set one in an updater config.
 
 ---
 
@@ -422,7 +430,7 @@ server, so only touch `siemcore` releases.
 
 The release artifact is the universal bundle
 `siemcore-universal-<MAJOR.MINOR.PATCH.BUILD>.tar.gz`, uploaded as
-`product=siemcore`, `channel=stable`. Not a raw Linux binary.
+`product=siemcore`. Not a raw Linux binary.
 
 ### Using cURL
 
@@ -432,7 +440,6 @@ curl -fsS -X POST https://updates.mysoc.ai/api/v1/releases \
   -H "X-API-Key: $KEY" \
   -F "product=siemcore" \
   -F "version=3.3.152.57" \
-  -F "channel=stable" \
   -F "target_groups=alpha" \
   -F "release_notes=…" \
   -F "artifact=@dist/siemcore-universal-3.3.152.57.tar.gz"
@@ -440,9 +447,9 @@ curl -fsS -X POST https://updates.mysoc.ai/api/v1/releases \
 
 ### Using the Upload Script
 
-`scripts/upload-release.sh` (in the updates-mysoc-ai repo) works too, but
-**always pass `--groups alpha`**: without `--groups` it sends no target
-groups, which the server treats as all four rings.
+`scripts/upload-release.sh` (in the updates-mysoc-ai repo) works too. It
+refuses to run without `--groups` (a release with no target groups reaches all
+four rings), and it has no channel option. Start with `--groups alpha`.
 
 ```bash
 ./scripts/upload-release.sh --product siemcore --version 3.3.152.57 \

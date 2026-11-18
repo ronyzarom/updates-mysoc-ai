@@ -222,9 +222,8 @@ curl -X DELETE https://updates.mysoc.ai/api/v1/instances/{id} \
 Navigate to **Releases** to see all uploaded releases:
 
 - **Product** - Product name (e.g., `siemcore`)
-- **Version** - Semantic version (e.g., `2.0.17`)
-- **Channel** - Release channel (stable, beta, nightly)
-- **Target Groups** - Which instance groups receive this release
+- **Version** - Four-part version (e.g., `2.0.17.1`)
+- **Target Groups** - Which rings receive this release (the only update selector)
 - **Size** - Artifact file size
 - **Uploaded** - When the release was created
 
@@ -236,9 +235,8 @@ Navigate to **Releases** to see all uploaded releases:
 2. Click **Upload Release**
 3. Fill in the form:
    - Product: `siemcore`
-   - Version: `2.0.18`
-   - Channel: `stable`
-   - Target Groups: Select groups
+   - Version: `2.0.18.1`
+   - Target Groups: `alpha` (widen later, one ring at a time)
    - Release Notes: Description of changes
    - Artifact: Upload the binary file
 4. Click **Upload**
@@ -248,11 +246,10 @@ Navigate to **Releases** to see all uploaded releases:
 ```bash
 ./scripts/upload-release.sh \
   --product siemcore \
-  --version 2.0.18 \
+  --version 2.0.18.1 \
   --file ./bin/siemcore-linux-amd64 \
-  --channel stable \
-  --groups alpha,beta,stable,production \
-  --api-key "YOUR_ADMIN_API_KEY" \
+  --groups alpha \
+  --api-key "YOUR_RELEASES_API_KEY" \
   --notes "Bug fixes and improvements"
 ```
 
@@ -260,11 +257,10 @@ Navigate to **Releases** to see all uploaded releases:
 
 ```bash
 curl -X POST https://updates.mysoc.ai/api/v1/releases \
-  -H "X-API-Key: YOUR_ADMIN_API_KEY" \
+  -H "X-API-Key: YOUR_RELEASES_API_KEY" \
   -F "product=siemcore" \
-  -F "version=2.0.18" \
-  -F "channel=stable" \
-  -F "target_groups=alpha,beta,stable,production" \
+  -F "version=2.0.18.1" \
+  -F "target_groups=alpha" \
   -F "release_notes=Bug fixes and improvements" \
   -F "artifact=@./bin/siemcore-linux-amd64"
 ```

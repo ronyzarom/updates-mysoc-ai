@@ -36,4 +36,3 @@ simulation:
 products:
   - name: siemcore
     current_version: 0.0.0
-    channel: stable

@@ -13,7 +13,6 @@ import { sealStatusOf } from "@/lib/derive";
 interface UploadFormData {
   product: string;
   version: string;
-  channel: string;
   release_notes: string;
   target_groups: string[];
   artifact: File | null;
@@ -54,7 +53,6 @@ export default function ReleasesPage() {
   const [uploadForm, setUploadForm] = useState<UploadFormData>({
     product: "",
     version: "",
-    channel: "stable",
     release_notes: "",
     target_groups: [...DEFAULT_TARGET_GROUPS],
     artifact: null,
@@ -77,7 +75,7 @@ export default function ReleasesPage() {
       return api.uploadRelease({
         product: data.product,
         version: data.version,
-        channel: data.independent ? `dual-alpha-${data.product}` : data.channel,
+        channel: data.independent ? `dual-alpha-${data.product}` : undefined,
         release_notes: data.release_notes || undefined,
         target_groups: data.independent ? ["alpha"] : data.target_groups.length > 0 ? data.target_groups : undefined,
         artifact: data.artifact,
@@ -91,7 +89,6 @@ export default function ReleasesPage() {
       setUploadForm({
         product: "",
         version: "",
-        channel: "stable",
         release_notes: "",
         target_groups: [...DEFAULT_TARGET_GROUPS],
         artifact: null,
@@ -328,7 +325,6 @@ export default function ReleasesPage() {
                     <thead>
                       <tr>
                         <th>Version</th>
-                        <th>Channel</th>
                         <th>Target Groups</th>
                         <th>Integrity</th>
                         <th>Issuer seal</th>
@@ -350,19 +346,11 @@ export default function ReleasesPage() {
                                 Legacy · shared artifact
                               </div>
                             )}
-                          </td>
-                          <td>
-                            <span
-                              className={`px-2 py-1 rounded text-xs ${
-                                release.channel === "stable"
-                                  ? "bg-emerald-500/20 text-emerald-400"
-                                  : release.channel === "beta"
-                                  ? "bg-amber-500/20 text-amber-400"
-                                  : "bg-slate-700 text-slate-400"
-                              }`}
-                            >
-                              {release.channel}
-                            </span>
+                            {release.channel?.startsWith("dual-alpha-") && (
+                              <div className="text-xs text-slate-400 mt-1" title="Published to the isolated qualification namespace; never offered on the normal update path.">
+                                Isolated qualification
+                              </div>
+                            )}
                           </td>
                           <td>
                             <div className="flex flex-wrap gap-1">
@@ -597,23 +585,6 @@ export default function ReleasesPage() {
                   onChange={(e) => setUploadForm({ ...uploadForm, version: e.target.value })}
                   className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Channel
-                </label>
-                <select
-                  value={uploadForm.independent ? `dual-alpha-${uploadForm.product}` : uploadForm.channel}
-                  disabled={uploadForm.independent}
-                  onChange={(e) => setUploadForm({ ...uploadForm, channel: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                >
-                  {uploadForm.independent && <option value={`dual-alpha-${uploadForm.product}`}>Isolated alpha qualification</option>}
-                  <option value="stable">Stable</option>
-                  <option value="beta">Beta</option>
-                  <option value="alpha">Alpha</option>
-                </select>
               </div>
 
               <div>

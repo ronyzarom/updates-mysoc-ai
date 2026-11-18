@@ -17,7 +17,6 @@ NC='\033[0m'
 
 # Default values
 UPDATE_SERVER="${UPDATE_SERVER:-https://updates.mysoc.ai}"
-CHANNEL="stable"
 # Not GROUPS: that is a Bash builtin array whose assignments are ignored.
 TARGET_GROUPS=""
 NOTES=""
@@ -38,8 +37,8 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --channel|-c)
-            CHANNEL="$2"
-            shift 2
+            echo -e "${RED}Error: --channel was removed. Target groups (--groups) are the only update selector; the server records every release under the fixed legacy channel.${NC}"
+            exit 1
             ;;
         --groups|-g)
             TARGET_GROUPS="$2"
@@ -70,7 +69,6 @@ while [[ $# -gt 0 ]]; do
             echo "                   (start with alpha; the server treats no groups as all four)"
             echo ""
             echo "Optional:"
-            echo "  --channel, -c    Release channel: stable, beta, nightly (default: stable)"
             echo "  --notes, -n      Release notes"
             echo "  --server, -s     Updates server URL (default: https://updates.mysoc.ai)"
             echo "  --api-key, -k    Releases-scoped API key (or set UPDATES_API_KEY env var)"
@@ -139,7 +137,6 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo -e "  ${GREEN}Product:${NC}  $PRODUCT"
 echo -e "  ${GREEN}Version:${NC}  $VERSION"
-echo -e "  ${GREEN}Channel:${NC}  $CHANNEL"
 echo -e "  ${GREEN}Groups:${NC}   ${TARGET_GROUPS}"
 echo -e "  ${GREEN}File:${NC}     $FILE ($(du -h "$FILE" | cut -f1))"
 echo -e "  ${GREEN}Server:${NC}   $UPDATE_SERVER"
@@ -154,7 +151,6 @@ CURL_ARGS=(
     "${UPDATE_SERVER}/api/v1/releases"
     -F "product=${PRODUCT}"
     -F "version=${VERSION}"
-    -F "channel=${CHANNEL}"
     -F "artifact=@${FILE}"
     -F "target_groups=${TARGET_GROUPS}"
 )

@@ -83,7 +83,6 @@ heartbeat:
 
 update:
   check_interval: 5m
-  channel: stable
   auto_update: true
 
 products:
