@@ -135,7 +135,7 @@ func (p RetentionPolicy) isQualification(r *types.Release) bool {
 	if r.Manifest.ArtifactKind != "" || len(r.Manifest.ArtifactVariants) > 0 {
 		return true
 	}
-	if strings.HasPrefix(r.Channel, "dual-alpha-") {
+	if strings.HasPrefix(r.Channel, QualificationChannelPrefix) {
 		return true
 	}
 	return p.QualificationPrefix != "" && strings.HasPrefix(r.Channel, p.QualificationPrefix)

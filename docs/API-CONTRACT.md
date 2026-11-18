@@ -18,6 +18,7 @@ implemented, that is called out explicitly in
 | 1.15.0  | 2026-09-05 | Additive `products[].telemetry` (SWF delivery counters) on heartbeat / children rollup; stored in `last_heartbeat_data`, no migration. Decoded/re-encoded at each relay hop, so relays + server need 1.15.0+ to preserve it. See §7.3 and [Relay 1.15.0 Contract Addendum](RELAY-1.15.0-CONTRACT-ADDENDUM.md). |
 | 1.16.0  | 2026-09-08 | Additive delivery-destination fields inside `products[].telemetry`: `target_endpoint`, `target_resolved_ip`, `target_tls`, `target_sni`, `last_connect_ok_utc` (read-only diagnostics, no control surface). Telemetry timestamps are now omitted (not zero-valued) when absent after re-encode. No migration; relays + server need 1.16.0+ to preserve the new fields. See §7.3 and [Relay 1.16.0 Contract Addendum](RELAY-1.16.0-CONTRACT-ADDENDUM.md). |
 | 1.16.2  | 2026-09-26 | Issuer sealing: optional `issuer_signature` / `issuer_key_id` on `POST /releases`, checked and recorded as `seal_status` (never rejected); re-upload of an existing product+version and overwrite through `PUT /releases/{product}/{version}/{filename}` return `409`; trusted issuer key admin API; `GET /health` adds `commit`. Migrations 018 (`releases.channel` to VARCHAR(64), already applied in production) and additive 019. See §9.6. |
+| 1.19.0.8 | 2026-11-18 | Update check and `/latest`: a release on a `dual-alpha-<product>` channel is never offered, whatever its `target_groups`. No wire change. |
 | 1.19.0.6 | 2026-11-18 | `POST /releases` with no `target_groups` defaults to `alpha` only (was all four). A ring change through either release edit (`PUT /releases/{product}/{version}` with `target_groups`, or `PUT …/target-groups`) must be a duplicate-free, cumulative ring prefix such as `alpha,beta` (`400` otherwise); on `…/target-groups` an explicit `[]` still withdraws the release, and a body without `target_groups` is now a `400`, and both apply the availability promotion gate (`409`, `?override=<reason>` audited). `POST /auth/mfa/disable` accepts a backup code in place of a TOTP code. `PUT /admin/users/{id}` refuses to change your own role or deactivate yourself (`400`). API keys: `product_tier` is accepted only with scope `update-group` and must be a known tier (`400` otherwise). `GET /health` adds `database`, `storage`. Instance lists: `failed=true` filter (failure not superseded by a newer installed version), `customer=__none__` for unassigned, search also matches `display_name` and `last_ip_address` with LIKE wildcards escaped, list items add `self_update_capable` and `relay_listener_ok`, empty results are `[]` not `null`; tree roots include orphans (parent not on record); security list/stats count only reporting nodes; `GET /instances/{id}` and the cleanup endpoints return `404` for an unknown, malformed or deleted id. All additive or tightening; no migration. |
 
 ---
@@ -191,7 +192,7 @@ curl https://updates.mysoc.ai/health
 ```
 
 ```json
-{ "status": "ok", "version": "1.19.0.7", "commit": "0123456789ab", "database": "postgresql", "storage": "local" }
+{ "status": "ok", "version": "1.19.0.8", "commit": "0123456789ab", "database": "postgresql", "storage": "local" }
 ```
 
 `commit` is the short git commit the binary was built from; a `-dirty` suffix
@@ -313,7 +314,7 @@ compatibility and ignored (1.19.0+). Returns a `ReleaseInfo`
 | `artifact`      | yes      | The file (max 500 MB)                                     |
 | `product`       | yes      | Product name                                              |
 | `version`       | yes      | Release version (e.g. `v2.0.270`)                         |
-| `channel`       | no       | Legacy; do not send. Recorded as `stable`. Selects nothing (1.19.0+). Only isolated qualification sets `dual-alpha-<product>`, automatically |
+| `channel`       | no       | Legacy; do not send. Recorded as `stable`. Selects nothing (1.19.0+). Only isolated qualification sets `dual-alpha-<product>`, automatically; a release in that namespace is never part of a normal update offer, whatever its `target_groups` (1.19.0.8+) |
 | `release_notes` | no       | Free text                                                 |
 | `target_groups` | no       | The only update selector. Comma-separated **or** `target_groups[]` repeated. Valid: `alpha`, `beta`, `stable`, `production`. Omitted = `alpha` only (1.19.0.6+; earlier servers put an omitted list on all four rings, production included), so always set it |
 | `issuer_signature` | no    | Issuer seal: base64 ed25519 over `mysoc-release-v1\n{product}\n{version}\n{sha256}` (1.16.2+, §9.6) |

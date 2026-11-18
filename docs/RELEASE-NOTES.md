@@ -11,7 +11,7 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.7 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Build:** 1.19.0.8 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
 **Status:** **built + validated locally; NOT deployed.** Server deploy and the
 SiemCore self-service key issuance are separate gates awaiting Rony's explicit
 go. The migration (020) and the new auth surface change the **server**, so this
@@ -24,13 +24,20 @@ dashboard, configs and docs (#5); `.4` makes deleting a release delete its
 files (#6); `.5` adds automatic release retention (#7); `.6` is the dashboard
 review fixes and the server changes they need (#8); `.7` restores withdrawing a
 release with an explicit empty `target_groups` list, which `.6` had turned
-into a `400`.
+into a `400`; `.8` closes the dual-alpha deploy blocker (#9).
 
-**Open deploy blocker:** with the channel filter gone, a legacy release parked on
-a `dual-alpha-<product>` channel (today `swf 2.3.0.4`, published to all four
-groups) is a candidate on the normal offer path. It loses only on version today.
-The normal offer path must exclude `dual-alpha-*` releases before this deploys.
-(Still open in `.6`.)
+### #9 Dual-alpha releases never reach a normal offer
+
+With the channel filter gone, a legacy release parked on a
+`dual-alpha-<product>` channel (today `swf 2.3.0.4`, published to all four
+groups) became a candidate on the normal offer path, losing only on version.
+The ring offer (`HighestReleaseForGroup`) and `/latest` (`GetLatestRelease`)
+now skip any release whose channel starts with `dual-alpha-`, whatever its
+target groups, alongside the existing artifact-kind filter. Paired
+qualification releases live in that namespace too, so they are no longer
+offered to anyone; SiemCore retired that model on 2026-09-29 and no product
+qualified it. After deploying, withdraw `swf 2.3.0.4` with an empty
+`target_groups` list so the record stops showing as live on every ring.
 
 ### #8 Dashboard review fixes
 
@@ -242,12 +249,12 @@ full stop. The `channel` column/field is no longer part of release selection.
 - **Exception (unchanged):** the alpha-gated independent-artifact qualification
   path (`IndependentOffer`, `dual-alpha-<product>`) still uses channel as an
   internal artifact *namespace* — that is a qualification scope, not a ring, and
-  is invisible to normal clients. Removing it there is separate, out-of-scope
-  work.
+  is excluded from the normal offer (#9). Removing it there is separate,
+  out-of-scope work.
 - **Backward compatible for normal releases:** every normal release is on
   `stable`, so collapsing the predicate changes no live offer for them; the ring
   (`target_groups`) was already doing the real gating. Legacy releases parked on
-  a `dual-alpha-*` channel are the exception (see the open deploy blocker above).
+  a `dual-alpha-*` channel were the exception, closed by #9.
 
 **Follow-on:** removing `channel` from new templates and docs is done in #5. A
 later, cross-project phased removal of `channel` from the wire contract can

@@ -343,7 +343,7 @@ func (s *Service) GetLatestRelease(ctx context.Context, product, channel, curren
 
 	compatible := releases[:0]
 	for _, r := range releases {
-		if r.Manifest.ArtifactKind == "" {
+		if normalOffer(&r) {
 			compatible = append(compatible, r)
 		}
 	}
@@ -371,11 +371,24 @@ func (s *Service) HighestReleaseForGroup(ctx context.Context, product, channel, 
 	}
 	legacy := all[:0]
 	for _, r := range all {
-		if r.Manifest.ArtifactKind == "" {
+		if normalOffer(&r) {
 			legacy = append(legacy, r)
 		}
 	}
 	return findHighestVersion(legacy), nil
+}
+
+// QualificationChannelPrefix marks the retired dual-artifact qualification
+// namespace (dual-alpha-<product>).
+const QualificationChannelPrefix = "dual-alpha-"
+
+// normalOffer reports whether a release may be offered on the normal update
+// path. Independent bootstrap/update records and anything in the qualification
+// namespace are excluded whatever their target groups: once channel stopped
+// selecting, a legacy dual-alpha release published to every ring would
+// otherwise compete with normal releases.
+func normalOffer(r *types.Release) bool {
+	return r.Manifest.ArtifactKind == "" && !strings.HasPrefix(r.Channel, QualificationChannelPrefix)
 }
 
 // ReleaseInfoFor builds the check response for a (cached) release against the

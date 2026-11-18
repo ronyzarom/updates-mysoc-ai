@@ -107,6 +107,35 @@ func TestDualPairCoexistsWithLegacyVersion(t *testing.T) {
 	}
 }
 
+// A legacy release parked on a dual-alpha channel but published to every ring
+// (like swf 2.3.0.4) must never win the normal offer, even as the highest version.
+func TestQualificationChannelExcludedFromNormalOffer(t *testing.T) {
+	svc, _ := setupReleaseSchema(t)
+	ctx := context.Background()
+	all := []string{"alpha", "beta", "stable", "production"}
+	if _, err := svc.CreateRelease(ctx, CreateReleaseRequest{ProductName: "swf", Version: "2.3.0.1", Channel: "stable",
+		TargetGroups: all, Filename: "swf.tar.gz", File: strings.NewReader("normal")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateRelease(ctx, CreateReleaseRequest{ProductName: "swf", Version: "9.0.0.1", Channel: "dual-alpha-swf",
+		TargetGroups: all, Filename: "swf.tar.gz", File: strings.NewReader("parked")}); err != nil {
+		t.Fatal(err)
+	}
+	for _, ring := range all {
+		got, err := svc.HighestReleaseForGroup(ctx, "swf", "stable", ring)
+		if err != nil || got == nil || got.Version != "2.3.0.1" {
+			t.Fatalf("%s offer = %+v (err %v), want 2.3.0.1", ring, got, err)
+		}
+	}
+	latest, err := svc.GetLatestRelease(ctx, "swf", "stable", "2.3.0.0")
+	if err != nil || latest == nil || latest.LatestVersion != "2.3.0.1" {
+		t.Fatalf("latest = %+v (err %v), want 2.3.0.1", latest, err)
+	}
+	if got, err := svc.HighestReleaseForGroup(ctx, "swf", "dual-alpha-swf", "alpha"); err != nil || got == nil || got.Version != "2.3.0.1" {
+		t.Fatalf("a dual-alpha channel request must not reach the parked release, got %+v (err %v)", got, err)
+	}
+}
+
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
