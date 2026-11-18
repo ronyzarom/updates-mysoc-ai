@@ -11,12 +11,10 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.8 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
-**Status:** **built + validated locally; NOT deployed.** Server deploy and the
-SiemCore self-service key issuance are separate gates awaiting Rony's explicit
-go. The migration (020) and the new auth surface change the **server**, so this
-needs a server deploy before either feature is live. The dashboard changed too
-(#5), so the deploy also needs a dashboard rebuild. Build history: `.1`
+**Build:** 1.19.0.8 · commit `952f7bf` · tag `v1.19.0.8` · branch `version/1.19.0`.
+**Status:** **server + dashboard deployed** to updates.mysoc.ai on 2026-11-18
+on Rony's explicit go; updater binaries **not** published (see below). Issuing
+SiemCore a self-service ring key is a separate gate. Build history: `.1`
 enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
@@ -25,6 +23,48 @@ files (#6); `.5` adds automatic release retention (#7); `.6` is the dashboard
 review fixes and the server changes they need (#8); `.7` restores withdrawing a
 release with an explicit empty `target_groups` list, which `.6` had turned
 into a `400`; `.8` closes the dual-alpha deploy blocker (#9).
+
+**Local validation of `.8`:** gofmt, `go vet`, full Go suite on PostgreSQL 15.
+Upgrade check: the real 1.18.0.2 server (commit `8cab819`) seeded a throwaway
+database (releases incl. a dual-alpha release on all rings, license, two nodes,
+admin user, API key); 1.19.0.8 applied 020 with no row lost, served the same
+normal offers and stopped offering the dual-alpha release. Rollback check: the
+1.18.0.2 binary runs on the 020 schema unchanged (ignores the extra ledger row;
+refuses the new ring key with `403`), so rollback is a binary swap. Reverting
+the schema too needs every `update-group` key row deleted (revoked rows still
+block the down migration) **and** the `020` row removed from
+`schema_migrations`, or a later re-upgrade skips 020 and listing keys fails.
+
+**Deploy (2026-11-18, UTC):**
+
+- 23:12 hub notice to mysoc-ai, siemcore, swf (alpha-only upload default,
+  cumulative ring edits, `target_groups` required on `/target-groups`).
+- 23:13 backup `~/backups/release-1.19.0.8-20261118T231354Z` on the server:
+  database dump, the 1.18.0.2 binary (also kept as
+  `bin/update-server.pre-1.19.0.8`), the dashboard drop-in, and all 90 release
+  files.
+- Dashboard built on the server from `952f7bf` into
+  `~/dashboard-builds/archive-1.19.0.8`; every page and the stylesheet answered
+  `200` on a side port before the switch.
+- 23:17:27 `update-server` 1.19.0.8 (`952f7bf3071b`, linux/amd64 sha256
+  `7333fce6…`) started: `applied 020_api_key_update_group_scope`, one restart,
+  no errors. Dashboard drop-in switched to the 1.19.0.8 build right after.
+  All 24 devices active in the previous hour heartbeated again within minutes.
+- `swf 2.3.0.4` (`dual-alpha-swf`, paired) withdrawn from all four rings with
+  `target_groups: []`; the record stays.
+- 23:27:27 first retention pass: scanned 37, deleted 10, failed 0, exactly the
+  preview (mysoc 1.3.51.7, 1.3.52.2, 1.3.53.3, 1.3.54.20, 1.3.55.3; siemcore
+  3.3.183.1, 3.3.184.2, 3.3.184.3, 3.3.191.1; updater-linux-arm64 1.17.1.1).
+  Release storage 1.2 GB → 672 MB.
+
+**Updater not published.** The 1.18.2.1 alpha soak is not complete: all seven
+live alpha Linux nodes (the testing relay `mysoc-testing-mysoc-ai`, `drtest`,
+`testing-dr`, `testing-dr-b`, `siemcore-testing-01`, pods a/b `-20261114`) run
+1.18.2.1 with ~1-minute heartbeats, a successful self-update report where
+reported, and none pending; but no product apply has run through 1.18.2.1 yet
+(last applies 2026-11-17 13:29–14:04, before the 23:00 self-update) and no
+child download has been served from the relay cache on it. 1.19.0.8 updaters
+wait for that.
 
 ### #9 Dual-alpha releases never reach a normal offer
 
