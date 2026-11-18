@@ -665,10 +665,19 @@ func (s *Server) handleUpdateReleaseTargetGroups(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Validate groups (non-empty, known rings, cumulative from alpha).
-	if err := validateCumulativeGroups(req.TargetGroups); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	// Validate groups: an explicit empty list withdraws the release from every
+	// ring (the documented way to pull a bad release while keeping its record);
+	// anything else must be known rings, cumulative from alpha. A body without
+	// target_groups is refused so a malformed request cannot withdraw by accident.
+	if req.TargetGroups == nil {
+		writeError(w, http.StatusBadRequest, "target_groups is required (an empty list withdraws the release)")
 		return
+	}
+	if len(req.TargetGroups) > 0 {
+		if err := validateCumulativeGroups(req.TargetGroups); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	svc := s.releaseService()

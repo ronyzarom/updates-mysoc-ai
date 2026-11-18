@@ -11,7 +11,7 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
-**Build:** 1.19.0.6 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
+**Build:** 1.19.0.7 · commit _pending_ · tag _pending_ · branch `version/1.19.0`.
 **Status:** **built + validated locally; NOT deployed.** Server deploy and the
 SiemCore self-service key issuance are separate gates awaiting Rony's explicit
 go. The migration (020) and the new auth surface change the **server**, so this
@@ -22,7 +22,9 @@ update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
 dashboard, configs and docs (#5); `.4` makes deleting a release delete its
 files (#6); `.5` adds automatic release retention (#7); `.6` is the dashboard
-review fixes and the server changes they need (#8).
+review fixes and the server changes they need (#8); `.7` restores withdrawing a
+release with an explicit empty `target_groups` list, which `.6` had turned
+into a `400`.
 
 **Open deploy blocker:** with the channel filter gone, a legacy release parked on
 a `dual-alpha-<product>` channel (today `swf 2.3.0.4`, published to all four
@@ -40,9 +42,10 @@ unsafe defaults. This build fixes them, plus the server changes they need.
 - An upload with no target groups now lands on `alpha` only. It used to go to
   all four rings, production included.
 - Ring edits must be cumulative from alpha (`alpha`, `alpha,beta`, …). A set
-  that skips a ring, a duplicate, an unknown ring, or an empty list on
-  `/target-groups` is a `400`. A skipped ring is how stable once ended up with
-  no mySOC release.
+  that skips a ring, a duplicate or an unknown ring is a `400`. A skipped ring
+  is how stable once ended up with no mySOC release. An explicit `[]` on
+  `/target-groups` still withdraws a release; a body with no `target_groups`
+  is now a `400`.
 - The availability promotion gate (`409`, audited `?override=<reason>`) now
   also covers the notes-and-groups `PUT`. Before, that path could widen a
   release with no check.
