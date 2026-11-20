@@ -12,10 +12,11 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
 **Build:** 1.19.0.8 · commit `952f7bf` · tag `v1.19.0.8` · branch `version/1.19.0`.
-**Status:** **server + dashboard deployed** to updates.mysoc.ai on 2026-11-18;
-**updater `1.19.0.8` on `alpha,beta,stable`** (alpha 11:27 UTC, beta 13:40 UTC,
-stable 13:50 UTC — all three soaks passed). `production` remains on updater
-`1.18.0.2` pending Rony's separate explicit go. Issuing SiemCore a self-service ring key is a separate gate. Build history: `.1`
+**Status:** **live across all rings** — server + dashboard deployed to
+updates.mysoc.ai on 2026-11-18; **updater `1.19.0.8` on `alpha,beta,stable,production`**
+(2026-11-20: alpha 11:27, beta 13:40, stable 13:50, production 14:03 UTC — all 13
+active Linux nodes across all four rings running `1.19.0.8`). Issuing SiemCore a
+self-service ring key and updating `/install/` kits remain separate gates. Build history: `.1`
 enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
@@ -86,8 +87,15 @@ block the down migration) **and** the `020` row removed from
   (13:50:16, still on `1.18.0.2`, confirming mixed-version hops), none stuck in
   `pending_self_update`, and all 7 SWF children behind `siemcore-danshar` kept
   heartbeating cleanly through the new `1.19.0.8` relay (13:53:43–13:54:25).
-- `production`: **not widened** — `mysoc-cyfox-il` and `siemcore-cyfox-il`
-  remain on `1.18.0.2` pending Rony's explicit go.
+- `production` (14:03 UTC): widened to `["alpha","beta","stable","production"]`
+  on Rony's explicit go. **Production verified (14:04–14:09 UTC):**
+  `mysoc-cyfox-il` (finalized 14:04:22, `success=true`, `relay_listener_ok=true`,
+  heartbeats through 14:09:03) and `siemcore-cyfox-il` (heartbeats through
+  14:08:52) both upgraded `1.18.0.2 → 1.19.0.8` with zero pending self-updates;
+  all three SiemCore children (`siemcore-cyfox-il`, `siemcore-danshar`,
+  `siemcore-seetech`) and both SWF children behind `siemcore-cyfox-il` remained
+  online. All 13 active Linux nodes fleet-wide (alpha 7, beta 2, stable 2,
+  production 2) are on `1.19.0.8`.
 
 **Follow-up findings from the 1.18.2.1 alpha soak (for the next updater build):**
 
