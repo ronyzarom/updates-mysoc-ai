@@ -12,11 +12,11 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
 **Build:** 1.19.0.8 · commit `952f7bf` · tag `v1.19.0.8` · branch `version/1.19.0`.
-**Status:** **server + dashboard deployed** to updates.mysoc.ai on 2026-11-18
-and **updater `1.19.0.8` published to `alpha`** on 2026-11-20 (`publish-updater.sh --groups alpha`,
-after 1.18.2.1 passed its alpha soak), on Rony's explicit go. Beta, stable and
-production remain on updater `1.18.0.2` pending soak and a separate go per ring.
-Issuing SiemCore a self-service ring key is a separate gate. Build history: `.1`
+**Status:** **server + dashboard deployed** to updates.mysoc.ai on 2026-11-18;
+**updater `1.19.0.8` on `alpha,beta`** (published to `alpha` 2026-11-20 11:27 UTC;
+widened to `beta` 13:40 UTC after alpha soak passed; beta soak passed 13:46 UTC).
+`stable` and `production` remain on updater `1.18.0.2` pending separate explicit
+approval per ring. Issuing SiemCore a self-service ring key is a separate gate. Build history: `.1`
 enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
@@ -59,12 +59,28 @@ block the down migration) **and** the `020` row removed from
   3.3.183.1, 3.3.184.2, 3.3.184.3, 3.3.191.1; updater-linux-arm64 1.17.1.1).
   Release storage 1.2 GB → 672 MB.
 
-**Updater published to `alpha` (2026-11-20, UTC):** after 1.18.2.1 passed all
-alpha soak criteria (see 1.18.2 below), `updater-linux-amd64` (sha256
-`f155493b…`) and `updater-linux-arm64` (sha256 `bc23ef71…`) `1.19.0.8` were
-published to `alpha` only via `scripts/publish-updater.sh --groups alpha`.
-Beta, stable and production remain on `1.18.0.2` pending soak and a separate
-explicit instruction per ring.
+**Updater rings (`updater-linux-amd64` sha256 `f155493b…`, `updater-linux-arm64` sha256 `bc23ef71…`, 2026-11-20 UTC):**
+
+- `alpha` (11:27 UTC): published via `scripts/publish-updater.sh --groups alpha`
+  after 1.18.2.1 passed its alpha soak (see 1.18.2 below).
+  **Alpha soak passed (11:28–13:39 UTC):** all seven active Linux alpha nodes
+  (`drtest.mysoc.ai`, `mysoc-testing-mysoc-ai`, `testing-dr.mysoc.ai`,
+  `testing-dr-b.mysoc.ai`, `siemcore-testing-01`,
+  `siemcore-bezeq-pod-test-a-20261114`, `siemcore-bezeq-pod-test-b-20261114`)
+  upgraded to `1.19.0.8` and held it >2 hours (>100 cycles) with `success=true`
+  self-updates, zero pending self-updates, and clean product checks. Relay
+  cache verified from nginx access log: `mysoc-testing-mysoc-ai` filled its
+  cache once at 11:28:01, finalized on `1.19.0.8` at 11:28:14, and served all
+  three SiemCore children with no further server downloads.
+- `beta` (13:40 UTC): widened to `["alpha","beta"]` on Rony's explicit go.
+  **Beta soak passed (13:41–13:46 UTC):** `mysoc-cloud-mysoc-ai` upgraded
+  `1.18.0.2 → 1.19.0.8` (finalized 13:41:33, `success=true`, `relay_listener_ok=true`,
+  heartbeats through 13:45:36) and filled its relay cache at 13:41:21;
+  `siemcore-cloud-01` upgraded via the relay cache with no direct server fetch
+  and heartbeated online through the relay from 13:42:10 through 13:44:59
+  (>=3 cycles, none stuck in `pending_self_update`).
+- `stable` / `production`: **not widened** — remain on `1.18.0.2` pending a
+  separate explicit go per ring.
 
 **Follow-up findings from the 1.18.2.1 alpha soak (for the next updater build):**
 
