@@ -13,10 +13,9 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 **Build:** 1.19.0.8 · commit `952f7bf` · tag `v1.19.0.8` · branch `version/1.19.0`.
 **Status:** **server + dashboard deployed** to updates.mysoc.ai on 2026-11-18;
-**updater `1.19.0.8` on `alpha,beta`** (published to `alpha` 2026-11-20 11:27 UTC;
-widened to `beta` 13:40 UTC after alpha soak passed; beta soak passed 13:46 UTC).
-`stable` and `production` remain on updater `1.18.0.2` pending separate explicit
-approval per ring. Issuing SiemCore a self-service ring key is a separate gate. Build history: `.1`
+**updater `1.19.0.8` on `alpha,beta,stable`** (alpha 11:27 UTC, beta 13:40 UTC,
+stable 13:50 UTC — all three soaks passed). `production` remains on updater
+`1.18.0.2` pending Rony's separate explicit go. Issuing SiemCore a self-service ring key is a separate gate. Build history: `.1`
 enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
@@ -79,8 +78,16 @@ block the down migration) **and** the `020` row removed from
   `siemcore-cloud-01` upgraded via the relay cache with no direct server fetch
   and heartbeated online through the relay from 13:42:10 through 13:44:59
   (>=3 cycles, none stuck in `pending_self_update`).
-- `stable` / `production`: **not widened** — remain on `1.18.0.2` pending a
-  separate explicit go per ring.
+- `stable` (13:50 UTC): widened to `["alpha","beta","stable"]` on Rony's
+  explicit go. **Stable soak passed (13:50–13:55 UTC):** `siemcore-seetech`
+  (on `1.19.0.8` by 13:50:30, heartbeats through 13:54:22) and
+  `siemcore-danshar` (heartbeats through 13:54:34) both upgraded
+  `1.18.0.2 → 1.19.0.8` from a single relay cache fill on `mysoc-cyfox-il`
+  (13:50:16, still on `1.18.0.2`, confirming mixed-version hops), none stuck in
+  `pending_self_update`, and all 7 SWF children behind `siemcore-danshar` kept
+  heartbeating cleanly through the new `1.19.0.8` relay (13:53:43–13:54:25).
+- `production`: **not widened** — `mysoc-cyfox-il` and `siemcore-cyfox-il`
+  remain on `1.18.0.2` pending Rony's explicit go.
 
 **Follow-up findings from the 1.18.2.1 alpha soak (for the next updater build):**
 
