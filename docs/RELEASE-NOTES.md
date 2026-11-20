@@ -13,8 +13,10 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 **Build:** 1.19.0.8 · commit `952f7bf` · tag `v1.19.0.8` · branch `version/1.19.0`.
 **Status:** **server + dashboard deployed** to updates.mysoc.ai on 2026-11-18
-on Rony's explicit go; updater binaries **not** published (see below). Issuing
-SiemCore a self-service ring key is a separate gate. Build history: `.1`
+and **updater `1.19.0.8` published to `alpha`** on 2026-11-20 (`publish-updater.sh --groups alpha`,
+after 1.18.2.1 passed its alpha soak), on Rony's explicit go. Beta, stable and
+production remain on updater `1.18.0.2` pending soak and a separate go per ring.
+Issuing SiemCore a self-service ring key is a separate gate. Build history: `.1`
 enrol-into-a-ring (#2) + scoped ring key (#3); `.2` makes target groups the sole
 update selector (#4, below); `.3` rebased onto `main` (carries 1.18.1.5 and the
 1.18.2.1 measurement fix) and removes channel from the publishing tools,
@@ -57,14 +59,28 @@ block the down migration) **and** the `020` row removed from
   3.3.183.1, 3.3.184.2, 3.3.184.3, 3.3.191.1; updater-linux-arm64 1.17.1.1).
   Release storage 1.2 GB → 672 MB.
 
-**Updater not published.** The 1.18.2.1 alpha soak is not complete: all seven
-live alpha Linux nodes (the testing relay `mysoc-testing-mysoc-ai`, `drtest`,
-`testing-dr`, `testing-dr-b`, `siemcore-testing-01`, pods a/b `-20261114`) run
-1.18.2.1 with ~1-minute heartbeats, a successful self-update report where
-reported, and none pending; but no product apply has run through 1.18.2.1 yet
-(last applies 2026-11-17 13:29–14:04, before the 23:00 self-update) and no
-child download has been served from the relay cache on it. 1.19.0.8 updaters
-wait for that.
+**Updater published to `alpha` (2026-11-20, UTC):** after 1.18.2.1 passed all
+alpha soak criteria (see 1.18.2 below), `updater-linux-amd64` (sha256
+`f155493b…`) and `updater-linux-arm64` (sha256 `bc23ef71…`) `1.19.0.8` were
+published to `alpha` only via `scripts/publish-updater.sh --groups alpha`.
+Beta, stable and production remain on `1.18.0.2` pending soak and a separate
+explicit instruction per ring.
+
+**Follow-up findings from the 1.18.2.1 alpha soak (for the next updater build):**
+
+1. `Relay.handleChildReport` (`pkg/updatersim/relay.go`) omits
+   `UnavailableSeconds` and `AvailabilityViolation` when constructing
+   `child.LastReport`, and `ChildReports()` prefers `child.LastReport` over
+   `Heartbeat.LastUpdateAttempt` because its relay-side timestamp is newer —
+   stripping downtime telemetry from every relayed child.
+2. SiemCore's `health_command` is a target-version gate, not a liveness probe
+   (inline retry loop on older hosts; target-version equality on one-line pod
+   hosts). A separate direct HTTP liveness probe config (e.g.
+   `availability_probe_url`, HTTP 200 on any version) is needed so the updater
+   can measure SiemCore outages accurately.
+3. Log `unavailable_seconds` on the `"update applied and verified"` line, and
+   send the first heartbeat before the first self-update check after restart
+   (avoids a one-off `403` on the first cycle after self-update).
 
 ### #9 Dual-alpha releases never reach a normal offer
 
@@ -371,7 +387,18 @@ relay carrying the new `ChildReport` field for the cascade-pod case.
 **Build:** 1.18.2.1 · commit `8a8bb96` · tag `v1.18.2.1` · branch `version/1.18.2`.
 **Status:** **published to alpha** (`updater-linux-amd64` sha256 `049b6340…`,
 `updater-linux-arm64` sha256 `9478cd3b…`) on Rony's explicit go, 2026-11-17.
-Soak on alpha pending; no widening without it plus a per-ring go. This is an
+**Alpha soak passed (2026-11-18..20):** all seven live Linux alpha nodes
+(`drtest.mysoc.ai`, `mysoc-testing-mysoc-ai`, `testing-dr.mysoc.ai`,
+`testing-dr-b.mysoc.ai`, `siemcore-testing-01`,
+`siemcore-bezeq-pod-test-a-20261114`, `siemcore-bezeq-pod-test-b-20261114`)
+held 1.18.2.1 for >60 hours with ~1-minute heartbeats, clean self-updates and
+none stuck in `pending_self_update`; all four mySOC alpha nodes applied
+`1.3.60.1`..`1.3.60.5` cleanly (`mysoc-testing-mysoc-ai` reported 10 s); all
+three SiemCore alpha nodes applied `3.3.199.2` cleanly with zero warnings (the
+135 s apply on testing no longer tripped the availability warning); relay cache
+proven by `mysoc-testing-mysoc-ai` (one 70 MB fill in relay journal + one
+download in server access log at 23:51:05 UTC, all three children updated).
+Superseded on alpha by `1.19.0.8` on 2026-11-20. This is an
 updater-only change (`pkg/updatersim`); the server is unchanged (`1.18.0.2`).
 
 **Problem.** `unavailable_seconds` (invariant 7) was the restart command's full
