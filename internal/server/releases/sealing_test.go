@@ -93,17 +93,23 @@ func TestIssuerFor(t *testing.T) {
 		"mysoc-platform":           IssuerMySoc,
 		"siemcore":                 IssuerSiemCore,
 		"SiemCore-collector":       IssuerSiemCore,
+		"widecore":                 IssuerWideCore,
+		"WideCore-gateway":         IssuerWideCore,
 		"swf":                      IssuerSWF,
 		"swf-windows":              IssuerSWF,
 		"updater-linux-amd64":      IssuerUpdates,
 		"mysoc-updater":            IssuerUpdates,
 		"siemcore-cascade-updater": IssuerUpdates,
+		"widecore-updater":         IssuerUpdates,
 		"relay-kit":                IssuerUpdates,
 		"something-else":           IssuerOther,
 	} {
 		if got := IssuerFor(product); got != want {
 			t.Errorf("IssuerFor(%q) = %q, want %q", product, got, want)
 		}
+	}
+	if !validIssuerScope(IssuerWideCore) {
+		t.Fatal("widecore must be a valid issuer scope")
 	}
 }
 

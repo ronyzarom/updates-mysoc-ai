@@ -882,10 +882,10 @@ type TreeChildRow struct {
 }
 
 // treeChildOrder surfaces exceptions first (offline, then failed updates), then
-// relays above leaves (mysoc > siemcore > swf), then by id for stability.
+// relays/tier-2 servers above leaves (mysoc > siemcore/widecore > swf), then by id for stability.
 var treeChildOrder = ` ORDER BY (` + derivedStatusExpr + `) = 'offline' DESC,
 	last_update_success IS FALSE DESC,
-	CASE product_tier WHEN 'mysoc' THEN 0 WHEN 'siemcore' THEN 1 WHEN 'swf' THEN 2 ELSE 3 END ASC,
+	CASE product_tier WHEN 'mysoc' THEN 0 WHEN 'siemcore' THEN 1 WHEN 'widecore' THEN 1 WHEN 'swf' THEN 2 ELSE 3 END ASC,
 	instance_id ASC`
 
 // TreeChildren returns one level of the fleet cascade: the direct children of

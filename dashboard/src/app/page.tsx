@@ -10,6 +10,7 @@ import {
   XCircle,
   Building2,
   Boxes,
+  Shield,
   MonitorSmartphone,
   ChevronRight,
   Key,
@@ -103,7 +104,7 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold text-white">Dashboard</h1>
         <p className="text-slate-400 mt-1">
           One license per operator, one cascade per fleet: mysoc &rsaquo;
-          siemcore &rsaquo; swf
+          siemcore / widecore &rsaquo; swf
         </p>
       </div>
 
@@ -116,7 +117,7 @@ export default function DashboardPage() {
       )}
 
       {/* Hierarchy stats: operators first, then fleet by tier */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
         <StatCard
           name="Operators"
           value={activeOperators}
@@ -146,6 +147,15 @@ export default function DashboardPage() {
           icon={Boxes}
           color="text-sky-400"
           bgColor="bg-sky-500/20"
+          href="/instances"
+        />
+        <StatCard
+          name="WideCore Gateways"
+          value={tierCount("widecore")}
+          sub="via mysoc relay"
+          icon={Shield}
+          color="text-indigo-400"
+          bgColor="bg-indigo-500/20"
           href="/instances"
         />
         <StatCard
@@ -293,6 +303,10 @@ export default function DashboardPage() {
                     <ChevronRight className="w-3 h-3 text-slate-600" />
                     <span title="siemcore servers">
                       {op.nodes_by_tier?.["siemcore"] ?? 0}
+                    </span>
+                    <span className="text-slate-600">/</span>
+                    <span title="widecore gateways">
+                      {op.nodes_by_tier?.["widecore"] ?? 0}
                     </span>
                     <ChevronRight className="w-3 h-3 text-slate-600" />
                     <span title="swf agents">{op.nodes_by_tier?.["swf"] ?? 0}</span>

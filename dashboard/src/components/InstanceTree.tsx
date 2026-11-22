@@ -22,12 +22,14 @@ import { useState } from "react";
 const TIER_STYLES: Record<string, string> = {
   mysoc: "bg-violet-500/20 text-violet-300 border border-violet-500/30",
   siemcore: "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30",
+  widecore: "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30",
   swf: "bg-amber-500/20 text-amber-300 border border-amber-500/30",
 };
 
 const TIER_LABELS: Record<string, string> = {
   mysoc: "MySoc",
   siemcore: "SiemCore",
+  widecore: "WideCore",
   swf: "SWF",
 };
 

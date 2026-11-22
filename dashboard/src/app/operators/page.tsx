@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Server,
   Boxes,
+  Shield,
   MonitorSmartphone,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
@@ -354,6 +355,7 @@ export default function OperatorsPage() {
 const TIER_META = [
   { tier: "mysoc", label: "mysoc", icon: Server, color: "text-violet-400" },
   { tier: "siemcore", label: "siemcore", icon: Boxes, color: "text-cyan-400" },
+  { tier: "widecore", label: "widecore", icon: Shield, color: "text-indigo-400" },
   { tier: "swf", label: "swf", icon: MonitorSmartphone, color: "text-emerald-400" },
 ] as const;
 
@@ -432,7 +434,7 @@ function OperatorCard({
       </div>
 
       {/* Fleet breakdown */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {TIER_META.map(({ tier, label, icon: Icon, color }) => (
           <div
             key={tier}

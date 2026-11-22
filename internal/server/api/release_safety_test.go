@@ -140,4 +140,35 @@ func TestTargetGroupsWithdrawHTTP(t *testing.T) {
 	if g := groups(); len(g) != 1 || g[0] != "alpha" {
 		t.Fatalf("re-offer should land on alpha, got %v", g)
 	}
+
+	// POST /api/v1/releases/ must also enforce cumulative target_groups:
+	// production-only or skipped rings are 400; omitted defaults to alpha only;
+	// product=widecore is accepted.
+	uploadGroups := func(product, ver, tg string) int {
+		var b bytes.Buffer
+		w := multipart.NewWriter(&b)
+		_ = w.WriteField("product", product)
+		_ = w.WriteField("version", ver)
+		if tg != "" {
+			_ = w.WriteField("target_groups", tg)
+		}
+		fw, _ := w.CreateFormFile("artifact", product+".tar.gz")
+		_, _ = fw.Write([]byte("artifact"))
+		_ = w.Close()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/releases/", &b)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		return do(req)
+	}
+	if code := uploadGroups("widecore", "1.0.0.1", "production"); code != http.StatusBadRequest {
+		t.Fatalf("POST production-only: want 400, got %d", code)
+	}
+	if code := uploadGroups("widecore", "1.0.0.1", "alpha,stable"); code != http.StatusBadRequest {
+		t.Fatalf("POST skipped beta: want 400, got %d", code)
+	}
+	if code := uploadGroups("widecore", "1.0.0.1", "alpha,alpha"); code != http.StatusBadRequest {
+		t.Fatalf("POST duplicate ring: want 400, got %d", code)
+	}
+	if code := uploadGroups("widecore", "1.0.0.1", "alpha"); code != http.StatusCreated {
+		t.Fatalf("POST widecore alpha: want 201, got %d", code)
+	}
 }

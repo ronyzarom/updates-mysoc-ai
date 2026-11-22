@@ -71,12 +71,13 @@ const (
 
 var productNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-// Canonical product tiers (mysoc > siemcore > swf). A customer owns one license
-// that spans the whole tree; every node presents the same license_key and
+// Canonical product tiers (mysoc > {siemcore > swf, widecore}). A customer owns
+// one license that spans the whole tree; every node presents its credential and
 // self-reports its tier plus its parent node's instance id.
 const (
 	TierMySoc    = "mysoc"
 	TierSiemCore = "siemcore"
+	TierWideCore = "widecore"
 	TierSWF      = "swf"
 )
 
@@ -85,6 +86,7 @@ const (
 var tierRequiresParent = map[string]bool{
 	TierMySoc:    false,
 	TierSiemCore: true,
+	TierWideCore: true,
 	TierSWF:      true,
 }
 
@@ -296,11 +298,11 @@ type InstanceConfig struct {
 	UpdaterVersion string `yaml:"updater_version"`
 	OS             string `yaml:"os,omitempty"`
 	Arch           string `yaml:"arch,omitempty"`
-	// ProductTier is the canonical tier this node reports: mysoc, siemcore, or
-	// swf. Optional; when set it is validated and sent on every heartbeat.
+	// ProductTier is the canonical tier this node reports: mysoc, siemcore,
+	// widecore, or swf. Optional; when set it is validated and sent on every heartbeat.
 	ProductTier string `yaml:"product_tier,omitempty"`
 	// ParentID is the instance id of this node's parent (a siemcore for an swf,
-	// a mysoc for a siemcore). Required for siemcore/swf, forbidden for mysoc.
+	// a mysoc for a siemcore or widecore). Required for non-root tiers, forbidden for mysoc.
 	ParentID string `yaml:"parent_id,omitempty"`
 	// CustomerID identifies the end customer this node serves; it travels up
 	// the cascade so the updates server can group the fleet per customer.
@@ -367,12 +369,17 @@ type FilesystemConfig struct {
 	// built-in default (30m).
 	FirstInstallTimeout Duration `yaml:"first_install_timeout,omitempty"`
 	// MaxUnavailableSeconds is the restart-window budget (invariant 7). During
-	// apply/rollback the executor measures how long the product's health URL is
-	// unavailable; exceeding this never aborts the in-flight apply (that would
+	// apply/rollback the executor measures how long the product's liveness probe
+	// is unavailable; exceeding this never aborts the in-flight apply (that would
 	// only lengthen the outage) but flags the update report so alpha catches a
 	// release that takes the server down for too long. 0 uses the default
-	// (120s). Requires a health_command to measure anything.
+	// (120s). Requires either availability_probe_url or health_command to measure.
 	MaxUnavailableSeconds int `yaml:"max_unavailable_seconds,omitempty"`
+	// AvailabilityProbeURL, when set, is polled via HTTP GET (2s timeout, HTTP
+	// 200 on any version = up) during restartAndMeasure instead of invoking
+	// health_command. This separates fast version-agnostic liveness probing from
+	// health_command, which remains the final target-version validation gate.
+	AvailabilityProbeURL string `yaml:"availability_probe_url,omitempty"`
 }
 
 // ProductConfig identifies one simulated managed product.
@@ -665,6 +672,19 @@ func (c *Config) Validate() error {
 		if c.Simulation.Filesystem.FirstInstallTimeout.Duration <= 0 {
 			return fmt.Errorf("simulation.filesystem.first_install_timeout must be positive")
 		}
+		if rawProbe := strings.TrimSpace(c.Simulation.Filesystem.AvailabilityProbeURL); rawProbe != "" {
+			pu, err := url.Parse(rawProbe)
+			if err != nil {
+				return fmt.Errorf("invalid simulation.filesystem.availability_probe_url: %w", err)
+			}
+			if pu.Scheme != "http" && pu.Scheme != "https" {
+				return fmt.Errorf("simulation.filesystem.availability_probe_url must use http or https")
+			}
+			if pu.Host == "" || pu.User != nil {
+				return fmt.Errorf("simulation.filesystem.availability_probe_url must contain a host and no embedded credentials")
+			}
+			c.Simulation.Filesystem.AvailabilityProbeURL = rawProbe
+		}
 	default:
 		return fmt.Errorf("invalid simulation executor %q (must be noop or filesystem)", c.Simulation.Executor)
 	}
@@ -672,7 +692,7 @@ func (c *Config) Validate() error {
 	if c.Instance.ProductTier != "" {
 		tier := strings.ToLower(strings.TrimSpace(c.Instance.ProductTier))
 		if !validTier(tier) {
-			return fmt.Errorf("invalid instance.product_tier %q (must be mysoc, siemcore, or swf)", c.Instance.ProductTier)
+			return fmt.Errorf("invalid instance.product_tier %q (must be mysoc, siemcore, widecore, or swf)", c.Instance.ProductTier)
 		}
 		parent := strings.TrimSpace(c.Instance.ParentID)
 		if tierRequiresParent[tier] && parent == "" {

@@ -9,6 +9,36 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
+## 1.20.0 — WideCore tier support + updater liveness probe & relay telemetry
+
+**Build:** 1.20.0.1 · branch `version/1.20.0` (cut from `main` at `92bed80`, which contains `v1.19.0.8`).
+**Status:** **built + validated locally; NOT deployed.**
+
+### What changed
+
+1. **WideCore tier support (server, updater, dashboard; no DB migration):**
+   - Added `widecore` to the canonical tier catalog (`rank: 1`, `parent_tier: mysoc`, sibling of `siemcore`, leaf for now — relays to nothing). WideCore nodes enroll only through their operator's `mysoc` relay and require no separate license on `updates.mysoc.ai`.
+   - Updated hierarchy validation, tree child sort order (`siemcore` and `widecore` at rank 1, `swf` at rank 2), `update-group` API-key tier scoping, and issuer sealing (`widecore` issuer; `widecore-updater` / `widecore-cascade-updater` remain under `updates`).
+   - Updated the updater config tier check (`product_tier: widecore` accepted, requires `parent_id`).
+   - Updated the dashboard (overview `WideCore Gateways` stat card + operator counts, instances tier filter & indigo badge, operators summary, releases product picker, trusted-key issuer scope, scoped API-key tier selector).
+   - WideCore kits and install/enroll scripts wait until WideCore defines its install layout and apply shim.
+
+2. **Updater liveness probe & soak follow-ups:**
+   - Added optional `simulation.filesystem.availability_probe_url`: when set, outage measurement during `restart_command` polls that URL directly via HTTP GET (2s timeout, `DisableKeepAlives: true`, HTTP 200 on any version = up) instead of spawning `health_command`, avoiding false violations when `health_command` checks the target version or spawns slow commands. Falls back to `health_command` when unset; `health_command` remains the post-apply validation gate.
+   - Fixed `Relay.handleChildReport` dropping `unavailable_seconds` and `availability_violation` when recording a child's `POST /api/v1/updates/{product}/report` (because `ChildrenReport()` prefers the newer report timestamp over `Heartbeat.LastUpdateAttempt`, relayed nodes previously lost availability telemetry at the relay hop).
+   - Logged `unavailable_seconds` and `availability_violation` on `"update applied and verified"` for direct per-node journal inspection.
+   - Sent a non-fatal heartbeat before `selfUpdatePhase` on the first cycle after boot (and while `PendingSelfUpdate != nil`), preventing the one-off `403 unknown source: enroll via heartbeat first` right after a self-update restart while keeping invariant 1 (heartbeat failure never blocks self-update).
+   - Enforced `validateCumulativeGroups` on `POST /api/v1/releases` when `target_groups` is non-empty (`400` on non-cumulative or duplicate rings such as `production` or `alpha,stable`), matching `PUT /releases/{product}/{version}` and `PUT …/target-groups`.
+
+### Relay compatibility
+
+- **Mixed-version tolerance:** Fully backwards- and forwards-compatible across any version mix. No wire-breaking changes, no DB migrations.
+- **Older relays (< 1.20.0.1):** Continue relaying heartbeats, checks, and downloads unchanged. A `1.19.0.8` mysoc relay already forwards child heartbeats with `product_tier=widecore` verbatim (it does not validate child tier names), and drops `unavailable_seconds` / `availability_violation` only on `POST …/report` (fixed once the relay itself updates to `1.20.0.1`).
+- **Minimum server version for WideCore enrollment:** Server `1.20.0.1+` is required before WideCore nodes enroll (older servers reject `product_tier=widecore` in hierarchy validation).
+- **Child-facing changes:** None.
+
+---
+
 ## 1.19.0 — Self-service rings + target groups are the only selector
 
 **Build:** 1.19.0.8 · commit `952f7bf` · tag `v1.19.0.8` · branch `version/1.19.0`.

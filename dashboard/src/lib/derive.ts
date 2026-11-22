@@ -199,7 +199,7 @@ export function sealStatusOf(release: Pick<Release, "seal_status">): SealStatus 
   return release.seal_status ?? "unsealed";
 }
 
-export const ISSUER_ORDER = ["mysoc", "siemcore", "swf", "updates", "other"] as const;
+export const ISSUER_ORDER = ["mysoc", "siemcore", "widecore", "swf", "updates", "other"] as const;
 
 export interface IssuerSealCoverage {
   issuer: string;

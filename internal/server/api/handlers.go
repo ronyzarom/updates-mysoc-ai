@@ -247,14 +247,13 @@ func (s *Server) handleUploadRelease(w http.ResponseWriter, r *http.Request) {
 		targetGroups = append(targetGroups, tgs...)
 	}
 
-	// Validate target group names
+	// Validate target group names: any explicit list must be a duplicate-free,
+	// cumulative prefix starting at alpha (matching the edit endpoints). When
+	// omitted, CreateRelease defaults to alpha only.
 	if len(targetGroups) > 0 {
-		validGroups := map[string]bool{"alpha": true, "beta": true, "stable": true, "production": true}
-		for _, g := range targetGroups {
-			if !validGroups[g] {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid target group: %q (must be alpha, beta, stable, or production). Raw form value: %q", g, rawTargetGroups))
-				return
-			}
+		if err := validateCumulativeGroups(targetGroups); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("%s (raw form value: %q)", err.Error(), rawTargetGroups))
+			return
 		}
 	}
 

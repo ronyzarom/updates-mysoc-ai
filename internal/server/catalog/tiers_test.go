@@ -4,17 +4,25 @@ import "testing"
 
 func TestTiersCanonical(t *testing.T) {
 	tiers := Tiers()
-	if len(tiers) != 3 {
-		t.Fatalf("expected 3 tiers, got %d", len(tiers))
+	if len(tiers) != 4 {
+		t.Fatalf("expected 4 tiers, got %d", len(tiers))
 	}
 	// Root-first ordering by rank.
-	wantOrder := []string{"mysoc", "siemcore", "swf"}
-	for i, want := range wantOrder {
-		if tiers[i].Name != want {
-			t.Fatalf("tier[%d] = %q, want %q", i, tiers[i].Name, want)
+	want := []struct {
+		name string
+		rank int
+	}{
+		{"mysoc", 0},
+		{"siemcore", 1},
+		{"widecore", 1},
+		{"swf", 2},
+	}
+	for i, w := range want {
+		if tiers[i].Name != w.name {
+			t.Fatalf("tier[%d] = %q, want %q", i, tiers[i].Name, w.name)
 		}
-		if tiers[i].Rank != i {
-			t.Fatalf("tier %q rank = %d, want %d", tiers[i].Name, tiers[i].Rank, i)
+		if tiers[i].Rank != w.rank {
+			t.Fatalf("tier %q rank = %d, want %d", tiers[i].Name, tiers[i].Rank, w.rank)
 		}
 	}
 	// Returned slice must be a copy (mutating it must not affect the catalog).
@@ -25,7 +33,7 @@ func TestTiersCanonical(t *testing.T) {
 }
 
 func TestIsValidTier(t *testing.T) {
-	for _, ok := range []string{"mysoc", "siemcore", "swf"} {
+	for _, ok := range []string{"mysoc", "siemcore", "widecore", "swf"} {
 		if !IsValidTier(ok) {
 			t.Fatalf("%q should be valid", ok)
 		}
@@ -44,6 +52,7 @@ func TestExpectedParentTier(t *testing.T) {
 	}{
 		"mysoc":    {parent: "", ok: true},
 		"siemcore": {parent: "mysoc", ok: true},
+		"widecore": {parent: "mysoc", ok: true},
 		"swf":      {parent: "siemcore", ok: true},
 		"unknown":  {parent: "", ok: false},
 	}
@@ -62,6 +71,15 @@ func TestParentTierMatches(t *testing.T) {
 	if !ParentTierMatches("siemcore", "mysoc") {
 		t.Fatal("siemcore's parent should be mysoc")
 	}
+	if !ParentTierMatches("widecore", "mysoc") {
+		t.Fatal("widecore's parent should be mysoc")
+	}
+	if ParentTierMatches("swf", "widecore") {
+		t.Fatal("widecore is a leaf for now and must not be accepted as swf's parent")
+	}
+	if ParentTierMatches("widecore", "siemcore") {
+		t.Fatal("widecore is a sibling of siemcore, not its child")
+	}
 	if ParentTierMatches("swf", "mysoc") {
 		t.Fatal("swf's parent must be exactly one rank above (siemcore), not mysoc")
 	}
@@ -74,7 +92,7 @@ func TestRequiresParent(t *testing.T) {
 	if RequiresParent("mysoc") {
 		t.Fatal("mysoc (root) must not require a parent")
 	}
-	if !RequiresParent("siemcore") || !RequiresParent("swf") {
-		t.Fatal("siemcore and swf must require a parent")
+	if !RequiresParent("siemcore") || !RequiresParent("widecore") || !RequiresParent("swf") {
+		t.Fatal("siemcore, widecore, and swf must require a parent")
 	}
 }

@@ -40,6 +40,7 @@ const TIER_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "Any tier (unbound)" },
   { value: "mysoc", label: "MySoc" },
   { value: "siemcore", label: "SiemCore" },
+  { value: "widecore", label: "WideCore" },
   { value: "swf", label: "SWF" },
 ];
 

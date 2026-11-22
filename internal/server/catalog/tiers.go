@@ -1,13 +1,13 @@
 // Package catalog defines the canonical product hierarchy shared by the update
-// server and its clients: a customer owns one license that spans a three-tier
-// tree of mysoc (root) -> siemcore -> swf.
+// server and its clients: a customer owns one license that spans a tree rooted
+// at mysoc -> {siemcore (-> swf), widecore}.
 package catalog
 
 import "strings"
 
 // Tier describes one level of the product hierarchy.
 type Tier struct {
-	Name        string `json:"name"`                  // canonical id used on the wire (mysoc|siemcore|swf)
+	Name        string `json:"name"`                  // canonical id used on the wire (mysoc|siemcore|widecore|swf)
 	DisplayName string `json:"display_name"`          // human-friendly label for the dashboard
 	Rank        int    `json:"rank"`                  // 0 = root; larger = deeper
 	ParentTier  string `json:"parent_tier,omitempty"` // required parent tier ("" for the root)
@@ -17,6 +17,7 @@ type Tier struct {
 var tiers = []Tier{
 	{Name: "mysoc", DisplayName: "MySoc", Rank: 0, ParentTier: ""},
 	{Name: "siemcore", DisplayName: "SiemCore", Rank: 1, ParentTier: "mysoc"},
+	{Name: "widecore", DisplayName: "WideCore", Rank: 1, ParentTier: "mysoc"},
 	{Name: "swf", DisplayName: "SWF Windows Forwarder", Rank: 2, ParentTier: "siemcore"},
 }
 

@@ -33,7 +33,7 @@ func (s *Server) validateHierarchy(ctx context.Context, tier, parentInstanceID s
 		return "", true
 	}
 	if !catalog.IsValidTier(tier) {
-		return fmt.Sprintf("invalid product_tier %q (must be mysoc, siemcore, or swf)", tier), false
+		return fmt.Sprintf("invalid product_tier %q (must be mysoc, siemcore, widecore, or swf)", tier), false
 	}
 
 	expectedParent, _ := catalog.ExpectedParentTier(tier)

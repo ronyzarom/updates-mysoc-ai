@@ -33,9 +33,9 @@ interface UploadFormData {
 }
 
 // Canonical cascade products. Every release flows updates server -> mysoc
-// relay -> siemcore relay -> swf; picking the right product places it at the
-// right level of the cascade.
-const CASCADE_PRODUCTS = ["mysoc", "siemcore", "swf"] as const;
+// relay -> {siemcore relay -> swf, widecore}; picking the right product places
+// it at the right level of the cascade.
+const CASCADE_PRODUCTS = ["mysoc", "siemcore", "widecore", "swf"] as const;
 const CUSTOM_PRODUCT = "__custom__";
 
 const RING_PILL: Record<string, string> = {

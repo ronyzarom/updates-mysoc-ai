@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,6 +62,14 @@ type FilesystemExecutor struct {
 	// flags — never aborts — a report that exceeds the budget, so alpha catches a
 	// release that takes the product down for too long.
 	MaxUnavailableSeconds int
+	// AvailabilityProbeURL, when set, is polled via HTTP GET (2s timeout, HTTP
+	// 200 on any version = up) during restartAndMeasure instead of running
+	// HealthCommand, keeping HealthCommand strictly as the final validation gate.
+	AvailabilityProbeURL string
+
+	// probeClient is used by probeHTTP with keep-alives disabled so restart
+	// probes do not reuse stale sockets across a process restart.
+	probeClient *http.Client
 
 	// lastUnavailableSeconds and lastAvailabilityViolation hold the most recent
 	// measured restart window. Apply/Rollback run serially within one cycle and
@@ -129,7 +138,14 @@ func NewFilesystemExecutor(cfg FilesystemConfig, logger *slog.Logger) *Filesyste
 		CommandTimeout:        timeout,
 		FirstInstallTimeout:   firstInstallTimeout,
 		MaxUnavailableSeconds: maxUnavailable,
-		logger:                logger,
+		AvailabilityProbeURL:  strings.TrimSpace(cfg.AvailabilityProbeURL),
+		probeClient: &http.Client{
+			Timeout: availabilityProbeTimeout,
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
+		},
+		logger: logger,
 	}
 }
 
@@ -250,12 +266,13 @@ func (e *FilesystemExecutor) Apply(ctx context.Context, update Update) error {
 	return nil
 }
 
-// healthProbeInterval is how often restartAndMeasure samples the health command
-// while the restart runs; healthProbeTimeout bounds each sample so a refused
-// connection during the outage returns promptly.
+// healthProbeInterval is how often restartAndMeasure samples availability
+// while the restart runs; healthProbeTimeout bounds command probes and
+// availabilityProbeTimeout bounds direct HTTP liveness probes.
 const (
-	healthProbeInterval = 1 * time.Second
-	healthProbeTimeout  = 5 * time.Second
+	healthProbeInterval      = 1 * time.Second
+	healthProbeTimeout       = 5 * time.Second
+	availabilityProbeTimeout = 2 * time.Second
 )
 
 // restartAndMeasure runs the restart command for a phase and records the
@@ -265,18 +282,19 @@ const (
 // (for a cascade apply) a long validation that continues long after the app is
 // back up; timing the whole command therefore massively overcounted a slow
 // apply as downtime. Instead, while the command runs, we poll the configured
-// health command and count only the contiguous window during which it did not
-// pass. Health that never drops (zero-downtime) yields 0; the post-recovery
-// validation time is "up" and is not counted. A window longer than
-// MaxUnavailableSeconds flags lastAvailabilityViolation but never aborts the
-// in-flight change — aborting would only lengthen the outage.
+// liveness probe (AvailabilityProbeURL when set, otherwise HealthCommand) and
+// count only the contiguous window during which it did not pass. Health that
+// never drops (zero-downtime) yields 0; the post-recovery validation time is
+// "up" and is not counted. A window longer than MaxUnavailableSeconds flags
+// lastAvailabilityViolation but never aborts the in-flight change — aborting
+// would only lengthen the outage.
 func (e *FilesystemExecutor) restartAndMeasure(ctx context.Context, phase string, update Update) error {
 	// first_install is whole-host provisioning, not a steady-state restart
-	// window: measuring it would mark every fresh host as a violation. With no
-	// health command there is nothing to probe, so nothing is measured either
-	// (documented on FilesystemConfig.MaxUnavailableSeconds). In both cases the
-	// window stays at its reset value (0, no violation).
-	if phase == firstInstallPhase || len(e.HealthCommand) == 0 {
+	// window: measuring it would mark every fresh host as a violation. With
+	// neither an availability probe URL nor a health command there is nothing
+	// to probe, so nothing is measured either. In both cases the window stays
+	// at its reset value (0, no violation).
+	if phase == firstInstallPhase || (e.AvailabilityProbeURL == "" && len(e.HealthCommand) == 0) {
 		return e.runCommand(ctx, "restart", phase, e.RestartCommand, update)
 	}
 
@@ -330,11 +348,14 @@ func (e *FilesystemExecutor) measureUnavailable(ctx context.Context, update Upda
 	}
 }
 
-// probeHealthy runs the configured health command once, with a short timeout,
-// and reports whether it passed (exit 0). It mirrors how Validate invokes the
-// health command (same phase, env, and hardening) but is quiet and bounded so it
-// can be polled repeatedly during a restart.
+// probeHealthy samples product liveness once during a restart. When
+// AvailabilityProbeURL is configured it performs a fast, version-agnostic HTTP
+// GET (HTTP 200 = up); otherwise it falls back to running HealthCommand once
+// with a short timeout.
 func (e *FilesystemExecutor) probeHealthy(ctx context.Context, update Update) bool {
+	if e.AvailabilityProbeURL != "" {
+		return e.probeHTTP(ctx)
+	}
 	if len(e.HealthCommand) == 0 {
 		return true
 	}
@@ -363,6 +384,35 @@ func (e *FilesystemExecutor) probeHealthy(ctx context.Context, update Update) bo
 	cmd.Stdout = out
 	cmd.Stderr = out
 	return cmd.Run() == nil
+}
+
+// probeHTTP performs one direct GET to AvailabilityProbeURL with a 2s timeout.
+// Any HTTP 200 response counts as healthy regardless of body or version.
+func (e *FilesystemExecutor) probeHTTP(ctx context.Context) bool {
+	timeout := availabilityProbeTimeout
+	if e.CommandTimeout > 0 && e.CommandTimeout < timeout {
+		timeout = e.CommandTimeout
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, e.AvailabilityProbeURL, nil)
+	if err != nil {
+		return false
+	}
+	client := e.probeClient
+	if client == nil {
+		client = &http.Client{
+			Timeout:   timeout,
+			Transport: &http.Transport{DisableKeepAlives: true},
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // resetUnavailable clears the measured window before a new Apply so a failure

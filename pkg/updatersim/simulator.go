@@ -91,6 +91,13 @@ type Simulator struct {
 	// a hook whose Wait never returns) stops feeding the systemd watchdog and
 	// the process is restarted, while a long-but-progressing cycle is not.
 	lastProgress atomic.Int64
+
+	// heartbeatedOnce tracks whether this process has completed at least one
+	// successful heartbeat since boot. On the very first cycle (or while a
+	// self-update is awaiting heartbeat confirmation), heartbeat runs before
+	// self-update (still non-fatal) so a relay parent learns this source before
+	// the first self-update check and avoids a spurious 403.
+	heartbeatedOnce bool
 }
 
 // noteProgress records that the cycle is making forward progress. Called at
@@ -364,11 +371,35 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 	// first_install) from one wedged inside a single phase.
 	s.noteProgress()
 
-	// 1. Self-update FIRST, in isolation, with its own deadline. Its outcome
-	//    never depends on heartbeat or product results, so a rejected heartbeat
-	//    or a wedged product hook can never stop the updater from fetching the
+	runHeartbeat := func() {
+		s.noteProgress()
+		if _, err := s.SendHeartbeat(ctx); err != nil {
+			s.noteParentAuth(err)
+			cycleErrors = append(cycleErrors, fmt.Errorf("heartbeat: %w", err))
+		} else {
+			s.heartbeatedOnce = true
+			// A successful heartbeat is the proof a freshly self-updated binary can
+			// reach its parent; finalize any pending self-update now (deferred from
+			// boot so a node that cannot heartbeat is never declared good).
+			s.finalizeSelfUpdateOnHeartbeat()
+		}
+	}
+
+	// On the first cycle after boot (or while finalizing a pending self-update),
+	// send a non-fatal heartbeat before the first self-update check so a parent
+	// relay learns this source IP and avoids a spurious 403. Heartbeat failure
+	// is still non-fatal: selfUpdatePhase always runs immediately after.
+	heartbeatFirst := !s.heartbeatedOnce || s.state.PendingSelfUpdate != nil
+	if heartbeatFirst {
+		runHeartbeat()
+	}
+
+	// 1. Self-update in isolation, with its own deadline. Its outcome never
+	//    depends on heartbeat or product results, so a rejected heartbeat or a
+	//    wedged product hook can never stop the updater from fetching the
 	//    release that fixes the host. A successful activation returns
 	//    ErrRestartPending immediately so the process can hand off.
+	s.noteProgress()
 	if err := s.selfUpdatePhase(ctx, mode); err != nil {
 		if errors.Is(err, ErrRestartPending) {
 			return err
@@ -376,18 +407,11 @@ func (s *Simulator) RunCycle(ctx context.Context, mode Mode) error {
 		cycleErrors = append(cycleErrors, err)
 	}
 
-	// 2. Heartbeat. A heartbeat error is recorded but NEVER fatal: a
-	//    server-side rejection must not block product work or (above)
-	//    self-update.
-	s.noteProgress()
-	if _, err := s.SendHeartbeat(ctx); err != nil {
-		s.noteParentAuth(err)
-		cycleErrors = append(cycleErrors, fmt.Errorf("heartbeat: %w", err))
-	} else {
-		// A successful heartbeat is the proof a freshly self-updated binary can
-		// reach its parent; finalize any pending self-update now (deferred from
-		// boot so a node that cannot heartbeat is never declared good).
-		s.finalizeSelfUpdateOnHeartbeat()
+	// 2. Heartbeat (steady-state cycles). A heartbeat error is recorded but
+	//    NEVER fatal: a server-side rejection must not block product work or
+	//    (above) self-update.
+	if !heartbeatFirst {
+		runHeartbeat()
 	}
 
 	// 3. Products, each bounded by its own deadline so one hung hook cannot
@@ -677,6 +701,8 @@ func (s *Simulator) processOffer(
 		"product", update.Product,
 		"from_version", update.FromVersion,
 		"to_version", update.ToVersion,
+		"unavailable_seconds", unavailable,
+		"availability_violation", violation,
 	)
 	return nil
 }

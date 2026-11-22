@@ -12,6 +12,7 @@ const TIER_FILTERS = [
   { value: "all", label: "All tiers" },
   { value: "mysoc", label: "MySoc" },
   { value: "siemcore", label: "SiemCore" },
+  { value: "widecore", label: "WideCore" },
   { value: "swf", label: "SWF" },
 ];
 

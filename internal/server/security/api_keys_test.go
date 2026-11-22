@@ -115,6 +115,7 @@ func TestNormalizeKeyTier(t *testing.T) {
 	}{
 		{ScopeUpdateGroup, "", "", false},                   // unbound update-group key
 		{ScopeUpdateGroup, " SiemCore ", "siemcore", false}, // normalized
+		{ScopeUpdateGroup, " WideCore ", "widecore", false}, // normalized
 		{ScopeUpdateGroup, "mysoc", "mysoc", false},
 		{ScopeUpdateGroup, "swf", "swf", false},
 		{ScopeUpdateGroup, "siem-core", "", true}, // typo: not a catalog tier

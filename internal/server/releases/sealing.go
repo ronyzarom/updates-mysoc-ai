@@ -29,6 +29,7 @@ const (
 const (
 	IssuerMySoc    = "mysoc"
 	IssuerSiemCore = "siemcore"
+	IssuerWideCore = "widecore"
 	IssuerSWF      = "swf"
 	IssuerUpdates  = "updates"
 	IssuerOther    = "other"
@@ -49,7 +50,7 @@ var (
 	ErrTrustedKeyExists   = errors.New("trusted key already registered")
 	ErrTrustedKeyNotFound = errors.New("trusted key not found")
 	ErrTooManyActiveKeys  = fmt.Errorf("at most %d active keys are allowed per issuer scope; retire one first", MaxActiveKeysPerScope)
-	ErrInvalidIssuer      = errors.New("issuer must be empty (all issuers), mysoc, siemcore, swf or updates")
+	ErrInvalidIssuer      = errors.New("issuer must be empty (all issuers), mysoc, siemcore, widecore, swf or updates")
 	ErrInvalidPublicKey   = errors.New("public_key must be a hex-encoded 32-byte ed25519 key")
 )
 
@@ -83,12 +84,15 @@ func IssuerFor(product string) string {
 	p := strings.ToLower(strings.TrimSpace(product))
 	switch {
 	case strings.HasPrefix(p, "updater-"), strings.HasPrefix(p, "relay-"),
-		strings.HasPrefix(p, "mysoc-updater"), strings.HasPrefix(p, "siemcore-cascade-updater"):
+		strings.HasPrefix(p, "mysoc-updater"), strings.HasPrefix(p, "siemcore-cascade-updater"),
+		strings.HasPrefix(p, "widecore-updater"), strings.HasPrefix(p, "widecore-cascade-updater"):
 		return IssuerUpdates
 	case p == "mysoc" || strings.HasPrefix(p, "mysoc-"):
 		return IssuerMySoc
 	case p == "siemcore" || strings.HasPrefix(p, "siemcore-"):
 		return IssuerSiemCore
+	case p == "widecore" || strings.HasPrefix(p, "widecore-"):
+		return IssuerWideCore
 	case p == "swf" || strings.HasPrefix(p, "swf-"):
 		return IssuerSWF
 	default:
@@ -98,7 +102,7 @@ func IssuerFor(product string) string {
 
 func validIssuerScope(issuer string) bool {
 	switch issuer {
-	case "", IssuerMySoc, IssuerSiemCore, IssuerSWF, IssuerUpdates:
+	case "", IssuerMySoc, IssuerSiemCore, IssuerWideCore, IssuerSWF, IssuerUpdates:
 		return true
 	}
 	return false

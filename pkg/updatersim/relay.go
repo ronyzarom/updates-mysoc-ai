@@ -804,12 +804,16 @@ func (r *Relay) handleChildReport(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	if child, ok := r.children[report.InstanceID]; ok {
 		child.LastReport = &platformtypes.UpdateAttempt{
-			FromVersion:          report.FromVersion,
-			TargetVersion:        report.ToVersion,
-			Success:              report.Success,
-			Error:                report.Error,
-			Timestamp:            time.Now().UTC(),
-			SelectedArtifactKind: report.SelectedArtifactKind, DependencyValidation: report.DependencyValidation, ArtifactDigest: report.ArtifactDigest,
+			FromVersion:           report.FromVersion,
+			TargetVersion:         report.ToVersion,
+			Success:               report.Success,
+			Error:                 report.Error,
+			Timestamp:             time.Now().UTC(),
+			UnavailableSeconds:    report.UnavailableSeconds,
+			AvailabilityViolation: report.AvailabilityViolation,
+			SelectedArtifactKind:  report.SelectedArtifactKind,
+			DependencyValidation:  report.DependencyValidation,
+			ArtifactDigest:        report.ArtifactDigest,
 		}
 	}
 	r.mu.Unlock()
@@ -820,6 +824,8 @@ func (r *Relay) handleChildReport(w http.ResponseWriter, req *http.Request) {
 		"from", report.FromVersion,
 		"to", report.ToVersion,
 		"success", report.Success,
+		"unavailable_seconds", report.UnavailableSeconds,
+		"availability_violation", report.AvailabilityViolation,
 	)
 	relayJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 }

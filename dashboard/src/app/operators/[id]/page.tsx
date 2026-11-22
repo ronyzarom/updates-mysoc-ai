@@ -185,8 +185,8 @@ export default function OperatorDetailPage() {
           icon={Server}
           color="text-violet-400"
           bg="bg-violet-500/15"
-          label="mysoc / siemcore"
-          value={`${op.nodes_by_tier?.["mysoc"] ?? 0} / ${op.nodes_by_tier?.["siemcore"] ?? 0}`}
+          label="mysoc / siemcore / widecore"
+          value={`${op.nodes_by_tier?.["mysoc"] ?? 0} / ${op.nodes_by_tier?.["siemcore"] ?? 0} / ${op.nodes_by_tier?.["widecore"] ?? 0}`}
         />
         <TierStat
           icon={MonitorSmartphone}

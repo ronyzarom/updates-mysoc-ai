@@ -11,6 +11,7 @@ const ISSUER_SCOPES = [
   { value: "", label: "All issuers" },
   { value: "mysoc", label: "mysoc" },
   { value: "siemcore", label: "siemcore" },
+  { value: "widecore", label: "widecore" },
   { value: "swf", label: "swf" },
   { value: "updates", label: "updates (updater and relay kits)" },
 ];

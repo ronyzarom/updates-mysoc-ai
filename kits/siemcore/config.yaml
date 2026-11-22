@@ -91,6 +91,10 @@ heartbeat:
 #   cycle_timeout: 60m    # a stuck cycle self-cancels instead of starving ticks
 #   product_timeout: 40m  # per-product budget within a cycle
 #   filesystem:
+#     # Optional fast liveness URL (HTTP 200 on any version = up) used for
+#     # outage measurement during restart_command; health_command still runs
+#     # for post-apply validation. Falls back to health_command when unset.
+#     # availability_probe_url: http://127.0.0.1:8443/health/live
 #     # The only outage an update may cause is the restart window; exceeding this
 #     # flags the report (never aborts the apply) and blocks ring promotion.
 #     max_unavailable_seconds: 120

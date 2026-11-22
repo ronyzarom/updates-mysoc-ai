@@ -2,7 +2,7 @@
 // port). Defaults to "" so production stays same-origin/relative.
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-export type ProductTier = "mysoc" | "siemcore" | "swf";
+export type ProductTier = "mysoc" | "siemcore" | "widecore" | "swf";
 
 export interface Instance {
   id: string;
