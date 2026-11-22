@@ -11,7 +11,7 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.20.0 — WideCore tier support + updater liveness probe & relay telemetry
 
-**Build:** 1.20.0.1 · branch `version/1.20.0` (cut from `main` at `92bed80`, which contains `v1.19.0.8`).
+**Build:** 1.20.0.2 · branch `version/1.20.0` (cut from `main` at `92bed80`, which contains `v1.19.0.8`). Build history: `.1` initial candidate; `.2` corrected `/api/v1/products` endpoint path in `docs/API-CONTRACT.md`.
 **Status:** **built + validated locally; NOT deployed.**
 
 ### What changed
