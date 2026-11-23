@@ -11,8 +11,17 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.20.0 — WideCore tier support + updater liveness probe & relay telemetry
 
-**Build:** 1.20.0.2 · branch `version/1.20.0` (cut from `main` at `92bed80`, which contains `v1.19.0.8`). Build history: `.1` initial candidate; `.2` corrected `/api/v1/products` endpoint path in `docs/API-CONTRACT.md`.
-**Status:** **built + validated locally; NOT deployed.**
+**Build:** 1.20.0.2 · commit `8dfda96` · tag `v1.20.0.2` · branch `version/1.20.0` (cut from `main` at `92bed80`, which contains `v1.19.0.8`). Build history: `.1` initial candidate (`80a3974`); `.2` corrected `/api/v1/products` endpoint path in `docs/API-CONTRACT.md`.
+**Status:** **live across all rings** — server + dashboard deployed to `updates.mysoc.ai` on 2026-11-22 22:48 UTC; **updater `1.20.0.2` on `alpha,beta,stable,production`** (2026-11-22 22:50 `alpha` → 2026-11-23 05:16 `beta` → 05:24 `stable` → 05:28 `production` UTC — all 13 active Linux nodes across all four rings running `1.20.0.2` with zero errors).
+
+**Deploy & ring soak (UTC):**
+- 2026-11-22 22:39: backup `~/backups/release-1.20.0.2-20261122T223903Z` (`mysoc_updates.dump`, `update-server-1.19.0.8`, `dashboard-dual-sections.conf`, `SHA256SUMS`) + `bin/update-server.pre-1.20.0.2`. Dashboard built from `git archive 8dfda96` into `~/dashboard-builds/archive-1.20.0.2` and verified HTTP 200 on all 10 routes + CSS on side port 3099 before switching.
+- 2026-11-22 22:48:47: `update-server` `1.20.0.2` (`8dfda96a9b84`, `sha256: 3ae980d9…`) and `dashboard` `1.20.0.2` live (schema at head `20`, no migration).
+- 2026-11-22 22:50: `updater-linux-amd64` (`sha256: 6a024606…`) and `updater-linux-arm64` (`sha256: 682f6a4a…`) published to `alpha`.
+- 2026-11-23 05:16 (`alpha` soak pass, ~6.5 h): 7/7 active Linux `alpha` nodes (`drtest.mysoc.ai`, `mysoc-testing-mysoc-ai`, `testing-dr.mysoc.ai`, `testing-dr-b.mysoc.ai`, `siemcore-testing-01`, `siemcore-bezeq-pod-test-a-20261114`, `siemcore-bezeq-pod-test-b-20261114`) on `1.20.0.2`, all 4 `mysoc` relays `relay_listener_ok: true`, `swf-pilot-ronyassus-2` relaying cleanly, zero errors → widened to `alpha,beta`.
+- 2026-11-23 05:24 (`beta` soak pass): 2/2 `beta` nodes (`mysoc-cloud-mysoc-ai` `success=true` at 05:17:40, `relay_listener_ok: true`; `siemcore-cloud-01`) on `1.20.0.2`, zero errors → widened to `alpha,beta,stable`.
+- 2026-11-23 05:28 (`stable` soak pass): 2/2 `stable` Linux nodes (`siemcore-danshar`, `siemcore-seetech`) on `1.20.0.2` with all 7 SWF children beneath `siemcore-danshar` relaying fresh heartbeats, zero errors → widened to `alpha,beta,stable,production`.
+- 2026-11-23 05:30 (`production` verified): 2/2 `production` nodes (`mysoc-cyfox-il` `success=true` at 05:28:48, `relay_listener_ok: true`; `siemcore-cyfox-il` + active SWF children) on `1.20.0.2`, zero errors. All 13/13 active Linux nodes across all four rings converged on `1.20.0.2`.
 
 ### What changed
 
