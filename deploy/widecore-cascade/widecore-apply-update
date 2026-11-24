@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# widecore-apply-update — the host shim between the updater and a release.
+#
+# Installed once, by the enroll script, as /usr/local/sbin/widecore-apply-update
+# (root:root 0755), and named in /etc/sudoers.d/widecore-updater. The updater
+# (running as widecore-updater) runs it through sudo with one argument: the phase.
+#
+#   widecore-apply-update apply | first_install | rollback | health
+#
+# It decides nothing about how widecore is installed. It checks that the
+# release the updater put in place is owned by widecore-updater, whole,
+# matches its .updater-release.json metadata and checksums.txt, and lies
+# under the install root, then hands over to the release's own updater/apply
+# or updater/health. Caller environment is ignored (sudo strips it).
+set -euo pipefail
+
+INSTALL_ROOT=/opt/widecore-cascade
+PRODUCT=widecore
+PRODUCT_ROOT="$INSTALL_ROOT/$PRODUCT"
+CURRENT="$PRODUCT_ROOT/current"
+RELEASES="$PRODUCT_ROOT/releases"
+UPDATER_USER=widecore-updater
+ENV_FILE=/etc/widecore/widecore.env
+DEPLOY_INFO=/var/lib/widecore/DEPLOY_INFO.json
+
+refuse() { echo "[widecore-apply-update] refused: $*" >&2; exit 1; }
+
+# Extract a flat JSON string field without requiring python3 or jq.
+json_str() { # file, key
+    grep -oE "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$1" 2>/dev/null |
+        head -1 |
+        sed "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"//; s/\"\$//"
+}
+
+# The local listener configured for this host (or its default).
+local_address() {
+    local addr=127.0.0.1:9180 line
+    if [[ -r "$ENV_FILE" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" == WIDECORE_LOCAL_LISTEN=* ]]; then
+                addr="${line#*=}"
+                addr="${addr%\"}"; addr="${addr#\"}"
+                addr="${addr%\'}"; addr="${addr#\'}"
+            fi
+        done < "$ENV_FILE"
+    fi
+    printf '%s' "${addr:-127.0.0.1:9180}"
+}
+
+[[ $# -eq 1 ]] || refuse "one argument is needed: apply, first_install, rollback or health"
+phase="$1"
+case "$phase" in
+    apply|first_install|rollback) entry=updater/apply ;;
+    health) entry=updater/health ;;
+    *) refuse "unknown phase '$phase': use apply, first_install, rollback or health" ;;
+esac
+[[ "${EUID:-$(id -u)}" -eq 0 ]] || refuse "must run as root, through sudo"
+
+# The standard tools only, from the standard places, whatever the caller's
+# PATH was.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+if [[ ! -e "$CURRENT" ]]; then
+    if [[ "$phase" == rollback ]]; then
+        # The rollback of a first install: the updater removed the link, and
+        # there is no release to bring back. The exit code says what state
+        # the host is in, so nobody is called out for a host that is serving,
+        # and a host left down is not reported as fine.
+        addr="$(local_address)"
+        if systemctl is-active --quiet widecore.service 2>/dev/null &&
+           (exec 3<>"/dev/tcp/${addr%:*}/${addr#*:}") 2>/dev/null; then
+            echo "[widecore-apply-update] no release to return to; the service that is installed is running"
+            exit 0
+        fi
+        refuse "no release to return to, and widecore is not running on this host"
+    fi
+    refuse "$CURRENT does not exist: the updater has not put a release in place"
+fi
+
+# Where the link really leads. It must be one release directory under the
+# install root, owned by the updater account, with no way out of it.
+release="$(readlink -f -- "$CURRENT")" || refuse "$CURRENT cannot be resolved"
+[[ -d "$release" ]] || refuse "$CURRENT leads to $release, which is not a directory"
+[[ "$release" == "$RELEASES"/* && "${release#"$RELEASES"/}" != */* ]] ||
+    refuse "$CURRENT leads to $release, which is not a release under $RELEASES"
+
+owner="$(stat -c %U "$release")"
+[[ "$owner" == "$UPDATER_USER" ]] ||
+    refuse "release directory $release is owned by '$owner', expected '$UPDATER_USER'"
+
+# What will be run as root must be a plain file of the release, and listed
+# in its checksums.
+for file in checksums.txt VERSION bin/widecore updater/apply updater/health; do
+    [[ -f "$release/$file" && ! -L "$release/$file" ]] || refuse "the release has no $file"
+done
+[[ -x "$release/$entry" ]] || refuse "$entry is not executable"
+
+# Cross-check the updater's staging metadata against the release's own VERSION.
+meta="$release/.updater-release.json"
+[[ -f "$meta" && ! -L "$meta" ]] || refuse "missing release metadata $meta"
+version="$(tr -d '[:space:]' < "$release/VERSION")"
+[[ -n "$version" ]] || refuse "empty VERSION file in $release"
+meta_product="$(json_str "$meta" product)"
+meta_version="$(json_str "$meta" version)"
+[[ "$meta_product" == "$PRODUCT" ]] ||
+    refuse "metadata product '$meta_product' does not match '$PRODUCT'"
+[[ "$meta_version" == "$version" ]] ||
+    refuse "metadata version '$meta_version' does not match VERSION '$version'"
+
+for file in VERSION bin/widecore updater/apply updater/health; do
+    grep -qE "^[0-9a-f]{64}  ${file}\$" "$release/checksums.txt" || refuse "checksums.txt does not list $file"
+done
+grep -qvE '^[0-9a-f]{64}  [A-Za-z0-9._/-]+$' "$release/checksums.txt" &&
+    refuse "checksums.txt has a line that is not a checksum and a file name"
+grep -qE '  (/|(.*/)?\.\.(/|$))' "$release/checksums.txt" &&
+    refuse "checksums.txt names a file outside the release"
+
+# The whole release for anything that changes the host; for the health check,
+# which runs often, the files it runs.
+if [[ "$phase" == health ]]; then
+    list="$(grep -E '  (VERSION|bin/widecore|updater/health)$' "$release/checksums.txt")"
+else
+    list="$(cat "$release/checksums.txt")"
+fi
+if ! (cd "$release" && sha256sum --check --quiet --strict <<<"$list") >&2; then
+    refuse "the release in $release does not match its checksums.txt; it was not unpacked whole, or was changed since"
+fi
+
+# Resolve FROM_VERSION locally from DEPLOY_INFO.json instead of trusting caller env.
+from_version="0.0.0"
+if [[ -r "$DEPLOY_INFO" ]]; then
+    prev="$(json_str "$DEPLOY_INFO" version)"
+    [[ -n "$prev" ]] && from_version="$prev"
+fi
+
+# The release is told where it is and what version it came from by this script,
+# never by the caller.
+export CURRENT_DIR="$CURRENT" \
+       INSTALL_ROOT \
+       PRODUCT \
+       VERSION="$version" \
+       FROM_VERSION="$from_version" \
+       UPDATER_PHASE="$phase"
+exec "$release/$entry" "$phase"

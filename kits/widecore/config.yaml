@@ -1,0 +1,96 @@
+# WideCore cascade updater — production configuration (leaf child of mysoc)
+#
+# This node never talks to updates.mysoc.ai and relays to nothing. It
+# heartbeats to the operator's mysoc relay, and installs widecore updates
+# served from the relay's signature-verified cache.
+
+server:
+  # The mysoc relay's child-facing address (relay.listen on the mysoc node).
+  # The relay listener is TLS-only: use https:// and pin its certificate when
+  # the relay serves a private CA/self-signed cert.
+  url: https://mysoc.example.internal:18443
+  # The mysoc relay's cert.pem (from its relay.tls dir) — omit/comment out when
+  # the relay serves a publicly trusted certificate.
+  ca_file: mysoc-relay-ca.pem
+  # WideCore enrollment credential agreed with the operator (any stable
+  # secret string; it is bound to a relay_token at first contact).
+  license_key: "CHANGE-ME-WIDECORE-CREDENTIAL"
+  timeout: 30s
+
+instance:
+  # Stable unique id for this widecore gateway updater.
+  id: widecore-CHANGE-ME
+  type: server
+  product_tier: widecore
+  # instance.id of the mysoc node this widecore belongs to.
+  parent_id: mysoc-CHANGE-ME
+  # End customer this widecore serves; flows up the cascade for fleet views.
+  customer_id: customer-CHANGE-ME
+  customer_name: "Customer Name"
+  # Optional initial update ring (alpha/beta/stable/production). Honored ONLY
+  # on first enrollment of a brand-new instance_id; server-owned thereafter.
+  # update_group: stable
+  hostname: ""            # defaults to the OS hostname when empty
+  updater_version: "@VERSION@"
+
+signing:
+  # Same pinned key as the whole fleet:
+  #   curl -s https://updates.mysoc.ai/api/v1/signing-key
+  public_key: "PASTE-HEX-PUBLIC-KEY"
+  require: true
+
+# WideCore is a leaf node (relays to nothing).
+relay:
+  enabled: false
+
+heartbeat:
+  interval: 60s
+  jitter: 10s
+
+# The updater keeps ITSELF updated from the cascade (on by default): each
+# cycle it also checks the mysoc relay for the product "updater-<os>-<arch>"
+# using the running binary's stamped version. Offers are signature-verified,
+# staged, validated (the candidate must execute and report the offered
+# version), then activated with an atomic symlink swap and a service restart.
+# Requires the install layout created by install.sh.
+# self_update:
+#   disabled: true      # opt out of updater self-updates
+#   timeout: 10m        # whole self-update phase budget; runs in isolation
+
+# Survivability bounds. All optional; shown with their defaults.
+# signing:
+#   public_keys:
+#     - "PRIMARY-HEX-PUBLIC-KEY"
+#     - "ROTATED-IN-HEX-PUBLIC-KEY"
+# server:
+#   download_timeout: 30m        # whole-artifact download budget
+#   download_stall_timeout: 2m   # abort a download that makes no progress
+# simulation:
+#   cycle_timeout: 60m           # a stuck cycle self-cancels instead of starving ticks
+#   product_timeout: 40m         # per-product budget within a cycle
+#   filesystem:
+#     max_unavailable_seconds: 120
+
+simulation:
+  # "real" runs the full pipeline: verify signature + checksum, download,
+  # run the executor, report the result upstream. Without the executor block
+  # below, offered updates FAIL loudly (visible on the dashboard).
+  mode: real
+  artifact_dir: /var/lib/widecore-updater/artifacts
+  state_file: /var/lib/widecore-updater/state.json
+  # PRODUCTION INSTALLS — WideCore contract. The four WideCore host files live
+  # canonically in widecore-ai/deploy/ (widecore-apply-update,
+  # sudoers-widecore-updater, updater-override.conf, updater-executor.yaml);
+  # updates-mysoc bundles those four files in this kit, SHA-256-pinned.
+  # `install.sh --executor filesystem` installs the shim
+  # (/usr/local/sbin/widecore-apply-update), its NOPASSWD sudoers entry and the
+  # unit drop-in, then SPLICES updater-executor.yaml into the marked region
+  # below verbatim.
+#BEGIN-FS-EXECUTOR
+#  (no executor configured — install.sh --executor filesystem splices the
+#   WideCore-owned updater-executor.yaml here; see the comment above)
+#END-FS-EXECUTOR
+
+products:
+  - name: widecore
+    current_version: "0.0.0"   # set to the currently installed widecore version

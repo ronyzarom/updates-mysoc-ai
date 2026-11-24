@@ -1,0 +1,36 @@
+[Unit]
+Description=WideCore cascade updater (leaf child of the operator's mysoc relay)
+After=network-online.target
+Wants=network-online.target
+# Survivability (invariant 4): if the updater restarts too fast too often — the
+# signature of a self-update to a binary that cannot stay up — systemd stops
+# flapping it and triggers the restore unit, which rolls the self-update layout
+# back to .previous and starts a known-good binary.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=widecore-updater-restore.service
+
+[Service]
+# Type=notify: the updater signals READY=1 only after it has settled any pending
+# self-update, so a binary that never reaches readiness is a failed start (and
+# OnFailure restores .previous). WatchdogSec restarts a wedged process; the
+# pinger is decoupled from cycle duration so a long first_install never trips it.
+Type=notify
+NotifyAccess=main
+WatchdogSec=180
+User=widecore-updater
+Group=widecore-updater
+# Leaf node: runs `run` (no child-facing relay listener).
+ExecStart=/usr/local/bin/widecore-updater run --config /etc/widecore-updater/config.yaml
+Restart=always
+RestartSec=10
+# Give in-flight drains headroom before SIGKILL.
+TimeoutStopSec=150
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/widecore-updater
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

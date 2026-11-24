@@ -2,7 +2,7 @@
 # publish-install.sh — publish the one-command fresh-install bootstrap + updater
 # kit to the PUBLIC /install/ path on updates.mysoc.ai.
 #
-# Usage: scripts/publish-install.sh [mysoc|siemcore] [--yes]   (default: mysoc)
+# Usage: scripts/publish-install.sh [mysoc|siemcore|widecore] [--yes]   (default: mysoc)
 #
 # This serves (for the mysoc tier; siemcore is the twin, siemcore-*):
 #   https://updates.mysoc.ai/install/mysoc-enroll.sh
@@ -27,9 +27,9 @@ CONFIRM=0
 TIER=mysoc
 for arg in "$@"; do
     case "$arg" in
-        --yes)            CONFIRM=1 ;;
-        mysoc|siemcore)   TIER="$arg" ;;
-        *) echo "unknown argument: $arg (expected mysoc|siemcore and/or --yes)" >&2; exit 1 ;;
+        --yes)                     CONFIRM=1 ;;
+        mysoc|siemcore|widecore)   TIER="$arg" ;;
+        *) echo "unknown argument: $arg (expected mysoc|siemcore|widecore and/or --yes)" >&2; exit 1 ;;
     esac
 done
 

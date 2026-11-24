@@ -9,6 +9,26 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
+## 1.21.0 — WideCore updater kit & one-command enrollment bootstrap
+
+**Build:** 1.21.0.1 · branch `version/1.21.0` (cut from `main` at `f5f1e87`, which contains `v1.20.0.2`).
+**Status:** **built + validated locally; NOT deployed.**
+
+### What changed
+
+- Added **`kits/widecore/`** (`widecore-updater` canonical service/account/binary name, leaf mode running `widecore-updater run --config /etc/widecore-updater/config.yaml` with `relay.enabled: false`, `product_tier: widecore`, `products: [widecore]`, optional `--update-group` initial ring flag, self-updatable layout, and root-owned invariant-4 restore backstop).
+- Bundled and SHA-256-pinned WideCore's four finalized host files from `widecore-ai` (`release/1.0.0` @ `af29efc`) under `deploy/widecore-cascade/` (`widecore-apply-update`, `sudoers-widecore-updater`, `updater-override.conf`, `updater-executor.yaml`, pinned in `widecore-host-files.sha256`).
+- Added **`deploy/bootstrap/widecore-enroll.sh`** — one-command fresh-host bootstrap that copies `server.conf` to `/etc/widecore/install-seed.env`, stages `TLS_MODE=provided` certs out of `/root`, `/home`, or `/tmp` into `/etc/widecore/seed-tls/` (for `ProtectHome=true` / `PrivateTmp=true` compatibility), installs and enrolls `widecore-updater --clean --executor filesystem`, and waits for `"update applied and verified"` + `http://127.0.0.1:9180/livez`.
+- Extended `scripts/build-kits.sh` and `scripts/publish-install.sh` to build and publish `widecore-updater-kit` alongside `mysoc` and `siemcore`.
+
+### Relay compatibility
+
+- **Mixed-version tolerance:** Kits-and-tooling release only; zero server, wire, or updater Go runtime behavior changes compared to `1.20.0.2`. No DB migration.
+- **Minimum server version:** `1.20.0.2+` (already live on `updates.mysoc.ai`).
+- **Child-facing changes:** None (`widecore-updater` is a leaf).
+
+---
+
 ## 1.20.0 — WideCore tier support + updater liveness probe & relay telemetry
 
 **Build:** 1.20.0.2 · commit `8dfda96` · tag `v1.20.0.2` · branch `version/1.20.0` (cut from `main` at `92bed80`, which contains `v1.19.0.8`). Build history: `.1` initial candidate (`80a3974`); `.2` corrected `/api/v1/products` endpoint path in `docs/API-CONTRACT.md`.

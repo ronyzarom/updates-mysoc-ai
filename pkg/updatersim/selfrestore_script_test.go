@@ -26,6 +26,7 @@ func TestSelfRestoreScriptRollsBackToPrevious(t *testing.T) {
 	}{
 		{"mysoc", "../../kits/mysoc/mysoc-updater-self-restore.sh", "mysoc-updater"},
 		{"siemcore", "../../kits/siemcore/siemcore-cascade-updater-self-restore.sh", "siemcore-cascade-updater"},
+		{"widecore", "../../kits/widecore/widecore-updater-self-restore.sh", "widecore-updater"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -89,6 +90,7 @@ func TestSelfRestoreScriptSkipsNonSelfUpdateFailure(t *testing.T) {
 	}{
 		{"mysoc", "../../kits/mysoc/mysoc-updater-self-restore.sh", "mysoc-updater"},
 		{"siemcore", "../../kits/siemcore/siemcore-cascade-updater-self-restore.sh", "siemcore-cascade-updater"},
+		{"widecore", "../../kits/widecore/widecore-updater-self-restore.sh", "widecore-updater"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -157,6 +159,7 @@ func TestSelfRestoreScriptRollsBackOnPendingMarker(t *testing.T) {
 	}{
 		{"mysoc", "../../kits/mysoc/mysoc-updater-self-restore.sh", "mysoc-updater"},
 		{"siemcore", "../../kits/siemcore/siemcore-cascade-updater-self-restore.sh", "siemcore-cascade-updater"},
+		{"widecore", "../../kits/widecore/widecore-updater-self-restore.sh", "widecore-updater"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

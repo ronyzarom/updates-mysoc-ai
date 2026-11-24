@@ -51,6 +51,7 @@ Tailoring means pre-filling a rendered kit's `config.yaml` (instance id,
 | ---- | ---- | ---- |
 | mysoc | `mysoc-updater` | |
 | siemcore | `siemcore-cascade-updater` | Renamed in 1.8.1.1; `siemcore-updater` is the retired v2 daemon and is flagged by v3 posture audits. Never mask either unit to silence an audit. |
+| widecore | `widecore-updater` | Leaf child of `mysoc` (runs `run`, `relay.enabled: false`). |
 
 ## Publishing an updater self-update
 

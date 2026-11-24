@@ -3,7 +3,7 @@
 # stamping the binary (ldflags), config, README, and bundled docs from the
 # repo's single VERSION anchor so nothing can drift.
 #
-# Usage: scripts/build-kits.sh [mysoc|siemcore]...   (default: both)
+# Usage: scripts/build-kits.sh [mysoc|siemcore|widecore]...   (default: all three)
 #
 # Output: dist/updater-kits/<kit>-<VERSION>/
 #
@@ -31,13 +31,14 @@ else
 fi
 
 TIERS=("$@")
-[[ ${#TIERS[@]} -eq 0 ]] && TIERS=(mysoc siemcore)
+[[ ${#TIERS[@]} -eq 0 ]] && TIERS=(mysoc siemcore widecore)
 
 for tier in "${TIERS[@]}"; do
     case "$tier" in
         mysoc)    BIN_NAME=mysoc-updater;            KIT_NAME=mysoc-updater-kit ;;
         siemcore) BIN_NAME=siemcore-cascade-updater; KIT_NAME=siemcore-updater-kit ;;
-        *) echo "unknown tier: $tier (expected mysoc or siemcore)" >&2; exit 1 ;;
+        widecore) BIN_NAME=widecore-updater;         KIT_NAME=widecore-updater-kit ;;
+        *) echo "unknown tier: $tier (expected mysoc, siemcore, or widecore)" >&2; exit 1 ;;
     esac
 
     OUT="dist/updater-kits/${KIT_NAME}-${VERSION}"
@@ -94,6 +95,23 @@ for tier in "${TIERS[@]}"; do
                 exit 1
             fi
         done
+    elif [[ "$tier" == widecore ]]; then
+        # The four widecore host files (apply shim, sudoers entry, unit drop-in,
+        # executor block) are WideCore-owned; verify pinned SHA-256s before shipping.
+        echo "==> $tier: bundling WideCore host files + verifying pins"
+        for hf in widecore-apply-update sudoers-widecore-updater updater-override.conf updater-executor.yaml widecore-host-files.sha256; do
+            cp "deploy/widecore-cascade/$hf" "$OUT/$hf"
+        done
+        chmod +x "$OUT/widecore-apply-update"
+        for hf in widecore-apply-update sudoers-widecore-updater updater-override.conf updater-executor.yaml; do
+            want="$(awk -v b="$hf" '$2==b || $2=="*"b {print $1; exit}' "$OUT/widecore-host-files.sha256")"
+            have="$(SHA "$OUT/$hf" | awk '{print $1}')"
+            if [[ -z "$want" || "$want" != "$have" ]]; then
+                echo "ERROR: widecore host file $hf does not match its pin (pin ${want:-none}, got $have)." >&2
+                echo "       Regenerate deploy/widecore-cascade/widecore-host-files.sha256 after a deliberate change." >&2
+                exit 1
+            fi
+        done
     fi
 
     echo "==> $tier: bundling docs (stamped)"
@@ -110,6 +128,7 @@ for tier in "${TIERS[@]}"; do
         files=(bin/* config.yaml install.sh ./*.service)
         [[ -f mysoc-apply-update.sh ]] && files+=(mysoc-apply-update.sh)
         [[ -f siemcore-apply-update.sh ]] && files+=(siemcore-apply-update.sh siemcore-cascade-updater.sudoers override.conf executor-block.yaml siemcore-host-files.sha256)
+        [[ -f widecore-apply-update ]] && files+=(widecore-apply-update sudoers-widecore-updater updater-override.conf updater-executor.yaml widecore-host-files.sha256)
         for restore in ./*-self-restore.sh; do
             [[ -f "$restore" ]] && files+=("$restore")
         done

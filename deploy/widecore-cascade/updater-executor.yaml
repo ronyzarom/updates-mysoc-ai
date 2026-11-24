@@ -1,0 +1,22 @@
+# The executor block spliced under simulation: in /etc/widecore-updater/config.yaml
+# by the enroll script (updates-mysoc-ai/kits/widecore/).
+#
+# instance.product_tier: widecore lives under instance: in the kit's config.yaml,
+# not here. The updater unpacks a release into
+#   /opt/widecore-cascade/widecore/releases/<version>/
+# and points /opt/widecore-cascade/widecore/current at it before calling the shim.
+# Fresh-host behavior (invoking phase "first_install" when from_version is 0.0.0,
+# skipping rollback on failure, backing off 5m/15m/60m) is built into the updater.
+  executor: filesystem
+  filesystem:
+    install_root: /opt/widecore-cascade
+    restart_command: ["sudo", "-n", "/usr/local/sbin/widecore-apply-update"]
+    health_command: ["sudo", "-n", "/usr/local/sbin/widecore-apply-update"]
+    # Plain HTTP on this host only. The updater checks certificates, and the
+    # gateway's certificate is for its public name, not for 127.0.0.1.
+    availability_probe_url: "http://127.0.0.1:9180/livez"
+    # apply may wait up to 10 minutes for the other node of a pair while this
+    # node keeps returning 200 on /livez.
+    command_timeout: 15m
+    keep_releases: 3
+    first_install_timeout: 30m

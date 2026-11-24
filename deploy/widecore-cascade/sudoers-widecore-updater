@@ -1,0 +1,8 @@
+# /etc/sudoers.d/widecore-updater (root:root 0440) — installed by the enroll
+# script. It lets the widecore-updater account run the host shim with one of
+# four lifecycle phases, and nothing else.
+#
+# No env_keep or SETENV: sudo strips the caller's environment and the shim
+# resolves and validates the release directory, version, and previous version
+# locally.
+widecore-updater ALL=(root) NOPASSWD: /usr/local/sbin/widecore-apply-update apply, /usr/local/sbin/widecore-apply-update first_install, /usr/local/sbin/widecore-apply-update rollback, /usr/local/sbin/widecore-apply-update health
