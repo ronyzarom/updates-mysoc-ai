@@ -11,8 +11,8 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.21.0 — WideCore updater kit & one-command enrollment bootstrap
 
-**Build:** 1.21.0.1 · branch `version/1.21.0` (cut from `main` at `f5f1e87`, which contains `v1.20.0.2`).
-**Status:** **built + validated locally; NOT deployed.**
+**Build:** 1.21.0.1 · commit `c22cc32` · tag `v1.21.0.1` · branch `version/1.21.0` (cut from `main` at `f5f1e87`, which contains `v1.20.0.2`).
+**Status:** **live at `https://updates.mysoc.ai/install/`** (published 2026-11-24 UTC: `widecore-enroll.sh`, `widecore-updater-kit-1.21.0.1.tar.gz`, `widecore-updater-kit-latest.tar.gz`, `sha256: 934fc250…`). Kits-only release; server, dashboard, and existing fleet updaters remain on `1.20.0.2`.
 
 ### What changed
 
