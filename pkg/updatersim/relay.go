@@ -715,6 +715,16 @@ func (r *Relay) handleChildCheck(w http.ResponseWriter, req *http.Request) {
 	if !r.authorizeChild(w, req, checkReq.InstanceID) {
 		return
 	}
+	// Backfill requested_update_group from the child's cached heartbeat when an
+	// older child updater omitted it from the check payload, so a relayed child's
+	// first check honors its enrolment ring before the first rollup lands.
+	if checkReq.RequestedUpdateGroup == "" {
+		r.mu.Lock()
+		if child, ok := r.children[checkReq.InstanceID]; ok {
+			checkReq.RequestedUpdateGroup = child.Heartbeat.RequestedUpdateGroup
+		}
+		r.mu.Unlock()
+	}
 
 	offer, upstreamFields, err := r.upstream.CheckUpdateRaw(req.Context(), product, checkReq)
 	if err != nil {

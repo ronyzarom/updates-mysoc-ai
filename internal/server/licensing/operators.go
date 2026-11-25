@@ -124,7 +124,7 @@ func (s *Service) issuePlatformKey(ctx context.Context, operatorID, operatorName
 		Type:         "mysoc-cloud",
 		Product:      "mysoc",
 		OperatorRef:  operatorID,
-		Products:     []string{"mysoc", "siemcore", "swf"},
+		Products:     []string{"mysoc", "siemcore", "widecore", "swf"},
 		IssuedAt:     time.Now(),
 		ExpiresAt:    expiresAt,
 		IsActive:     true,

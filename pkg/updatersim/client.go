@@ -71,20 +71,21 @@ type HeartbeatResponse struct {
 // and ParentInstanceID carry the self-reported product hierarchy; servers that
 // do not understand them ignore the extra fields.
 type UpdateCheckRequest struct {
-	InstanceID         string                     `json:"instance_id"`
-	CurrentVersion     string                     `json:"current_version"`
-	UpdaterVersion     string                     `json:"updater_version"`
-	OS                 string                     `json:"os"`
-	Arch               string                     `json:"arch"`
-	Hostname           string                     `json:"hostname"`
-	Channel            string                     `json:"channel"`
-	ProductTier        string                     `json:"product_tier,omitempty"`
-	ParentInstanceID   string                     `json:"parent_instance_id,omitempty"`
-	Lifecycle          string                     `json:"lifecycle,omitempty"`
-	InstalledVersion   string                     `json:"installed_version,omitempty"`
-	CachedDependencies []platformtypes.Dependency `json:"cached_dependencies"`
-	ProtocolVersion    string                     `json:"protocol_version,omitempty"`
-	Capabilities       []string                   `json:"capabilities,omitempty"`
+	InstanceID           string                     `json:"instance_id"`
+	CurrentVersion       string                     `json:"current_version"`
+	UpdaterVersion       string                     `json:"updater_version"`
+	OS                   string                     `json:"os"`
+	Arch                 string                     `json:"arch"`
+	Hostname             string                     `json:"hostname"`
+	Channel              string                     `json:"channel"`
+	ProductTier          string                     `json:"product_tier,omitempty"`
+	ParentInstanceID     string                     `json:"parent_instance_id,omitempty"`
+	RequestedUpdateGroup string                     `json:"requested_update_group,omitempty"`
+	Lifecycle            string                     `json:"lifecycle,omitempty"`
+	InstalledVersion     string                     `json:"installed_version,omitempty"`
+	CachedDependencies   []platformtypes.Dependency `json:"cached_dependencies"`
+	ProtocolVersion      string                     `json:"protocol_version,omitempty"`
+	Capabilities         []string                   `json:"capabilities,omitempty"`
 }
 
 // UpdateCheckResponse is the current group-aware update-check response.

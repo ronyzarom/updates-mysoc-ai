@@ -269,15 +269,16 @@ func (s *Simulator) Check(ctx context.Context, productName string) (*UpdateOffer
 
 	operatingSystem, architecture := s.platform()
 	request := UpdateCheckRequest{
-		InstanceID:       s.config.Instance.ID,
-		CurrentVersion:   product.CurrentVersion,
-		UpdaterVersion:   s.config.Instance.UpdaterVersion,
-		OS:               operatingSystem,
-		Arch:             architecture,
-		Hostname:         s.config.Instance.Hostname,
-		Channel:          product.Channel,
-		ProductTier:      s.config.Instance.ProductTier,
-		ParentInstanceID: s.config.Instance.ParentID,
+		InstanceID:           s.config.Instance.ID,
+		CurrentVersion:       product.CurrentVersion,
+		UpdaterVersion:       s.config.Instance.UpdaterVersion,
+		OS:                   operatingSystem,
+		Arch:                 architecture,
+		Hostname:             s.config.Instance.Hostname,
+		Channel:              product.Channel,
+		ProductTier:          s.config.Instance.ProductTier,
+		ParentInstanceID:     s.config.Instance.ParentID,
+		RequestedUpdateGroup: s.config.Instance.UpdateGroup,
 	}
 	if len(product.PrerequisiteVerifier) > 0 {
 		request.ProtocolVersion = artifactprotocol.Version

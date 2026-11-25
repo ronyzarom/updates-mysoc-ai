@@ -202,12 +202,23 @@ fi
 chmod 0600 "$INSTANCE_ID_FILE"
 
 # Signing key: the whole fleet pins one key. Prefer an explicit value; else try
-# the parent relay (trust-on-first-use) so the one command still works.
+# the parent relay (when reachable unauthenticated) or the updates server that
+# served the kit (trust-on-first-use) so the one command still works.
 if [[ -z "$SIGNING_KEY" ]]; then
-    SIGNING_KEY="$(curl -fsS --max-time 10 "${RELAY_CA_FILE:+--cacert "$RELAY_CA_FILE"}" \
+    SIGNING_CA_ARGS=()
+    [[ -n "$RELAY_CA_FILE" ]] && SIGNING_CA_ARGS=(--cacert "$RELAY_CA_FILE")
+    SIGNING_SOURCE=""
+    SIGNING_KEY="$(curl -fsS --max-time 10 "${SIGNING_CA_ARGS[@]}" \
         "$PARENT_URL/api/v1/signing-key" 2>/dev/null | grep -o '[0-9a-f]\{64\}' | head -1 || true)"
     if [[ -n "$SIGNING_KEY" ]]; then
-        warn "signing key fetched from $PARENT_URL (trust-on-first-use); verify out of band: $SIGNING_KEY"
+        SIGNING_SOURCE="$PARENT_URL"
+    else
+        SIGNING_KEY="$(curl -fsS --max-time 10 \
+            "$UPDATES_URL/api/v1/signing-key" 2>/dev/null | grep -o '[0-9a-f]\{64\}' | head -1 || true)"
+        [[ -n "$SIGNING_KEY" ]] && SIGNING_SOURCE="$UPDATES_URL"
+    fi
+    if [[ -n "$SIGNING_KEY" ]]; then
+        warn "signing key fetched from $SIGNING_SOURCE (trust-on-first-use); verify out of band: $SIGNING_KEY"
     else
         die "no signing key: set UPDATES_SIGNING_KEY in server.conf or pass --signing-key (64 hex chars)"
     fi

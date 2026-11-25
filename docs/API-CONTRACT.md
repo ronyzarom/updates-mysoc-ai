@@ -799,7 +799,7 @@ All agent data-plane endpoints now **require** a valid `X-License-Key`:
 
 Missing, unknown, deactivated, or expired keys are rejected with `401`.
 New-style keys carry a `product` scope; a key scoped to `mysoc` covers the
-whole cascade beneath it (siemcore, swf). Heartbeats claiming a tier the key
+whole cascade beneath it (`mysoc`, `siemcore`, `widecore`, `swf`). Heartbeats claiming a tier the key
 does not authorize are rejected with `403`.
 
 ### 9.2 Operators and platform keys — `/api/v1/admin/operators`
@@ -863,7 +863,7 @@ A relay (updater in relay mode) serves its children on:
 | ------ | ---- | ----- |
 | GET    | `/health` | Liveness. |
 | POST   | `/api/v1/heartbeat` | Enrolls/refreshes a child. First contact returns a `relay_token`; the child MUST persist it and send it as `X-Relay-Token` on subsequent requests. |
-| POST   | `/api/v1/updates/{product}/check` | Forwarded upstream; download URLs are rewritten to the relay; `signature` passes through unchanged. |
+| POST   | `/api/v1/updates/{product}/check` | Forwarded upstream (including optional `requested_update_group` enrolment hint, backfilled from the child's cached heartbeat when omitted by an older child); download URLs are rewritten to the relay; `signature` passes through unchanged. |
 | POST   | `/api/v1/updates/{product}/report` | Recorded into the relay's rollup. |
 | GET    | `/api/v1/releases/{product}/{version}/download` | Served from the relay's pull-through cache; artifacts are checksum- and signature-verified before being cached. |
 

@@ -126,3 +126,30 @@ func TestWideCoreKitConfigAndPins(t *testing.T) {
 		t.Fatalf("products = %+v, want single widecore entry", cfg.Products)
 	}
 }
+
+// TestEnrollScriptsSigningKeyFallback guards against the empty-argument curl
+// bug ("${RELAY_CA_FILE:+--cacert ...}") and ensures both leaf enroll scripts
+// fall back to $UPDATES_URL/api/v1/signing-key when the parent relay does not
+// serve /api/v1/signing-key pre-enrollment.
+func TestEnrollScriptsSigningKeyFallback(t *testing.T) {
+	for _, rel := range []string{
+		"../../deploy/bootstrap/widecore-enroll.sh",
+		"../../deploy/bootstrap/siemcore-enroll.sh",
+	} {
+		path, err := filepath.Abs(rel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		s := string(raw)
+		if strings.Contains(s, `"${RELAY_CA_FILE:+--cacert`) {
+			t.Fatalf("%s contains empty-argument curl expansion bug for RELAY_CA_FILE", rel)
+		}
+		if !strings.Contains(s, `$UPDATES_URL/api/v1/signing-key`) {
+			t.Fatalf("%s missing fallback to $UPDATES_URL/api/v1/signing-key", rel)
+		}
+	}
+}

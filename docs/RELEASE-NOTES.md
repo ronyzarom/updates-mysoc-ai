@@ -9,6 +9,25 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ---
 
+## 1.21.1 — Enrollment polish: signing-key TOFU fallback, operator widecore tier, relayed initial ring
+
+**Build:** 1.21.1.1 · branch `version/1.21.1` (cut from `main` at `df19d1e`, which contains `v1.21.0.1` and `v1.20.0.2`).
+**Status:** **built + validated locally; NOT deployed.**
+
+### What changed
+
+- **Leaf enroll scripts (`deploy/bootstrap/widecore-enroll.sh`, `deploy/bootstrap/siemcore-enroll.sh`):** Fixed the empty-argument `curl` quoting bug when `UPDATES_RELAY_CA_FILE` is unset (`SIGNING_CA_ARGS` array) and added a public `$UPDATES_URL/api/v1/signing-key` fallback when the parent relay does not serve `/api/v1/signing-key` pre-enrollment.
+- **Operator platform licenses (`internal/server/licensing/operators.go`):** New and rotated operator platform keys now include `widecore` alongside `mysoc`, `siemcore`, and `swf` by default (`Products: ["mysoc", "siemcore", "widecore", "swf"]`).
+- **Relayed initial enrolment ring (`pkg/updatersim/client.go`, `simulator.go`, `relay.go`, `internal/server/api/handlers.go`):** Wired optional `requested_update_group` through `POST /api/v1/updates/{product}/check` into `TouchFromCheck` (honored on `INSERT` only; `ON CONFLICT` never changes an existing instance's ring), with relay-side backfill from the child's cached heartbeat when an older child omits the field. Fixes the first-check race where a newly enrolled relayed child landed on `stable` before its relay's first rollup heartbeat arrived.
+
+### Relay compatibility
+
+- **Mixed-version tolerance:** Additive optional JSON field `requested_update_group` on `POST /api/v1/updates/{product}/check`. Older servers and older relays ignore it safely (reverting to the existing `stable` default until moved); a `1.21.1.1` relay backfills it even for older child updaters (`1.21.0.1`). No DB migration.
+- **Minimum hop version for automatic relayed ring-on-first-check:** `1.21.1.1` on the updates server and the parent relay (child can be `1.21.0.1+`).
+- **Child-facing changes:** None breaking; additive optional request field only.
+
+---
+
 ## 1.21.0 — WideCore updater kit & one-command enrollment bootstrap
 
 **Build:** 1.21.0.1 · commit `c22cc32` · tag `v1.21.0.1` · branch `version/1.21.0` (cut from `main` at `f5f1e87`, which contains `v1.20.0.2`).
