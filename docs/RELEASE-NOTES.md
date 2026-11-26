@@ -11,8 +11,17 @@ see the Relay section of [UPDATER-RELEASE.md](UPDATER-RELEASE.md).
 
 ## 1.21.1 — Enrollment polish: signing-key TOFU fallback, operator widecore tier, relayed initial ring
 
-**Build:** 1.21.1.1 · branch `version/1.21.1` (cut from `main` at `df19d1e`, which contains `v1.21.0.1` and `v1.20.0.2`).
-**Status:** **built + validated locally; NOT deployed.**
+**Build:** 1.21.1.1 · commit `67c4884` · tag `v1.21.1.1` · branch `version/1.21.1` (cut from `main` at `df19d1e`, which contains `v1.21.0.1` and `v1.20.0.2`).
+**Status:** **live across all rings** — `update-server` `1.21.1.1` (`67c488452fd6`) deployed to `updates.mysoc.ai` on 2026-11-26 04:41 UTC; **`updater` `1.21.1.1` on `alpha,beta,stable,production`** (2026-11-26 04:41 `alpha` → 04:47 `beta` → 04:52 `stable` → 04:55 `production` UTC — all 14/14 active Linux nodes across all four rings running `1.21.1.1` + 9/9 SWF children online, zero errors); all three `/install/` kits (`mysoc`, `siemcore`, `widecore`) and enroll scripts updated to `1.21.1.1`.
+
+**Deploy & ring soak (UTC, 2026-11-26):**
+- 04:40:48: pre-deploy backup `~/backups/release-1.21.1.1-20261126T044048Z` (`mysoc_updates.dump`, `update-server-1.20.0.2`, `SHA256SUMS`) + `bin/update-server.pre-1.21.1.1`.
+- 04:41:00: `update-server` `1.21.1.1` (`67c488452fd6`, `sha256: 307510f9…`) live on `https://updates.mysoc.ai/health` (schema at head `20`, no migration).
+- 04:41:20: `updater-linux-amd64` (`sha256: 02e98eb7…`) and `updater-linux-arm64` (`sha256: 97910303…`) published to `alpha`; `/install/` kits + enroll scripts published for `widecore` (`ba38c8f5…`), `siemcore` (`017de3ce…`), and `mysoc` (`289b1601…`).
+- 04:47 (`alpha` soak pass): 8/8 active Linux `alpha` nodes (`drtest.mysoc.ai`, `mysoc-testing-mysoc-ai`, `testing-dr.mysoc.ai`, `testing-dr-b.mysoc.ai`, `siemcore-testing-01`, `siemcore-bezeq-pod-test-a-20261114`, `siemcore-bezeq-pod-test-b-20261114`, `widecore-test-1`) on `1.21.1.1`, all 4 `mysoc` relays `relay_listener_ok: true` + `self_update.last_result.success: true`, relay cache serving all 4 children beneath `mysoc-testing-mysoc-ai`, zero errors → widened to `alpha,beta`.
+- 04:52 (`beta` soak pass): 2/2 `beta` nodes (`mysoc-cloud-mysoc-ai` `success=true` at 04:48:15, `relay_listener_ok: true`; `siemcore-cloud-01`) on `1.21.1.1`, zero errors → widened to `alpha,beta,stable`.
+- 04:55 (`stable` soak pass): 2/2 `stable` Linux nodes (`siemcore-danshar`, `siemcore-seetech`) on `1.21.1.1` with SWF children relaying fresh heartbeats cleanly through `mysoc-cyfox-il`, zero errors → widened to `alpha,beta,stable,production`.
+- 04:59 (`production` verified): 2/2 `production` nodes (`mysoc-cyfox-il` `success=true` at 04:56:24, `relay_listener_ok: true`; `siemcore-cyfox-il` + all 9/9 active SWF children online) on `1.21.1.1`, zero 4xx/5xx or server errors since deploy. All 14/14 active Linux nodes across all four rings converged on `1.21.1.1`.
 
 ### What changed
 
